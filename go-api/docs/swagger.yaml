@@ -1,0 +1,82 @@
+basePath: /api/v1
+definitions:
+  domain.HealthCheck:
+    properties:
+      last_checked:
+        type: string
+      response:
+        type: string
+      status:
+        type: string
+    type: object
+  domain.HealthStatus:
+    properties:
+      checks:
+        additionalProperties:
+          $ref: '#/definitions/domain.HealthCheck'
+        type: object
+      status:
+        type: string
+      timestamp:
+        type: string
+      uptime:
+        type: string
+      version:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: API REST para processamento de modelos 3D e geração de arquivos G-code
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  termsOfService: http://swagger.io/terms/
+  title: Slicer API
+  version: "1.0"
+paths:
+  /health:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.HealthStatus'
+      summary: Verificar saúde do sistema
+      tags:
+      - system
+  /info:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Obter informações do sistema
+      tags:
+      - system
+  /metrics:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Obter métricas do sistema
+      tags:
+      - system
+schemes:
+- http
+- https
+swagger: "2.0"
