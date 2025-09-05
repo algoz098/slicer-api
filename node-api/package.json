@@ -39,7 +39,7 @@
     "compile": "shx rm -rf lib/ && tsc",
     "start": "node lib/",
     "prettier": "npx prettier \"**/*.ts\" --write",
-    "mocha": "cross-env NODE_ENV=test mocha --require ts-node/register test/**/*.test.ts",
+    "mocha": "cross-env NODE_ENV=test mocha",
     "test": "npm run mocha",
     "bundle:client": "npm run compile && npm pack --pack-destination ./public"
   },

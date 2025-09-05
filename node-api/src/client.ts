@@ -4,6 +4,14 @@ import type { TransportConnection, Application } from '@feathersjs/feathers'
 import authenticationClient from '@feathersjs/authentication-client'
 import type { AuthenticationClientOptions } from '@feathersjs/authentication-client'
 
+import { filesInfoClient } from './services/files/info/info.shared'
+export type {
+  FilesInfo,
+  FilesInfoData,
+  FilesInfoQuery,
+  FilesInfoPatch
+} from './services/files/info/info.shared'
+
 import { platesCountClient } from './services/plates/count/count.shared'
 export type {
   PlatesCount,
@@ -57,5 +65,6 @@ export const createClient = <Configuration = any,>(
   client.configure(healthcheckClient)
   client.configure(printerProfilesClient)
   client.configure(platesCountClient)
+  client.configure(filesInfoClient)
   return client
 }

@@ -22,8 +22,11 @@ describe('printer-profiles service', () => {
       const filePath = path.join(tmp, 'example.json')
       fs.writeFileSync(filePath, JSON.stringify(sample, null, 2))
 
+      // Create service with temporary directory
       const svc = new PrinterProfilesService({ app } as any)
-      ;(svc as any).basePath = tmp
+      // Override the profileManager to use the temporary directory
+      const { ProfileFileManager } = require('../../../src/utils/profile-file-manager')
+      ;(svc as any).profileManager = new ProfileFileManager(tmp, ['process'])
 
       const all = await svc.find()
       assert.equal(all.length, 2)

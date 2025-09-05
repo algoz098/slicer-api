@@ -1,24 +1,28 @@
 {
   "ts-node": {
     "esm": false,
+    "transpileOnly": true,
     "compilerOptions": {
-      "module": "commonjs"
+      "module": "commonjs",
+      "moduleResolution": "node",
+      "allowSyntheticDefaultImports": true
     }
   },
   "compilerOptions": {
     "target": "es2020",
     "module": "commonjs",
     "outDir": "./lib",
-    "rootDir": "./src",
+    "rootDir": "./",
     "declaration": true,
     "strict": true,
     "esModuleInterop": true,
-    "sourceMap": true
+    "allowSyntheticDefaultImports": true,
+    "moduleResolution": "node",
+    "sourceMap": true,
+    "skipLibCheck": true
   },
   "include": [
-    "src"
-  ],
-  "exclude": [
+    "src",
     "test"
   ]
 }

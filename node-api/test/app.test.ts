@@ -1,7 +1,7 @@
 // For more information about this file see https://dove.feathersjs.com/guides/cli/app.test.html
-const assert = require('assert')
-const axios = require('axios')
-const { app } = require('../src/app')
+import assert from 'assert'
+import axios from 'axios'
+import { app } from '../src/app'
 
 const port = app.get('port')
 const appUrl = `http://${app.get('host')}:${port}`

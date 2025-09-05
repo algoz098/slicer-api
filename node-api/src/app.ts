@@ -8,6 +8,7 @@ import { configurationValidator } from './configuration'
 import type { Application } from './declarations'
 import { logError } from './hooks/log-error'
 import { services } from './services/index'
+import { logger } from './logger'
 
 const app: Application = koa(feathers())
 
