@@ -4,13 +4,69 @@
 - URL: https://github.com/SoftFever/OrcaSlicer (confirmar tag 2.3.0)
 - Fork + tag espelhada.
 
-## Áreas para Mapear
-1. Núcleo de fatiamento (derivado do PrusaSlicer / SuperSlicer?).
-2. Parsing de formatos: STL, 3MF, AMF, OBJ.
-3. Geração de suportes, infill, perímetros, otimização de trajetórias.
-4. Pós-processamento: scripts, substituição de placeholders, cabeçalhos.
-5. Perfis (JSON/ini) e parâmetros.
-6. Motor de preview (não necessário fase 1).
+## Perfis de Impressora Disponíveis no Slicer-API
+
+O projeto slicer-api utiliza os mesmos perfis de impressora do OrcaSlicer, carregados da pasta `go-api/data/`. Os perfis disponíveis atualmente são idênticos aos listados acima:
+
+### Bambu Lab (BBL)
+- Bambu Lab X1 Carbon
+- Bambu Lab X1
+- Bambu Lab X1E
+- Bambu Lab P1P
+- Bambu Lab P1S
+- Bambu Lab A1 mini
+- Bambu Lab A1
+
+### Creality
+- Creality CR-10 V2
+- Creality CR-10 V3
+- Creality CR-10 Max
+- Creality CR-10 SE
+- Creality CR-6 SE
+- Creality CR-6 Max
+- Creality CR-M4
+- Creality Ender-3 V2
+- Creality Ender-3 V2 Neo
+- Creality Ender-3 S1
+- Creality Ender-3
+- Creality Ender-3 Pro
+- Creality Ender-3 S1 Pro
+- Creality Ender-3 S1 Plus
+- Creality Ender-3 V3 SE
+- Creality Ender-3 V3 KE
+- Creality Ender-3 V3
+- Creality Ender-3 V3 Plus
+- Creality Ender-5
+- Creality Ender-5 Max
+- Creality Ender-5 Plus
+- Creality Ender-5 Pro (2019)
+- Creality Ender-5S
+- Creality Ender-5 S1
+- Creality Ender-6
+- Creality Sermoon V1
+- Creality K1
+- Creality K1C
+- Creality K1 Max
+- Creality K1 SE
+- Creality K2 Plus
+- Creality Hi
+
+### Prusa
+- Prusa CORE One
+- Prusa CORE One HF
+- MK4IS
+- MK4S
+- MK4S HF
+- Prusa XL
+- Prusa XL 5T
+- MK3.5
+- MK3S
+- MINI
+- MINIIS
+
+**Nota:** Não foram encontrados perfis genéricos de impressora no OrcaSlicer. Os perfis são específicos para os vendors acima. Para filamentos e processos, existem perfis genéricos como "Generic PLA" e "Generic ABS".
+
+Esses perfis estão definidos nos arquivos `BBL.json`, `Creality.json` e `Prusa.json` na pasta `resources/profiles/` do repositório. Cada perfil inclui configurações de máquina, processos e filamentos compatíveis.
 
 ## Ferramentas de Análise
 - `cloc` para métricas de tamanho.
