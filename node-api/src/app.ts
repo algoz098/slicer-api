@@ -2,6 +2,7 @@
 import { feathers } from '@feathersjs/feathers'
 import configuration from '@feathersjs/configuration'
 import { koa, rest, bodyParser, errorHandler, parseAuthentication, cors, serveStatic } from '@feathersjs/koa'
+import koaBody from 'koa-body'
 
 import { configurationValidator } from './configuration'
 import type { Application } from './declarations'
@@ -39,7 +40,18 @@ app.use(async (ctx: any, next: any) => {
 app.use(serveStatic(app.get('public')))
 app.use(errorHandler())
 app.use(parseAuthentication())
-app.use(bodyParser())
+
+// Configure koa-body for file uploads and JSON parsing
+app.use(koaBody({
+  multipart: true,
+  formidable: {
+    maxFileSize: 100 * 1024 * 1024, // 100MB
+    keepExtensions: true
+  }
+}))
+
+// Remove the default bodyParser since koa-body handles it
+// app.use(bodyParser())
 
 // Configure services and transports
 app.configure(rest())

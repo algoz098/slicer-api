@@ -1,14 +1,13 @@
 // For more information about this file see https://dove.feathersjs.com/guides/cli/app.test.html
-import assert from 'assert'
-import axios from 'axios'
-import type { Server } from 'http'
-import { app } from '../src/app'
+const assert = require('assert')
+const axios = require('axios')
+const { app } = require('../src/app')
 
 const port = app.get('port')
 const appUrl = `http://${app.get('host')}:${port}`
 
 describe('Feathers application tests', () => {
-  let server: Server
+  let server
 
   before(async () => {
     server = await app.listen(port)
@@ -19,7 +18,7 @@ describe('Feathers application tests', () => {
   })
 
   it('starts and returns project info as JSON at /', async () => {
-    const { data } = await axios.get<{ status: string; name?: string; version?: string }>(appUrl)
+    const { data } = await axios.get(appUrl)
 
     assert.strictEqual(data.status, 'ok')
     // name and version are optional, but should exist in normal setups
