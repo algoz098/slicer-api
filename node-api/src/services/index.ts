@@ -1,6 +1,5 @@
 import { filesInfo } from './files/info/info'
 import { filesUpload } from './files/upload/upload'
-
 import { validation } from './validation/validation'
 import { platesCount } from './plates/count/count'
 import { printerProfiles } from './printer-profiles/printer-profiles'

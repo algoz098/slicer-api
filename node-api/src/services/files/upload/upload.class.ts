@@ -1,6 +1,6 @@
 // For more information about this file see https://dove.feathersjs.com/guides/cli/service.class.html#custom-services
 import type { Id, NullableId, Params, ServiceInterface } from '@feathersjs/feathers'
-import { BadRequest, NotFound } from '@feathersjs/errors'
+import { NotFound } from '@feathersjs/errors'
 import * as crypto from 'crypto'
 import * as path from 'path'
 
@@ -146,8 +146,8 @@ export class FilesUploadService<ServiceParams extends FilesUploadParams = FilesU
         data: file,
         options: {
           maxFileSize: appConfig.get('fileUpload.maxSize', APP_CONSTANTS.FILE_UPLOAD.MAX_FILE_SIZE),
-          allowedExtensions: appConfig.get('fileUpload.allowedExtensions', APP_CONSTANTS.FILE_UPLOAD.SUPPORTED_EXTENSIONS),
-          allowedMimeTypes: APP_CONSTANTS.FILE_UPLOAD.SUPPORTED_MIME_TYPES,
+          allowedExtensions: [...appConfig.get('fileUpload.allowedExtensions', APP_CONSTANTS.FILE_UPLOAD.SUPPORTED_EXTENSIONS)],
+          allowedMimeTypes: [...APP_CONSTANTS.FILE_UPLOAD.SUPPORTED_MIME_TYPES],
           deepValidation: appConfig.get('fileUpload.deepValidation', true)
         }
       }) as any

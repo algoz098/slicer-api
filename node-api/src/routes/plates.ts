@@ -2,14 +2,15 @@ import Router from '@koa/router'
 import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
+
 import { PlatesCountService } from '../services/plates/count/count.class'
 import type { Application } from '../declarations'
 
-export function createPlatesRouter(app: Application): Router {
+export function createPlatesRouter(app: Application): any {
   const router = new Router({ prefix: '/api' })
 
   // POST /api/plates/count - Count plates in uploaded 3MF file
-  router.post('/plates/count', async (ctx) => {
+  router.post('/plates/count', async (ctx: any) => {
     try {
       // Check if file was uploaded
       if (!ctx.request.files?.file) {
@@ -47,7 +48,8 @@ export function createPlatesRouter(app: Application): Router {
         let plateCount: number
 
         if (fileExtension === '.3mf') {
-          plateCount = await service.countPlatesIn3MF(tempFilePath)
+          const res = await service.create({ testFilePath: tempFilePath } as any)
+          plateCount = (res as any).count
         } else if (fileExtension === '.stl' || fileExtension === '.obj') {
           plateCount = 1 // STL and OBJ files typically contain single objects
         } else {
@@ -84,7 +86,7 @@ export function createPlatesRouter(app: Application): Router {
   })
 
   // POST /api/files/info - Extract profile information from uploaded 3MF file
-  router.post('/files/info', async (ctx) => {
+  router.post('/files/info', async (ctx: any) => {
     try {
       // Check if file was uploaded
       if (!ctx.request.files?.file) {

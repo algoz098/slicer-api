@@ -12,7 +12,6 @@ import {
   validationPatchResolver,
   validationQueryResolver
 } from './validation.schema'
-
 import type { Application } from '../../declarations'
 import { ValidationService, getOptions } from './validation.class'
 import { validationPath, validationMethods } from './validation.shared'

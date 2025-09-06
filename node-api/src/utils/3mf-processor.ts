@@ -1,7 +1,9 @@
 import * as yauzl from 'yauzl'
-import type { PrinterProfileInfo, ThreeMFMetadata, ProcessingConfig } from '../types/common'
+import { BadRequest } from '@feathersjs/errors'
+
+import type { PrinterProfileInfo } from '../types/common'
 import { ErrorFactory } from '../errors/custom-errors'
-import { logger, loggerHelpers } from '../logger'
+import { loggerHelpers } from '../logger'
 
 export interface ProcessingOptions {
   candidateFiles?: string[]

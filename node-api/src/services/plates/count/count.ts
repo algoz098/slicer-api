@@ -3,16 +3,11 @@
 import { hooks as schemaHooks } from '@feathersjs/schema'
 
 import {
-  platesCountDataValidator,
-  platesCountPatchValidator,
   platesCountQueryValidator,
   platesCountResolver,
   platesCountExternalResolver,
-  platesCountDataResolver,
-  platesCountPatchResolver,
   platesCountQueryResolver
 } from './count.schema'
-
 import type { Application } from '../../../declarations'
 import { PlatesCountService, getOptions } from './count.class'
 import { platesCountPath, platesCountMethods } from './count.shared'

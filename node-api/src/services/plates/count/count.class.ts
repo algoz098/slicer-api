@@ -1,5 +1,5 @@
 // For more information about this file see https://dove.feathersjs.com/guides/cli/service.class.html#custom-services
-import type { Id, NullableId, Params, ServiceInterface } from '@feathersjs/feathers'
+import type { Params, ServiceInterface } from '@feathersjs/feathers'
 import { BadRequest } from '@feathersjs/errors'
 import * as fs from 'fs'
 import * as path from 'path'

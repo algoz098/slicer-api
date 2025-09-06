@@ -2,6 +2,7 @@
 import assert from 'assert'
 import fs from 'fs'
 import path from 'path'
+
 import { app } from '../../../../src/app'
 
 describe('plates/count service', () => {

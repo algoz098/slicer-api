@@ -3,16 +3,11 @@
 import { hooks as schemaHooks } from '@feathersjs/schema'
 
 import {
-  healthcheckDataValidator,
-  healthcheckPatchValidator,
   healthcheckQueryValidator,
   healthcheckResolver,
   healthcheckExternalResolver,
-  healthcheckDataResolver,
-  healthcheckPatchResolver,
   healthcheckQueryResolver
 } from './healthcheck.schema'
-
 import type { Application } from '../../declarations'
 import { HealthcheckService, getOptions } from './healthcheck.class'
 import { healthcheckPath, healthcheckMethods } from './healthcheck.shared'

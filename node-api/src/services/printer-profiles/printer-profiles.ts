@@ -12,7 +12,6 @@ import {
   printerProfilesPatchResolver,
   printerProfilesQueryResolver
 } from './printer-profiles.schema'
-
 import type { Application } from '../../declarations'
 import { PrinterProfilesService, getOptions } from './printer-profiles.class'
 import { printerProfilesPath, printerProfilesMethods } from './printer-profiles.shared'

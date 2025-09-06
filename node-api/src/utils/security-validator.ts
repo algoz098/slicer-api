@@ -1,6 +1,6 @@
 import * as path from 'path'
 import * as fs from 'fs'
-import { ErrorFactory } from '../errors/custom-errors'
+
 import { logger, loggerHelpers } from '../logger'
 import type { UploadedFile } from '../types/common'
 

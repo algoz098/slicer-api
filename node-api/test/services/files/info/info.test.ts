@@ -1,8 +1,9 @@
 // For more information about this file see https://dove.feathersjs.com/guides/cli/service.test.html
 import * as fs from 'fs'
 import * as path from 'path'
-import { app } from '../../../../src/app'
 import assert from 'assert'
+
+import { app } from '../../../../src/app'
 
 describe('files/info service', function () {
   this.timeout(10000)
@@ -192,20 +193,9 @@ describe('files/info service', function () {
 
     assert.ok(result, 'Should return a result')
 
-    // Check if printerProfileValues exists
-    if (result.printerProfileValues) {
-
-      // Check for any numeric values that might have been normalized
-      const numericFields = Object.keys(result.printerProfileValues).filter(key =>
-        typeof result.printerProfileValues![key] === 'number'
-      )
-
-      // Check for boolean values
-      const booleanFields = Object.keys(result.printerProfileValues).filter(key =>
-        typeof result.printerProfileValues![key] === 'boolean'
-      )
-    } else {
-      console.log('printerProfileValues not found in result')
+    // Check if differences object exists and is plain object
+    if ((result as any).differences) {
+      assert.strictEqual(typeof (result as any).differences, 'object', 'differences should be an object')
     }
   })
 })

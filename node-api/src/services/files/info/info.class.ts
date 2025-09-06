@@ -1,12 +1,12 @@
 // For more information about this file see https://dove.feathersjs.com/guides/cli/service.class.html#custom-services
 import type { Id, NullableId, Params, ServiceInterface } from '@feathersjs/feathers'
 import { BadRequest } from '@feathersjs/errors'
+import * as path from 'path'
 
 import type { Application } from '../../../declarations'
 import type { FilesInfo, FilesInfoData, FilesInfoPatch, FilesInfoQuery } from './info.schema'
-import { logger, loggerHelpers, type LogContext } from '../../../logger'
+import { logger, loggerHelpers } from '../../../logger'
 import { ErrorFactory } from '../../../errors/custom-errors'
-import * as path from 'path'
 import { ProfileFileManager, type ProfileEntry } from '../../../utils/profile-file-manager'
 
 export type { FilesInfo, FilesInfoData, FilesInfoPatch, FilesInfoQuery }

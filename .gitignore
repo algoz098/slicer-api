@@ -33,7 +33,7 @@ go-api/server
 .vscode/
 .idea/
 
-source_OrcaSlicer
+
 
 # OS files
 .DS_Store

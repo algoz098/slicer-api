@@ -12,7 +12,6 @@ import {
   filesUploadPatchResolver,
   filesUploadQueryResolver
 } from './upload.schema'
-
 import type { Application } from '../../../declarations'
 import { FilesUploadService, getOptions } from './upload.class'
 import { filesUploadPath, filesUploadMethods } from './upload.shared'

@@ -11,7 +11,7 @@
   "contributors": [],
   "bugs": {},
   "engines": {
-    "node": ">= 24.7.0"
+    "node": ">=22.0.0"
   },
   "feathers": {
     "language": "ts",
@@ -38,7 +38,9 @@
     "dev": "nodemon -x ts-node src/index.ts",
     "compile": "shx rm -rf lib/ && tsc",
     "start": "node lib/",
-    "prettier": "npx prettier \"**/*.ts\" --write",
+    "prettier": "prettier \"**/*.{ts,tsx,js,json,md}\" --write",
+    "lint": "eslint . --ext .ts,.tsx --max-warnings=0",
+    "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "mocha": "cross-env NODE_ENV=test TS_NODE_COMPILER_OPTIONS='{\"module\":\"commonjs\"}' mocha --require ts-node/register --extensions ts test/**/*.test.ts",
     "test:info": "cross-env NODE_ENV=test TS_NODE_COMPILER_OPTIONS='{\"module\":\"commonjs\"}' mocha --require ts-node/register --extensions ts test/services/files/info/info.test.ts",
     "test": "npm run mocha",
@@ -55,6 +57,7 @@
     "@feathersjs/schema": "^5.0.34",
     "@feathersjs/transport-commons": "^5.0.34",
     "@feathersjs/typebox": "^5.0.34",
+    "@koa/router": "^14.0.0",
     "@types/yauzl": "^2.10.3",
     "koa-body": "^6.0.1",
     "winston": "^3.17.0",
@@ -63,10 +66,17 @@
   "devDependencies": {
     "@feathersjs/cli": "^5.0.34",
     "@feathersjs/rest-client": "^5.0.34",
+    "@types/koa__router": "^12.0.4",
     "@types/mocha": "^10.0.10",
     "@types/node": "^22.18.1",
+    "@typescript-eslint/eslint-plugin": "^8.42.0",
+    "@typescript-eslint/parser": "^8.42.0",
     "axios": "^1.11.0",
     "cross-env": "^10.0.0",
+    "eslint": "^9.35.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-unused-imports": "^4.2.0",
     "mocha": "^11.7.2",
     "nodemon": "^3.1.10",
     "prettier": "^3.6.2",

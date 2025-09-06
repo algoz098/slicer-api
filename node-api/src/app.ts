@@ -3,13 +3,12 @@ import { feathers } from '@feathersjs/feathers'
 import configuration from '@feathersjs/configuration'
 import { koa, rest, errorHandler, parseAuthentication, cors, serveStatic } from '@feathersjs/koa'
 import koaBody from 'koa-body'
-import { createPlatesRouter } from './routes/plates'
+
 
 import { configurationValidator } from './configuration'
 import type { Application } from './declarations'
 import { logError } from './hooks/log-error'
 import { services } from './services/index'
-import { logger } from './logger'
 
 const app: Application = koa(feathers())
 
@@ -72,6 +71,7 @@ app.configure(rest())
 app.configure(services)
 
 // Add custom routes
+import { createPlatesRouter } from './routes/plates'
 const platesRouter = createPlatesRouter(app)
 app.use(platesRouter.routes())
 app.use(platesRouter.allowedMethods())

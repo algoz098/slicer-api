@@ -1,9 +1,9 @@
 // For more information about this file see https://dove.feathersjs.com/guides/cli/service.class.html#custom-services
-import type { Id, NullableId, Params, ServiceInterface } from '@feathersjs/feathers'
-
-import type { Application } from '../../declarations'
+import type { Params, ServiceInterface } from '@feathersjs/feathers'
 import * as fs from 'fs'
 import * as path from 'path'
+
+import type { Application } from '../../declarations'
 import type {
   PrinterProfiles,
   PrinterProfilesData,
@@ -29,10 +29,11 @@ export class PrinterProfilesService<ServiceParams extends PrinterProfilesParams 
   private readonly profileManager: ProfileFileManager
   private readonly allowedTypesDefault = ['process', 'machine', 'machine_model']
   private removedProfiles: Set<string> = new Set() // Track removed profiles for testing
+  private readonly basePath: string
 
   constructor(public options: PrinterProfilesServiceOptions) {
-    const basePath = this.resolveBasePath()
-    this.profileManager = new ProfileFileManager(basePath, this.allowedTypesDefault)
+    this.basePath = this.resolveBasePath()
+    this.profileManager = new ProfileFileManager(this.basePath, this.allowedTypesDefault)
   }
 
   /**

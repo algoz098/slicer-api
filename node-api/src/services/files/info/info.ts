@@ -12,7 +12,6 @@ import {
   filesInfoPatchResolver,
   filesInfoQueryResolver
 } from './info.schema'
-
 import type { Application } from '../../../declarations'
 import { FilesInfoService, getOptions } from './info.class'
 import { filesInfoPath, filesInfoMethods } from './info.shared'

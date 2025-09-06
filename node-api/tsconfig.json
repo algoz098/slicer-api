@@ -9,7 +9,8 @@
     }
   },
   "compilerOptions": {
-    "target": "es2020",
+    "target": "es2021",
+    "lib": ["es2021"],
     "module": "commonjs",
     "outDir": "./lib",
     "rootDir": "./",

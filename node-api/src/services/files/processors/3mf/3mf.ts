@@ -12,7 +12,6 @@ import {
   threeMFProcessorPatchResolver,
   threeMFProcessorQueryResolver
 } from './3mf.schema'
-
 import type { Application } from '../../../../declarations'
 import { ThreeMFProcessorService, getOptions } from './3mf.class'
 import { threeMFProcessorPath, threeMFProcessorMethods } from './3mf.shared'

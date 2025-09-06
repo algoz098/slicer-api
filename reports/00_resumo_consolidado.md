@@ -10,10 +10,10 @@ Objetivo Macro: API que gera G-code indistinguível do OrcaSlicer 2.3.0.
 - Observabilidade desde o início (logs JSON, métricas, tracing).
 
 ## Decisões Atuais
-- Fase inicial: Go + subprocess headless.
-- Redis Streams + FS local.
-- Normalizador/Comparador de G-code em Python (CI/Testes).
-- Patch minimal sobre tag 2.3.0; isolamento UI via macros HEADLESS.
+- MVP da API em Node.js (Feathers + Koa), com upload e extração de informações de .3mf e contagem de plates funcionando com testes automatizados.
+- Redis Streams + FS local (planejado para fases futuras, não habilitado agora).
+- Normalizador/Comparador de G-code em Python (planejado para CI/Testes).
+- Patch minimal sobre tag 2.3.0 do OrcaSlicer; isolamento UI via macros HEADLESS (com o código fonte como submódulo).
 
 ## Critérios de Equivalência
 - Sem dif semântico (movimentos, extrusão, perímetros, retrações).

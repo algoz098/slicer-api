@@ -1,5 +1,6 @@
 // For more information about this file see https://dove.feathersjs.com/guides/cli/logging.html
 import { createLogger, format, transports } from 'winston'
+
 import type { HookContext } from './declarations'
 import { isAppError } from './errors/custom-errors'
 
