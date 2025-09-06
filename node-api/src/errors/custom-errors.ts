@@ -245,13 +245,22 @@ export const ErrorFactory = {
   validation: {
     invalidFileName: (fileName: string, reason: string, context?: Record<string, any>) =>
       new FileNameValidationError(fileName, reason, context),
-    
+
     invalidNozzleDiameter: (value: string, context?: Record<string, any>) =>
       new ValidationError(
         `Invalid nozzle diameter format: ${value}`,
         'nozzle',
         value,
         'Must be a decimal number (e.g., "0.4")',
+        context
+      ),
+
+    invalidParameter: (paramName: string, reason: string, context?: Record<string, any>) =>
+      new ValidationError(
+        `Invalid parameter ${paramName}: ${reason}`,
+        paramName,
+        undefined,
+        reason,
         context
       )
   },

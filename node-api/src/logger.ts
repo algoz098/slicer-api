@@ -42,7 +42,7 @@ export const logger = createLogger({
         message,
         ...meta
       }
-      return JSON.stringify(logEntry)
+      return safeStringify(logEntry)
     })
   ),
   transports: process.env.NODE_ENV === 'test' ? [
@@ -56,7 +56,7 @@ export const logger = createLogger({
         format.colorize(),
         format.simple(),
         format.printf(({ timestamp, level, message, ...meta }) => {
-          const metaStr = Object.keys(meta).length > 0 ? ` ${JSON.stringify(meta)}` : ''
+          const metaStr = Object.keys(meta).length > 0 ? ` ${safeStringify(meta)}` : ''
           return `${timestamp} [${level}]: ${message}${metaStr}`
         })
       )
@@ -231,3 +231,20 @@ function sanitizeParams(params: any): any {
 
   return sanitized
 }
+
+/**
+ * Safely stringify objects with circular references by replacing cycles with "[Circular]".
+ */
+function safeStringify(obj: any): string {
+  const seen = new WeakSet()
+  return JSON.stringify(obj, function (_key, value) {
+    if (typeof value === 'object' && value !== null) {
+      if (seen.has(value)) {
+        return '[Circular]'
+      }
+      seen.add(value)
+    }
+    return value
+  })
+}
+

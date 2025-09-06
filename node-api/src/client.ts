@@ -4,6 +4,14 @@ import type { TransportConnection, Application } from '@feathersjs/feathers'
 import authenticationClient from '@feathersjs/authentication-client'
 import type { AuthenticationClientOptions } from '@feathersjs/authentication-client'
 
+import { filamentsProfileClient } from './services/filaments-profile/filaments-profile.shared'
+export type {
+  FilamentsProfile,
+  FilamentsProfileData,
+  FilamentsProfileQuery,
+  FilamentsProfilePatch
+} from './services/filaments-profile/filaments-profile.shared'
+
 import { filesInfoClient } from './services/files/info/info.shared'
 export type {
   FilesInfo,
@@ -66,5 +74,6 @@ export const createClient = <Configuration = any,>(
   client.configure(printerProfilesClient)
   client.configure(platesCountClient)
   client.configure(filesInfoClient)
+  client.configure(filamentsProfileClient)
   return client
 }
