@@ -40,10 +40,37 @@ export const filesInfoSchema = Type.Object(
         description: 'Print profile name (e.g., "Standard", "Fine", "Draft")'
       })
     ),
-    // Differences agora é um OBJETO de pares chave/valor extraído dos settings do 3MF.
-    differences: Type.Optional(Type.Record(
+    // Differences agora é um ARRAY de diferenças entre arquivo e perfil da impressora
+    differences: Type.Optional(Type.Array(
+      Type.Object({
+        parameter: Type.String({
+          description: 'Name of the parameter that differs'
+        }),
+        fileValue: Type.Union([Type.String(), Type.Number(), Type.Boolean(), Type.Null()], {
+          description: 'Value from the uploaded file'
+        }),
+        profileValue: Type.Optional(Type.Union([Type.String(), Type.Number(), Type.Boolean(), Type.Null()], {
+          description: 'Value from the selected printer profile'
+        }))
+      })
+    )),
+
+    // Valores do perfil da impressora para comparação
+    printerProfileValues: Type.Optional(Type.Record(
       Type.String(),
-      Type.Any()
+      Type.Any(),
+      {
+        description: 'Values from the printer profile used for comparison'
+      }
+    )),
+
+    // Perfil do filamento
+    filamentProfile: Type.Optional(Type.Record(
+      Type.String(),
+      Type.Any(),
+      {
+        description: 'Filament profile values and settings'
+      }
     )),
 
 

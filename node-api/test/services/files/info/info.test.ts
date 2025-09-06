@@ -108,6 +108,22 @@ describe('files/info service', function () {
       assert.ok(result.plateCount >= 0, 'Plate count should be non-negative')
     }
 
+    // comfirm the differences has sparce infill percentage and its value is 5
+    assert.ok(result.differences, 'Should have differences')
+    assert.ok(result.differences.length > 0, 'Should have differences')
+    assert.ok(result.differences.find((d: any) => d.parameter === 'sparse_infill_percentage'), 'Should have sparse infill percentage difference')
+    assert.strictEqual((result.differences.find((d: any) => d.parameter === 'sparse_infill_percentage') as any).fileValue, 5, 'Sparse infill percentage should be 5')
+
+    assert.ok(result.filamentProfile, 'Should have filament profile values')
+    // confirm the name of the filamentprofile is SUNLU PLA+
+    assert.strictEqual(result.filamentProfile.name, 'SUNLU PLA+ 2.0 @base', 'Filament profile name should be correct')
+    // the filamentprofile.diferences should have valeus and have sparce_infill_percentage with value 15 with 4 as value
+    assert.ok(result.filamentProfile.differences, 'Should have filament profile differences')
+    assert.ok(result.filamentProfile.differences.length > 0, 'Should have filament profile differences')
+    assert.ok(result.filamentProfile.differences.find((d: any) => d.parameter === 'sparse_infill_percentage'), 'Should have sparse infill percentage difference')
+    assert.strictEqual((result.filamentProfile.differences.find((d: any) => d.parameter === 'sparse_infill_percentage') as any).fileValue, 4, 'Sparse infill percentage should be 4')
+    
+
     console.log('0:', JSON.stringify(result, null, 2))
     // console.log('0:', Object.keys((result as any).differences))
     // console.log('1:', JSON.stringify(Object.keys((result as any).printerProfileValues), null, 2))

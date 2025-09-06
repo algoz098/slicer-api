@@ -12,8 +12,8 @@ const { ProfileFileManager } = require('../../../src/utils/profile-file-manager'
 describe('filaments-profile service - find', () => {
   it('returns expected entries from filament_list', async () => {
     const res = await app.service('filaments-profile').find()
-    console.log(res)
-    // assert.ok(res.length > 0)
+    // console.log(res)
+    assert.ok(res.length > 0)
   })
 })
 
@@ -84,9 +84,6 @@ describe('filaments-profile service - get', () => {
 
     // Verify coesão: get returns same id as find
     assert.equal(profile.id, firstProfile.id, 'get should return same id as find')
-
-    console.log('Sample profile data keys:', Object.keys(profile))
-    console.log('Sample profile data:', JSON.stringify(profile, null, 2))
 
     // The profile should have all properties from the original JSON entry
     // At minimum, it should have more than just the 4 basic properties
