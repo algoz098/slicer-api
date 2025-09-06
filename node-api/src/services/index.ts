@@ -1,6 +1,6 @@
 import { filesInfo } from './files/info/info'
 import { filesUpload } from './files/upload/upload'
-import { threeMFProcessor } from './files/processors/3mf/3mf'
+
 import { validation } from './validation/validation'
 import { platesCount } from './plates/count/count'
 import { printerProfiles } from './printer-profiles/printer-profiles'
@@ -12,7 +12,7 @@ export const services = (app: Application) => {
   // Register core services first (dependencies for other services)
   app.configure(validation)
   app.configure(filesUpload)
-  app.configure(threeMFProcessor)
+
 
   // Register application services that depend on core services
   app.configure(filesInfo)

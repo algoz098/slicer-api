@@ -46,10 +46,10 @@ describe('plates/count service', () => {
   it('counts plates in test_3mf_25plates.3mf (should be 25)', async () => {
     const service = app.service('plates/count')
     const testFilePath = path.join(__dirname, '../../../../../test_files/test_3mf_25plates.3mf')
-    
+
     const fileBuffer = fs.readFileSync(testFilePath)
     const fileData = {}
-    
+
     // Simulate Koa context with file upload
     const mockCtx = {
       request: {
@@ -62,7 +62,7 @@ describe('plates/count service', () => {
         }
       }
     }
-    
+
     const params = {
       request: {
         ctx: mockCtx
@@ -70,19 +70,19 @@ describe('plates/count service', () => {
     } as any
 
     const result = await service.create(fileData, params)
-    
-    // The algorithm might count objects instead of plates, so we'll accept the actual count
-    assert(result.count > 0, 'Should count some plates/objects')
+
+    // This file contains 25 plates (detected via Metadata/plate_*.png files)
+    assert.strictEqual(result.count, 25, 'Should count 25 plates')
     assert.strictEqual(result.fileName, 'test_3mf_25plates.3mf', 'Should return correct filename')
   })
 
   it('counts plates in test_3mf_25plates_modified.3mf (should be 25)', async () => {
     const service = app.service('plates/count')
     const testFilePath = path.join(__dirname, '../../../../../test_files/test_3mf_25plates_modified.3mf')
-    
+
     const fileBuffer = fs.readFileSync(testFilePath)
     const fileData = {}
-    
+
     // Simulate Koa context with file upload
     const mockCtx = {
       request: {
@@ -95,7 +95,7 @@ describe('plates/count service', () => {
         }
       }
     }
-    
+
     const params = {
       request: {
         ctx: mockCtx
@@ -103,9 +103,9 @@ describe('plates/count service', () => {
     } as any
 
     const result = await service.create(fileData, params)
-    
-    // The algorithm might count objects instead of plates, so we'll accept the actual count
-    assert(result.count > 0, 'Should count some plates/objects')
+
+    // This file contains 25 plates (detected via Metadata/plate_*.png files)
+    assert.strictEqual(result.count, 25, 'Should count 25 plates')
     assert.strictEqual(result.fileName, 'test_3mf_25plates_modified.3mf', 'Should return correct filename')
   })
 

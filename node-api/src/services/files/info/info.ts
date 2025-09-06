@@ -16,6 +16,7 @@ import {
 import type { Application } from '../../../declarations'
 import { FilesInfoService, getOptions } from './info.class'
 import { filesInfoPath, filesInfoMethods } from './info.shared'
+import { extractFileUpload } from '../../../hooks/file-upload'
 
 export * from './info.class'
 export * from './info.schema'
@@ -45,6 +46,7 @@ export const filesInfo = (app: Application) => {
       find: [],
       get: [],
       create: [
+        extractFileUpload(),
         schemaHooks.validateData(filesInfoDataValidator),
         schemaHooks.resolveData(filesInfoDataResolver)
       ],

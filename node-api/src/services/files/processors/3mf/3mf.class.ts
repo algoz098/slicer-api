@@ -98,7 +98,7 @@ export class ThreeMFProcessorService<ServiceParams extends ThreeMFProcessorParam
 
     try {
       const result = processingStore.get(String(id))
-      
+
       if (!result) {
         logger.warn('Processing result not found', logContext)
         throw new NotFound(`Processing result with id ${id} not found`)
@@ -186,7 +186,7 @@ export class ThreeMFProcessorService<ServiceParams extends ThreeMFProcessorParam
 
     try {
       const result = await this.get(id as Id, params)
-      
+
       // Update allowed fields
       if (data.status) {
         result.status = data.status
@@ -215,7 +215,7 @@ export class ThreeMFProcessorService<ServiceParams extends ThreeMFProcessorParam
 
     try {
       const result = await this.get(id as Id, params)
-      
+
       // Remove from store
       processingStore.delete(result.id)
 
@@ -231,8 +231,8 @@ export class ThreeMFProcessorService<ServiceParams extends ThreeMFProcessorParam
    * Process 3MF file asynchronously
    */
   private async processFile(
-    processingResult: ThreeMFProcessor, 
-    options: any, 
+    processingResult: ThreeMFProcessor,
+    options: any,
     startTime: number
   ): Promise<void> {
     const logContext = {
@@ -250,7 +250,7 @@ export class ThreeMFProcessorService<ServiceParams extends ThreeMFProcessorParam
       // Process with timeout
       const extractedData = await Promise.race([
         this.extractProfileInfo(processingResult.filePath, candidateFiles, options),
-        new Promise((_, reject) => 
+        new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Processing timeout')), timeout)
         )
       ]) as any
@@ -266,7 +266,7 @@ export class ThreeMFProcessorService<ServiceParams extends ThreeMFProcessorParam
 
       // Update upload status
       const uploadService = this.options.app.service('files/upload')
-      await uploadService.patch(processingResult.uploadId, { 
+      await uploadService.patch(processingResult.uploadId, {
         status: 'processed',
         metadata: extractedData
       })
@@ -281,7 +281,7 @@ export class ThreeMFProcessorService<ServiceParams extends ThreeMFProcessorParam
 
     } catch (error) {
       const processingTime = Date.now() - startTime
-      
+
       // Update result with error
       processingResult.status = 'failed'
       processingResult.errors.push((error as Error).message)
@@ -307,8 +307,8 @@ export class ThreeMFProcessorService<ServiceParams extends ThreeMFProcessorParam
    * Extract profile information from 3MF file
    */
   private async extractProfileInfo(
-    filePath: string, 
-    candidateFiles: string[], 
+    filePath: string,
+    candidateFiles: string[],
     options: any
   ): Promise<any> {
     return new Promise((resolve, reject) => {
@@ -383,9 +383,9 @@ class ProfileExtractor {
       }
 
       const chunks: Buffer[] = []
-      
+
       readStream.on('data', (chunk: Buffer) => chunks.push(chunk))
-      
+
       readStream.on('end', () => {
         try {
           const content = Buffer.concat(chunks).toString('utf8')
@@ -396,7 +396,7 @@ class ProfileExtractor {
           reject(ErrorFactory.processing.metadataNotFound(entry.fileName))
         }
       })
-      
+
       readStream.on('error', (error) => {
         this.zipfile.close()
         reject(ErrorFactory.processing.metadataNotFound(entry.fileName))
@@ -405,21 +405,115 @@ class ProfileExtractor {
   }
 
   private parseContent(content: string, fileName: string): void {
-    // Simplified parsing logic - use the patterns from APP_CONSTANTS or options
-    const patterns = [
+    // Try to parse full JSON to capture all settings for this file
+    try {
+      const parsed = JSON.parse(content)
+      if (!this.extractedData.allSettings) this.extractedData.allSettings = {}
+      this.extractedData.allSettings[fileName] = parsed
+    } catch {
+      // ignore if not valid JSON; regex-based extraction will continue
+    }
+
+    // Basic profile patterns
+
+    // Always keep raw content for this file
+    try {
+      if (!this.extractedData.rawSettings) this.extractedData.rawSettings = {}
+      this.extractedData.rawSettings[fileName] = content
+    } catch {}
+
+    // Generic key-value parsing fallback (handles JSON-like and INI-like lines)
+    try {
+      if (!this.extractedData.allSettings) this.extractedData.allSettings = {}
+      const acc: Record<string, any> = {}
+
+      const applyKV = (k: string, v: string) => {
+        const key = k.trim()
+        let val: any = v.trim()
+        // Strip trailing commas or quotes
+        val = val.replace(/^"|^'|\s*,$|"$|'$/g, '')
+        // Normalize numeric and percent
+        if (/^\d+(?:\.\d+)?%$/.test(val)) {
+          val = parseFloat(val.replace('%', ''))
+        } else if (/^-?\d+(?:\.\d+)?$/.test(val)) {
+          const num = parseFloat(val)
+          if (!isNaN(num)) val = num
+        }
+        acc[key] = val
+      }
+
+      const regexes: RegExp[] = [
+        /"([^"]+)"\s*:\s*"([^"]*)"/g,       // "key": "value"
+        /'([^']+)'\s*:\s*'([^']*)'/g,           // 'key': 'value'
+        /"([^"]+)"\s*:\s*([0-9.]+)/g,         // "key": 123
+        /([A-Za-z0-9_.-]+)\s*:\s*"([^"]*)"/g, // key: "value"
+        /([A-Za-z0-9_.-]+)\s*=\s*"([^"]*)"/g, // key = "value"
+        /([A-Za-z0-9_.-]+)\s*=\s*([^\s,}]+)/g,  // key = value
+        /([A-Za-z0-9_.-]+)\s*:\s*([^\s,}]+)/g   // key: value
+      ]
+
+      for (const re of regexes) {
+        let m: RegExpExecArray | null
+        while ((m = re.exec(content)) !== null) {
+          applyKV(m[1], m[2])
+        }
+      }
+
+      this.extractedData.allSettings[fileName] = {
+        ...(this.extractedData.allSettings[fileName] || {}),
+        ...acc
+      }
+    } catch {}
+
+    const basicPatterns = [
       /"ProfileTitle"\s*:\s*"([^"]+)"/i,
       /"printer_model"\s*:\s*"([^"]+)"/i,
       /"nozzle_diameter"\s*:\s*\[([^\]]+)\]/i,
       /"default_print_profile"\s*:\s*"([^"]+)"/i
     ]
 
-    for (const pattern of patterns) {
+    // Enhanced patterns for nozzle and profile detection
+    const nozzleProfilePatterns = [
+      // Bambu Lab patterns
+      /"nozzle_diameter"\s*:\s*\[([^\]]+)\]/gi,
+      /"compatible_printers"\s*:\s*\[([^\]]+)\]/gi,
+      /"layer_height"\s*:\s*"([^"]+)"/gi,
+      /"print_profile"\s*:\s*"([^"]+)"/gi,
+      // OrcaSlicer patterns
+      /"printer_variant"\s*:\s*"([^"]+)"/gi,
+      /"nozzle_type"\s*:\s*"([^"]+)"/gi,
+      // PrusaSlicer patterns
+      /"printer_settings_id"\s*:\s*"([^"]+)"/gi,
+      /"print_settings_id"\s*:\s*"([^"]+)"/gi,
+      // Additional nozzle detection patterns
+      /"name"\s*:\s*"([^"]*(\d+\.?\d*)\s*nozzle[^"]*)"/gi
+    ]
+
+    // Print settings patterns
+    const settingsPatterns = [
+      /"sparse_infill_density"\s*:\s*"?([^",}]+)"?/i,
+      /"sparse_infill_percentage"\s*:\s*"?([^",}]+)"?/i,
+      /"layer_height"\s*:\s*"?([^",}]+)"?/i,
+      /"outer_wall_speed"\s*:\s*"([^"]+)"/i,
+      /"inner_wall_speed"\s*:\s*"([^"]+)"/i,
+      /"infill_speed"\s*:\s*"([^"]+)"/i,
+      /"bed_temperature"\s*:\s*"([^"]+)"/i,
+      /"nozzle_temperature"\s*:\s*"([^"]+)"/i,
+      /"support_enable"\s*:\s*"([^"]+)"/i,
+      /"adhesion_type"\s*:\s*"([^"]+)"/i,
+      /"filament_type"\s*:\s*"([^"]+)"/i,
+      /"filament_material"\s*:\s*"([^"]+)"/i
+    ]
+
+    // Parse basic profile information
+    for (const pattern of basicPatterns) {
       const match = content.match(pattern)
       if (match && match[1]) {
         const value = match[1].trim()
-        
+
         if (pattern.source.includes('ProfileTitle') || pattern.source.includes('print_profile')) {
-          this.extractedData.profile = value
+          // Store the original profile for reference, but we'll generate a corrected one later
+          this.extractedData.originalProfile = value
         } else if (pattern.source.includes('printer_model')) {
           this.extractedData.printer = value
         } else if (pattern.source.includes('nozzle_diameter')) {
@@ -427,6 +521,239 @@ class ProfileExtractor {
         }
       }
     }
+
+
+    // Track source precedence for settings: project_settings.config > process_settings_*.config
+    if (!(this.extractedData as any)._printSettingsSource) {
+      ;(this.extractedData as any)._printSettingsSource = {}
+    }
+    const srcMap = (this.extractedData as any)._printSettingsSource as Record<string, 'project' | 'process' | 'other'>
+    const isProjectConfig = /(^|\/)Metadata\/project_settings\.config$/.test(fileName)
+    const isProcessConfig = /(^|\/)Metadata\/process_settings.*\.config$/.test(fileName)
+    const currentSource: 'project' | 'process' | 'other' = isProjectConfig ? 'project' : isProcessConfig ? 'process' : 'other'
+
+    const shouldWrite = (key: string) => {
+      const prev = srcMap[key]
+      if (currentSource === 'project') return true
+      if (!prev) return true
+      if (prev !== 'project') return true
+      return false
+    }
+
+    // Parse print settings
+    if (!this.extractedData.printSettings) {
+      this.extractedData.printSettings = {}
+    }
+
+    for (const pattern of settingsPatterns) {
+      const match = content.match(pattern)
+      if (match && match[1]) {
+        const value = match[1].trim()
+
+        if (pattern.source.includes('sparse_infill_density') || pattern.source.includes('sparse_infill_percentage')) {
+          const numValue = parseFloat(value.replace('%', ''))
+          if (!isNaN(numValue) && shouldWrite('sparseInfillPercentage')) {
+            this.extractedData.printSettings.sparseInfillPercentage = numValue
+            srcMap['sparseInfillPercentage'] = currentSource
+          }
+        } else if (pattern.source.includes('layer_height')) {
+          const numValue = parseFloat(value)
+          if (!isNaN(numValue) && shouldWrite('layerHeight')) {
+            this.extractedData.printSettings.layerHeight = numValue
+            srcMap['layerHeight'] = currentSource
+          }
+        } else if (pattern.source.includes('speed')) {
+          const numValue = parseFloat(value)
+          if (!isNaN(numValue) && shouldWrite('printSpeed')) {
+            this.extractedData.printSettings.printSpeed = numValue
+            srcMap['printSpeed'] = currentSource
+          }
+        } else if (pattern.source.includes('bed_temperature')) {
+          const numValue = parseFloat(value)
+          if (!isNaN(numValue) && shouldWrite('bedTemperature')) {
+            this.extractedData.printSettings.bedTemperature = numValue
+            srcMap['bedTemperature'] = currentSource
+          }
+        } else if (pattern.source.includes('nozzle_temperature')) {
+          const numValue = parseFloat(value)
+          if (!isNaN(numValue) && shouldWrite('nozzleTemperature')) {
+            this.extractedData.printSettings.nozzleTemperature = numValue
+            srcMap['nozzleTemperature'] = currentSource
+          }
+        } else if (pattern.source.includes('support_enable')) {
+          if (shouldWrite('supportEnabled')) {
+            this.extractedData.printSettings.supportEnabled = value === 'true' || value === '1'
+            srcMap['supportEnabled'] = currentSource
+          }
+        } else if (pattern.source.includes('adhesion_type')) {
+          if (shouldWrite('adhesionType')) {
+            this.extractedData.printSettings.adhesionType = value
+            srcMap['adhesionType'] = currentSource
+          }
+        } else if (pattern.source.includes('filament_type') || pattern.source.includes('filament_material')) {
+          if (shouldWrite('filamentType')) {
+            this.extractedData.printSettings.filamentType = value
+            srcMap['filamentType'] = currentSource
+          }
+        }
+      }
+    }
+
+    // Process nozzle profile patterns for enhanced nozzle detection
+    for (const pattern of nozzleProfilePatterns) {
+      const matches = content.match(pattern)
+      if (matches) {
+        for (const match of matches) {
+          const fullMatch = match.match(pattern)
+          if (fullMatch && fullMatch[1]) {
+            const value = fullMatch[1].trim()
+
+            if (pattern.source.includes('nozzle_diameter')) {
+              // Extract nozzle diameter from array format: ["0.4"] or [0.4]
+              const nozzleMatch = value.match(/["']?(\d+\.?\d*)["']?/)
+              if (nozzleMatch && nozzleMatch[1]) {
+                this.extractedData.nozzle = nozzleMatch[1]
+              }
+            } else if (pattern.source.includes('printer_settings_id') || pattern.source.includes('name')) {
+              // Extract nozzle from printer name: "Bambu Lab P1S 0.4 nozzle"
+              const nozzleMatch = value.match(/(\d+\.?\d*)\s*nozzle/i)
+              if (nozzleMatch && nozzleMatch[1]) {
+                this.extractedData.nozzle = nozzleMatch[1]
+              }
+            } else if (pattern.source.includes('compatible_printers')) {
+              // Extract nozzle from compatible printers list
+              const nozzleMatch = value.match(/(\d+\.?\d*)\s*nozzle/i)
+              if (nozzleMatch && nozzleMatch[1] && !this.extractedData.nozzle) {
+                this.extractedData.nozzle = nozzleMatch[1]
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Extract detailed nozzle and profile information
+    this.extractLayerProfiles()
+  }
+
+
+
+  /**
+   * Extract layer profiles for the selected nozzle only
+   */
+  private extractLayerProfiles(): void {
+    // Initialize nozzleProfiles if not exists
+    if (!this.extractedData.nozzleProfiles) {
+      this.extractedData.nozzleProfiles = {
+        currentNozzle: null,
+        layerProfiles: {},
+        currentProfile: null
+      }
+    }
+
+    // Determine the selected nozzle strictly from file content.
+    // NOTE: We avoid "chutar"/guess defaults (ex.: 0.4) para não misturar valores.
+    // Se o nozzle não for detectado nos arquivos Metadata, mantemos undefined aqui
+    // e a API superior decide como comparar com defaults no campo `differences`.
+    let selectedNozzle = this.extractedData.nozzle
+    // (sem fallback automático aqui de propósito)
+
+    // Common layer height profiles for different nozzle sizes
+    const commonProfiles = {
+      '0.2': [
+        { name: 'Ultra Fine', layerHeight: 0.08, description: 'Highest quality, slowest print' },
+        { name: 'Fine', layerHeight: 0.12, description: 'High quality' },
+        { name: 'Standard', layerHeight: 0.16, description: 'Balanced quality and speed' }
+      ],
+      '0.4': [
+        { name: 'Fine', layerHeight: 0.16, description: 'High quality' },
+        { name: 'Standard', layerHeight: 0.2, description: 'Balanced quality and speed' },
+        { name: 'Draft', layerHeight: 0.24, description: 'Fast print, lower quality' },
+        { name: 'Fast', layerHeight: 0.28, description: 'Fastest print' }
+      ],
+      '0.6': [
+        { name: 'Standard', layerHeight: 0.2, description: 'Balanced quality and speed' },
+        { name: 'Draft', layerHeight: 0.3, description: 'Fast print' },
+        { name: 'Fast', layerHeight: 0.4, description: 'Fastest print, thick layers' }
+      ],
+      '0.8': [
+        { name: 'Standard', layerHeight: 0.3, description: 'Balanced for large nozzle' },
+        { name: 'Draft', layerHeight: 0.4, description: 'Fast print' },
+        { name: 'Fast', layerHeight: 0.6, description: 'Very fast, very thick layers' }
+      ],
+      '1.0': [
+        { name: 'Standard', layerHeight: 0.4, description: 'Balanced for large nozzle' },
+        { name: 'Draft', layerHeight: 0.6, description: 'Fast print' },
+        { name: 'Fast', layerHeight: 0.8, description: 'Very fast, very thick layers' }
+      ]
+    }
+
+    // Update nozzle profiles to show only the selected nozzle
+    this.extractedData.nozzleProfiles.currentNozzle = selectedNozzle
+    this.extractedData.nozzleProfiles.layerProfiles = {}
+
+    // Add layer profiles only for the selected nozzle
+    if (commonProfiles[selectedNozzle as keyof typeof commonProfiles]) {
+      this.extractedData.nozzleProfiles.layerProfiles[selectedNozzle] =
+        commonProfiles[selectedNozzle as keyof typeof commonProfiles]
+    } else {
+      // Fallback profiles for unknown nozzle sizes
+      const nozzleSize = parseFloat(selectedNozzle)
+      this.extractedData.nozzleProfiles.layerProfiles[selectedNozzle] = [
+        { name: 'Fine', layerHeight: nozzleSize * 0.4, description: 'High quality' },
+        { name: 'Standard', layerHeight: nozzleSize * 0.5, description: 'Balanced quality and speed' },
+        { name: 'Draft', layerHeight: nozzleSize * 0.75, description: 'Fast print' }
+      ]
+    }
+
+    // Generate corrected profile name based on actual printer and settings (format with 2 decimals)
+    this.generateCorrectedProfile(selectedNozzle)
+  }
+
+  /**
+   * Generate a corrected profile name based on the actual printer detected
+   */
+  private generateCorrectedProfile(selectedNozzle: string): void {
+    const layerHeight = this.extractedData.printSettings?.layerHeight || 0.2
+    const printer = this.extractedData.printer || ''
+
+    // Determine the correct technical suffix based on actual printer
+    let technicalSuffix = ''
+    if (printer.toLowerCase().includes('p1s')) {
+      technicalSuffix = '@BBL P1S'
+    } else if (printer.toLowerCase().includes('x1 carbon')) {
+      technicalSuffix = '@BBL X1C'
+    } else if (printer.toLowerCase().includes('x1e')) {
+      technicalSuffix = '@BBL X1E'
+    } else if (printer.toLowerCase().includes('x1')) {
+      technicalSuffix = '@BBL X1'
+    } else if (printer.toLowerCase().includes('a1')) {
+      technicalSuffix = '@BBL A1'
+    } else if (printer.toLowerCase().includes('bambu')) {
+      technicalSuffix = '@BBL'
+    } else {
+      technicalSuffix = `@${printer.replace(/\s+/g, '_').toUpperCase()}`
+    }
+
+    // Determine quality level based on layer height
+    let qualityLevel = 'Standard'
+    if (layerHeight <= 0.08) {
+      qualityLevel = 'Ultra Fine'
+    } else if (layerHeight <= 0.12) {
+      qualityLevel = 'Fine'
+    } else if (layerHeight <= 0.16) {
+      qualityLevel = 'High Quality'
+    } else if (layerHeight <= 0.2) {
+      qualityLevel = 'Standard'
+    } else if (layerHeight <= 0.24) {
+      qualityLevel = 'Draft'
+    } else {
+      qualityLevel = 'Fast'
+    }
+
+    // Generate the corrected profile name (format layer height with 2 decimals)
+    const lh2 = (Math.round(layerHeight * 100) / 100).toFixed(2)
+    this.extractedData.profile = `${lh2}mm ${qualityLevel} ${technicalSuffix}`
   }
 }
 

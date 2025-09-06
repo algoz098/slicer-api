@@ -1,8 +1,9 @@
 // For more information about this file see https://dove.feathersjs.com/guides/cli/application.html
 import { feathers } from '@feathersjs/feathers'
 import configuration from '@feathersjs/configuration'
-import { koa, rest, bodyParser, errorHandler, parseAuthentication, cors, serveStatic } from '@feathersjs/koa'
+import { koa, rest, errorHandler, parseAuthentication, cors, serveStatic } from '@feathersjs/koa'
 import koaBody from 'koa-body'
+import { createPlatesRouter } from './routes/plates'
 
 import { configurationValidator } from './configuration'
 import type { Application } from './declarations'
@@ -42,7 +43,7 @@ app.use(serveStatic(app.get('public')))
 app.use(errorHandler())
 app.use(parseAuthentication())
 
-// Configure koa-body for file uploads and JSON parsing
+// Configure koa-body for file uploads and JSON parsing BEFORE rest transport
 app.use(koaBody({
   multipart: true,
   formidable: {
@@ -51,13 +52,29 @@ app.use(koaBody({
   }
 }))
 
+// Custom middleware to attach file data to Feathers context
+app.use(async (ctx, next) => {
+  // Store the Koa context in the request for Feathers services to access
+  if (ctx.request.files) {
+    ctx.feathersFiles = ctx.request.files
+  }
+  await next()
+})
+
+// Configure services and transports AFTER body parsing
+app.configure(rest())
+
+
+
 // Remove the default bodyParser since koa-body handles it
 // app.use(bodyParser())
 
-// Configure services and transports
-app.configure(rest())
-
 app.configure(services)
+
+// Add custom routes
+const platesRouter = createPlatesRouter(app)
+app.use(platesRouter.routes())
+app.use(platesRouter.allowedMethods())
 
 // Register hooks that run on all service methods
 app.hooks({

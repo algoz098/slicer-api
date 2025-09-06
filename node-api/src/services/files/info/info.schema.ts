@@ -39,6 +39,95 @@ export const filesInfoSchema = Type.Object(
         maxLength: 200,
         description: 'Print profile name (e.g., "Standard", "Fine", "Draft")'
       })
+    ),
+    // Differences agora é um OBJETO de pares chave/valor extraído dos settings do 3MF.
+    differences: Type.Optional(Type.Record(
+      Type.String(),
+      Type.Any()
+    )),
+
+
+    // Print settings extracted from file
+    printSettings: Type.Optional(
+      Type.Object({
+        sparseInfillPercentage: Type.Optional(Type.Number({
+          minimum: 0,
+          maximum: 100,
+          description: 'Infill percentage (0-100%)'
+        })),
+        layerHeight: Type.Optional(Type.Number({
+          minimum: 0.01,
+          maximum: 1.0,
+          description: 'Layer height in mm'
+        })),
+        printSpeed: Type.Optional(Type.Number({
+          minimum: 1,
+          maximum: 1000,
+          description: 'Print speed in mm/s'
+        })),
+        bedTemperature: Type.Optional(Type.Number({
+          minimum: 0,
+          maximum: 200,
+          description: 'Bed temperature in Celsius'
+        })),
+        nozzleTemperature: Type.Optional(Type.Number({
+          minimum: 0,
+          maximum: 400,
+          description: 'Nozzle temperature in Celsius'
+        })),
+        supportEnabled: Type.Optional(Type.Boolean({
+          description: 'Whether supports are enabled'
+        })),
+        adhesionType: Type.Optional(Type.String({
+          description: 'Bed adhesion type (e.g., "brim", "raft", "skirt")'
+        })),
+        filamentType: Type.Optional(Type.String({
+          description: 'Filament material type (e.g., "PLA", "ABS", "PETG")'
+        }))
+      }, {
+        description: 'Print settings extracted from the file'
+      })
+    ),
+    // Plate count information
+    plateCount: Type.Optional(Type.Number({
+      minimum: 0,
+      description: 'Number of plates/objects detected in the file'
+    })),
+    // Comparison with selected printer profile
+    profileComparison: Type.Optional(
+      Type.Object({
+        selectedProfileId: Type.Optional(Type.String({
+          description: 'ID of the printer profile used for comparison'
+        })),
+        differences: Type.Optional(Type.Array(
+          Type.Object({
+            parameter: Type.String({
+              description: 'Name of the parameter that differs'
+            }),
+            fileValue: Type.Union([Type.String(), Type.Number(), Type.Boolean(), Type.Null()], {
+              description: 'Value from the uploaded file'
+            }),
+            profileValue: Type.Union([Type.String(), Type.Number(), Type.Boolean(), Type.Null()], {
+              description: 'Value from the selected printer profile'
+            })
+          })
+        )),
+        summary: Type.Optional(Type.Object({
+          totalDifferences: Type.Number({
+            description: 'Total number of parameter differences found'
+          }),
+          criticalDifferences: Type.Number({
+            description: 'Number of critical parameter differences (e.g., nozzle diameter, printer model)'
+          }),
+          compatibilityScore: Type.Number({
+            minimum: 0,
+            maximum: 100,
+            description: 'Compatibility percentage (0-100)'
+          })
+        }))
+      }, {
+        description: 'Comparison results between file parameters and selected printer profile'
+      })
     )
   },
   {
@@ -93,6 +182,13 @@ export const filesInfoQuerySchema = Type.Intersect(
         Type.Literal('gcode')
       ], {
         description: 'Filter by file format'
+      })),
+      // Profile comparison parameters
+      compareWithProfile: Type.Optional(Type.String({
+        description: 'ID of printer profile to compare file parameters against'
+      })),
+      includeComparison: Type.Optional(Type.Boolean({
+        description: 'Whether to include profile comparison in the response (default: false)'
       }))
     }, { additionalProperties: false })
   ],

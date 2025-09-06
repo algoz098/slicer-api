@@ -22,12 +22,14 @@ export const platesCountResolver = resolve<PlatesCount, HookContext<PlatesCountS
 export const platesCountExternalResolver = resolve<PlatesCount, HookContext<PlatesCountService>>({})
 
 // Schema for creating new entries
-export const platesCountDataSchema = Type.Object(
-  {
-    file: Type.Optional(Type.Any()) // File upload - optional to avoid validation issues
-  },
-  { $id: 'PlatesCountData' }
-)
+export const platesCountDataSchema = Type.Object({
+  // File upload data comes from multipart form data
+  // No direct properties needed here
+  testFilePath: Type.Optional(Type.String()) // For testing purposes
+}, {
+  $id: 'PlatesCountData',
+  description: 'Data schema for plate count - actual data comes from multipart form'
+})
 export type PlatesCountData = Static<typeof platesCountDataSchema>
 export const platesCountDataValidator = getValidator(platesCountDataSchema, dataValidator)
 export const platesCountDataResolver = resolve<PlatesCount, HookContext<PlatesCountService>>({})

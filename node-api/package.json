@@ -39,7 +39,8 @@
     "compile": "shx rm -rf lib/ && tsc",
     "start": "node lib/",
     "prettier": "npx prettier \"**/*.ts\" --write",
-    "mocha": "cross-env NODE_ENV=test mocha",
+    "mocha": "cross-env NODE_ENV=test TS_NODE_COMPILER_OPTIONS='{\"module\":\"commonjs\"}' mocha --require ts-node/register --extensions ts test/**/*.test.ts",
+    "test:info": "cross-env NODE_ENV=test TS_NODE_COMPILER_OPTIONS='{\"module\":\"commonjs\"}' mocha --require ts-node/register --extensions ts test/services/files/info/info.test.ts",
     "test": "npm run mocha",
     "bundle:client": "npm run compile && npm pack --pack-destination ./public"
   },
