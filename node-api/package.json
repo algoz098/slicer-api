@@ -44,7 +44,8 @@
     "mocha": "cross-env NODE_ENV=test TS_NODE_COMPILER_OPTIONS='{\"module\":\"commonjs\"}' mocha --require ts-node/register --extensions ts test/**/*.test.ts",
     "test:info": "cross-env NODE_ENV=test TS_NODE_COMPILER_OPTIONS='{\"module\":\"commonjs\"}' mocha --require ts-node/register --extensions ts test/services/files/info/info.test.ts",
     "test": "npm run mocha",
-    "bundle:client": "npm run compile && npm pack --pack-destination ./public"
+    "bundle:client": "npm run compile && npm pack --pack-destination ./public",
+    "build:addon": "node scripts/build-addon.js"
   },
   "dependencies": {
     "@feathersjs/adapter-commons": "^5.0.34",
@@ -72,12 +73,15 @@
     "@typescript-eslint/eslint-plugin": "^8.42.0",
     "@typescript-eslint/parser": "^8.42.0",
     "axios": "^1.11.0",
+    "bindings": "^1.5.0",
+    "cmake-js": "^7.3.1",
     "cross-env": "^10.0.0",
     "eslint": "^9.35.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-unused-imports": "^4.2.0",
     "mocha": "^11.7.2",
+    "node-addon-api": "^8.5.0",
     "nodemon": "^3.1.10",
     "prettier": "^3.6.2",
     "shx": "^0.4.0",

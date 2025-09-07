@@ -8,6 +8,7 @@ import * as yauzl from 'yauzl'
 
 import type { Application } from '../../../declarations'
 import type { PlatesCount, PlatesCountData, PlatesCountPatch, PlatesCountQuery } from './count.schema'
+import { logger } from '../../../logger'
 
 export type { PlatesCount, PlatesCountData, PlatesCountPatch, PlatesCountQuery }
 
@@ -38,7 +39,8 @@ export class PlatesCountService<ServiceParams extends PlatesCountParams = Plates
   private async processFile(data: PlatesCountData, params?: ServiceParams): Promise<PlatesCount> {
     // Temporary solution: test with a hardcoded file path for development
     if ((data as any)?.testFilePath) {
-      console.log('Debug - using test file path:', (data as any).testFilePath)
+      // Using test file path branch for internal tests; avoid console in production
+      logger.debug('Using test file path', { path: (data as any).testFilePath })
       return this.processFileFromPath((data as any).testFilePath)
     }
 

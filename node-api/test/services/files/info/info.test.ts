@@ -124,6 +124,7 @@ describe('files/info service', function () {
     assert.strictEqual((result.filamentProfile.differences.find((d: any) => d.parameter === 'sparse_infill_percentage') as any).fileValue, 4, 'Sparse infill percentage should be 4')
     
 
+    // eslint-disable-next-line no-console
     console.log('0:', JSON.stringify(result, null, 2))
     // console.log('0:', Object.keys((result as any).differences))
     // console.log('1:', JSON.stringify(Object.keys((result as any).printerProfileValues), null, 2))

@@ -11,9 +11,9 @@
  * 
  * The resolver merges all inherited properties to create a complete profile.
  */
-
 import * as fs from 'fs'
 import * as path from 'path'
+
 import { logger } from '../../logger'
 
 export interface ProfileData {

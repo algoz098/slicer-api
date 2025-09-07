@@ -1,0 +1,3 @@
+/Users/maosone/Downloads/slicer-api/node-api/native/orcaslicer_core/build/CMakeFiles/orcaslicer_core.dir
+/Users/maosone/Downloads/slicer-api/node-api/native/orcaslicer_core/build/CMakeFiles/edit_cache.dir
+/Users/maosone/Downloads/slicer-api/node-api/native/orcaslicer_core/build/CMakeFiles/rebuild_cache.dir

@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/maosone/Downloads/slicer-api/node-api/native/orcaslicer_core/build/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

@@ -4,45 +4,50 @@ import type { TransportConnection, Application } from '@feathersjs/feathers'
 import authenticationClient from '@feathersjs/authentication-client'
 import type { AuthenticationClientOptions } from '@feathersjs/authentication-client'
 
-import { filamentsProfileClient } from './services/filaments-profile/filaments-profile.shared'
+import { filesGcodeClient } from './services/files/gcode/gcode.shared'
 export type {
-  FilamentsProfile,
-  FilamentsProfileData,
-  FilamentsProfileQuery,
-  FilamentsProfilePatch
-} from './services/filaments-profile/filaments-profile.shared'
-
-import { filesInfoClient } from './services/files/info/info.shared'
-export type {
-  FilesInfo,
-  FilesInfoData,
-  FilesInfoQuery,
-  FilesInfoPatch
-} from './services/files/info/info.shared'
-
-import { platesCountClient } from './services/plates/count/count.shared'
-export type {
-  PlatesCount,
-  PlatesCountData,
-  PlatesCountQuery,
-  PlatesCountPatch
-} from './services/plates/count/count.shared'
-
-import { printerProfilesClient } from './services/printer-profiles/printer-profiles.shared'
-export type {
-  PrinterProfiles,
-  PrinterProfilesData,
-  PrinterProfilesQuery,
-  PrinterProfilesPatch
-} from './services/printer-profiles/printer-profiles.shared'
+  FilesGcode,
+  FilesGcodeData,
+  FilesGcodeQuery,
+  FilesGcodePatch
+} from './services/files/gcode/gcode.shared'
 
 import { healthcheckClient } from './services/healthcheck/healthcheck.shared'
+import { printerProfilesClient } from './services/printer-profiles/printer-profiles.shared'
+import { platesCountClient } from './services/plates/count/count.shared'
+import { filesInfoClient } from './services/files/info/info.shared'
+import { filamentsProfileClient } from './services/filaments-profile/filaments-profile.shared'
+
 export type {
   Healthcheck,
   HealthcheckData,
   HealthcheckQuery,
   HealthcheckPatch
 } from './services/healthcheck/healthcheck.shared'
+export type {
+  PrinterProfiles,
+  PrinterProfilesData,
+  PrinterProfilesQuery,
+  PrinterProfilesPatch
+} from './services/printer-profiles/printer-profiles.shared'
+export type {
+  PlatesCount,
+  PlatesCountData,
+  PlatesCountQuery,
+  PlatesCountPatch
+} from './services/plates/count/count.shared'
+export type {
+  FilesInfo,
+  FilesInfoData,
+  FilesInfoQuery,
+  FilesInfoPatch
+} from './services/files/info/info.shared'
+export type {
+  FilamentsProfile,
+  FilamentsProfileData,
+  FilamentsProfileQuery,
+  FilamentsProfilePatch
+} from './services/filaments-profile/filaments-profile.shared'
 
 export interface Configuration {
   connection: TransportConnection<ServiceTypes>
@@ -75,5 +80,6 @@ export const createClient = <Configuration = any,>(
   client.configure(platesCountClient)
   client.configure(filesInfoClient)
   client.configure(filamentsProfileClient)
+  client.configure(filesGcodeClient)
   return client
 }

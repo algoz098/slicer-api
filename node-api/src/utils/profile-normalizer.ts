@@ -1,5 +1,6 @@
 import * as fs from 'fs'
 import * as path from 'path'
+
 import { ProfileFileManager } from './profile-file-manager'
 
 export type TypeHint = 'number' | 'boolean'

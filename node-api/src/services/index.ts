@@ -1,3 +1,5 @@
+import { filesGcode } from './files/gcode/gcode'
+import { filesGcodeDebugPreamble } from './files/gcode/debug-preamble'
 import { filamentsProfile } from './filaments-profile/filaments-profile'
 import { filesInfo } from './files/info/info'
 import { filesUpload } from './files/upload/upload'
@@ -9,6 +11,8 @@ import { healthcheck } from './healthcheck/healthcheck'
 import type { Application } from '../declarations'
 
 export const services = (app: Application) => {
+  app.configure(filesGcode)
+  app.configure(filesGcodeDebugPreamble)
   app.configure(filamentsProfile)
   // Register core services first (dependencies for other services)
   app.configure(validation)

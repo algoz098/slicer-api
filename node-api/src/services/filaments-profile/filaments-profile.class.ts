@@ -13,7 +13,7 @@ import type {
 import { ProfileFileManager } from '../../utils/profile-file-manager'
 import { logger, loggerHelpers } from '../../logger'
 import { ErrorFactory } from '../../errors/custom-errors'
-import { buildTypeHints, normalizeProfile, TypeHints } from '../../utils/profile-normalizer'
+import { normalizeProfile, TypeHints } from '../../utils/profile-normalizer'
 import { FilamentDataNormalizer } from './filament-data-normalizer'
 import { ProfileInheritanceResolver } from './profile-inheritance-resolver'
 

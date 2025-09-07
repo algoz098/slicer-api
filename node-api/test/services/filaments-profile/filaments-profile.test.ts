@@ -88,6 +88,7 @@ describe('filaments-profile service - get', () => {
     // The profile should have all properties from the original JSON entry
     // At minimum, it should have more than just the 4 basic properties
     const propertyCount = Object.keys(profile).length
+    // eslint-disable-next-line no-console
     console.log('Profile has', propertyCount, 'properties')
   })
 })

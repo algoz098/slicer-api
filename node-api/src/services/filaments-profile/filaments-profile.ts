@@ -1,5 +1,4 @@
 // For more information about this file see https://dove.feathersjs.com/guides/cli/service.html
-
 import { hooks as schemaHooks } from '@feathersjs/schema'
 
 import {
@@ -12,7 +11,6 @@ import {
   filamentsProfilePatchResolver,
   filamentsProfileQueryResolver
 } from './filaments-profile.schema'
-
 import type { Application } from '../../declarations'
 import { FilamentsProfileService, getOptions } from './filaments-profile.class'
 import { filamentsProfilePath, filamentsProfileMethods } from './filaments-profile.shared'
