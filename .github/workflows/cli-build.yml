@@ -42,9 +42,15 @@ jobs:
         run: |
           cmake -S OrcaSlicerCli -B build -DORCASLICER_ROOT_DIR="${{ github.workspace }}/OrcaSlicer"
 
-      - name: Build (CMake)
+      - name: Build (CMake) [Linux/macOS]
+        if: runner.os != 'Windows'
         run: |
           cmake --build build --target orcaslicer-cli --config Release -- -j2
+
+      - name: Build (CMake, Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cmake --build build --target orcaslicer-cli --config Release
 
       - name: Show outputs
         run: |

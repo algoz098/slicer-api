@@ -49,7 +49,7 @@ jobs:
 
       - name: Build and stage prebuild
         working-directory: OrcaSlicerCli/bindings/node
-        run: npm run prebuild
+        run: npm run prebuild:all
 
       - name: List staged prebuilds
         working-directory: OrcaSlicerCli/bindings/node

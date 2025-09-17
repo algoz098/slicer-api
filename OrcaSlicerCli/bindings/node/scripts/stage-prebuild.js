@@ -36,6 +36,7 @@ function main() {
   // Candidate addon outputs (built locally)
   const addonCandidates = [
     path.join(pkgRoot, 'build', 'Release', 'orcaslicer_node.node'),
+    path.join(pkgRoot, 'build', 'bindings', 'node', 'orcaslicer_node.node'),
     path.join(pkgRoot, '../../build/bindings/node/orcaslicer_node.node'),
   ].map(p => path.resolve(p));
 
@@ -56,7 +57,9 @@ function main() {
   for (const name of engineNames) {
     // Same dir as addon (top-level cmake output case)
     engineCandidates.push(path.join(path.dirname(addonPath), name));
-    // Top-level cmake bindings dir
+    // Local bindings dir under this package build
+    engineCandidates.push(path.join(pkgRoot, 'build', 'bindings', 'node', name));
+    // Top-level cmake bindings dir (when building from repo root)
     engineCandidates.push(path.join(pkgRoot, '../../build/bindings/node/', name));
     // Fallback: local build dir sibling
     engineCandidates.push(path.join(pkgRoot, 'build', 'Release', name));
