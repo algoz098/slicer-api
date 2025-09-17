@@ -27,9 +27,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential cmake ninja-build python3 pkg-config libfontconfig1-dev
 
-      - name: Prepare OrcaSlicer build dir (satisfy CMake check)
+      - name: Prepare OrcaSlicer build dir (Linux/macOS)
+        if: runner.os != 'Windows'
         run: |
           mkdir -p OrcaSlicer/build
+
+      - name: Prepare OrcaSlicer build dir (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path 'OrcaSlicer\build' | Out-Null
 
       - name: Configure (CMake)
         run: |
