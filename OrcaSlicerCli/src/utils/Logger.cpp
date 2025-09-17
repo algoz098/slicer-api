@@ -6,6 +6,8 @@
 #include <sstream>
 #include <mutex>
 #include <map>
+#include <algorithm>
+#include <cctype>
 
 namespace OrcaSlicerCli {
 

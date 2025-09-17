@@ -45,6 +45,10 @@ add_library(orcacli_core STATIC
     ${ORCACLI_UTIL_SOURCES}
 )
 
+# Ensure static core can be linked into shared engine (Linux/UNIX needs PIC)
+set_property(TARGET orcacli_core PROPERTY POSITION_INDEPENDENT_CODE ON)
+
+
 # Always include nanosvg headers for nanosvg_impl.cpp regardless of libslic3r availability
 # This prevents build failures when HAVE_LIBSLIC3R=0 or before libs are detected.
 target_include_directories(orcacli_core PRIVATE

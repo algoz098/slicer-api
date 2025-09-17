@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-22.04, macos-13, macos-14, windows-2022 ]
+        os: [ ubuntu-22.04, macos-14, windows-2022 ]
     steps:
       - name: Checkout (with submodules)
         uses: actions/checkout@v4
@@ -30,7 +30,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build python3 pkg-config
+          sudo apt-get install -y build-essential cmake ninja-build python3 pkg-config libfontconfig1-dev
 
       - name: Prepare OrcaSlicer build dir (satisfy CMake check)
         run: |

@@ -5,6 +5,9 @@
 #include <cstdlib>
 
 #include <iostream>
+#include <algorithm>
+#include <cctype>
+#include <cstring>
 
 #include "core/CliCore.hpp"
 #include "Application.hpp"
