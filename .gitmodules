@@ -1,0 +1,4 @@
+[submodule "OrcaSlicer"]
+	path = OrcaSlicer
+	url = https://github.com/SoftFever/OrcaSlicer.git
+	branch = main

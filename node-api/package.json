@@ -1,0 +1,75 @@
+{
+  "name": "node-api",
+  "description": "",
+  "version": "0.0.0",
+  "homepage": "",
+  "private": true,
+  "keywords": [
+    "feathers"
+  ],
+  "author": {},
+  "contributors": [],
+  "bugs": {},
+  "engines": {
+    "node": ">= 24.7.0"
+  },
+  "feathers": {
+    "language": "ts",
+    "packager": "npm",
+    "database": "other",
+    "framework": "koa",
+    "transports": [
+      "rest"
+    ],
+    "schema": "typebox"
+  },
+  "directories": {
+    "lib": "src",
+    "test": "test"
+  },
+  "files": [
+    "lib/client.js",
+    "lib/**/*.d.ts",
+    "lib/**/*.shared.js"
+  ],
+  "main": "lib/client",
+  "scripts": {
+    "dev": "nodemon -x ts-node src/index.ts",
+    "compile": "shx rm -rf lib/ && tsc",
+    "start": "node lib/",
+    "prettier": "npx prettier \"**/*.ts\" --write",
+    "mocha": "cross-env NODE_ENV=test NODE_OPTIONS=--import=tsx mocha test/ --recursive --extension .ts --exit",
+    "test": "npm run mocha",
+    "smoke:slicer": "cross-env NODE_ENV=test ts-node scripts/smoke-slicer.ts",
+    "bundle:client": "npm run compile && npm pack --pack-destination ./public"
+  },
+  "dependencies": {
+    "@feathersjs/adapter-commons": "^5.0.35",
+    "@feathersjs/authentication": "^5.0.35",
+    "@feathersjs/authentication-client": "^5.0.35",
+    "@feathersjs/configuration": "^5.0.35",
+    "@feathersjs/errors": "^5.0.35",
+    "@feathersjs/feathers": "^5.0.35",
+    "@feathersjs/koa": "^5.0.35",
+    "@feathersjs/schema": "^5.0.35",
+    "@feathersjs/transport-commons": "^5.0.35",
+    "@feathersjs/typebox": "^5.0.35",
+    "koa-body": "^6.0.1",
+    "winston": "^3.17.0"
+  },
+  "devDependencies": {
+    "@feathersjs/cli": "^5.0.35",
+    "@feathersjs/rest-client": "^5.0.35",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^24.5.1",
+    "axios": "^1.12.2",
+    "cross-env": "^10.0.0",
+    "mocha": "^11.7.2",
+    "nodemon": "^3.1.10",
+    "prettier": "^3.6.2",
+    "shx": "^0.4.0",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}

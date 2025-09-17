@@ -1,0 +1,37 @@
+{
+  "name": "@orcaslicer/node",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Meta-pacote para consumir OrcaSlicerCli a partir da raiz do repositório (reexporta o addon N-API)",
+  "main": "OrcaSlicerCli/bindings/node/index.js",
+  "types": "OrcaSlicerCli/bindings/node/types/index.d.ts",
+  "scripts": {
+    "postinstall": "npx cmake-js build --directory OrcaSlicerCli/bindings/node",
+    "build": "npm run build --prefix OrcaSlicerCli/bindings/node",
+    "configure": "npm run configure --prefix OrcaSlicerCli/bindings/node",
+    "test": "npm test --prefix OrcaSlicerCli/bindings/node"
+  },
+  "devDependencies": {
+    "cmake-js": "^7.3.1"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "files": [
+    "OrcaSlicerCli/bindings/node/**/*",
+    "OrcaSlicer/resources/**/*",
+    "OrcaSlicerCli/src/**/*",
+    "OrcaSlicerCli/CMakeLists.txt",
+    "OrcaSlicerCli/build/**/*",
+    "OrcaSlicerCli/examples/**/*",
+    "example_files/**/*"
+  ],
+  "keywords": [
+    "orcaslicer",
+    "slicing",
+    "3d-printing",
+    "n-api",
+    "native-addon"
+  ]
+}
+

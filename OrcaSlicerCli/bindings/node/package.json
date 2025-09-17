@@ -1,0 +1,45 @@
+{
+  "name": "@orcaslicer/cli",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Node.js bindings for OrcaSlicerCli (N-API), enabling programmatic slicing",
+  "license": "AGPL-3.0-only",
+  "main": "index.js",
+  "types": "types/index.d.ts",
+  "scripts": {
+    "configure": "node -e \"(async()=>{const { CMake } = require('cmake-js'); const cm=new CMake({ runtime: 'node', CMakeOptions: ['-DORCACLI_BUILD_NODE_ADDON=ON','-DORCASLICER_ROOT_DIR=../../../OrcaSlicer']}); await cm.configure();})()\"",
+    "build": "node -e \"(async()=>{const { CMake } = require('cmake-js'); const cm=new CMake({ runtime: 'node', CMakeOptions: ['-DORCACLI_BUILD_NODE_ADDON=ON','-DORCASLICER_ROOT_DIR=../../../OrcaSlicer']}); await cm.build();})()\"",
+    "test": "node test/smoke.js && node test/unit.js && node test/e2e.js",
+    "slice": "node test/slice_compare.js",
+    "slice:resources": "ORCACLI_RESOURCES=../../../OrcaSlicer/resources node test/slice_compare.js",
+    "slice:all": "cmake -S ../.. -B ../../build -DORCACLI_BUILD_NODE_ADDON=ON -DORCACLI_ENABLE_ASAN=OFF && cmake --build ../../build --target orcaslicer_node -j4 && node test/slice_compare.js",
+    "slice:all:resources": "cmake -S ../.. -B ../../build -DORCACLI_BUILD_NODE_ADDON=ON -DORCACLI_ENABLE_ASAN=OFF && cmake --build ../../build --target orcaslicer_node -j4 && ORCACLI_RESOURCES=../../../OrcaSlicer/resources node test/slice_compare.js",
+    "slice:resources:quiet": "ORCACLI_LOG_LEVEL=1 ORCACLI_QUIET=1 ORCACLI_RESOURCES=../../../OrcaSlicer/resources node test/slice_compare.js",
+    "slice:all:resources:quiet": "ORCACLI_LOG_LEVEL=1 ORCACLI_QUIET=1 cmake -S ../.. -B ../../build -DORCACLI_BUILD_NODE_ADDON=ON -DORCACLI_ENABLE_ASAN=OFF && cmake --build ../../build --target orcaslicer_node -j4 && ORCACLI_RESOURCES=../../../OrcaSlicer/resources node test/slice_compare.js",
+
+    "pack:local": "npm run build && echo 'Artifacts under build/bindings/node'",
+
+    "prebuild:stage": "node scripts/stage-prebuild.js",
+    "prebuild": "npm run configure && npm run build && npm run prebuild:stage"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/<org>/<repo>.git"
+  },
+  "bugs": {
+    "url": "https://github.com/<org>/<repo>/issues"
+  },
+  "homepage": "https://github.com/<org>/<repo>#readme",
+  "devDependencies": {
+    "cmake-js": "^7.3.1"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "files": [
+    "prebuilds/**/*",
+    "build/bindings/node/*",
+    "index.js",
+    "types/**/*"
+  ]
+}
