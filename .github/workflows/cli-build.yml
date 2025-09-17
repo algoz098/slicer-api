@@ -2,10 +2,6 @@ name: C++ CLI build
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ node-api ]
-  pull_request:
-    branches: [ node-api ]
 
 jobs:
   build:
@@ -22,15 +18,26 @@ jobs:
           submodules: recursive
 
       # --- Build OrcaSlicer (full) as per official docs ---
-      - name: Linux | Build OrcaSlicer (deps + slic3r)
+      - name: Linux | Build OrcaSlicer + CLI inside Docker (Ubuntu 22.04)
         if: runner.os == 'Linux'
-        working-directory: OrcaSlicer
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential ninja-build curl git pkg-config
-          chmod +x build_linux.sh
-          ./build_linux.sh -u
-          ./build_linux.sh -dsi
+          docker run --rm \
+            -e GITHUB_ACTIONS=true \
+            -v "${{ github.workspace }}":/work \
+            -w /work \
+            ubuntu:22.04 bash -lc '
+              set -euo pipefail
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update
+              apt-get install -y build-essential ninja-build curl git pkg-config cmake
+              cd OrcaSlicer
+              chmod +x build_linux.sh
+              ./build_linux.sh -u
+              ./build_linux.sh -dsi
+              cd /work
+              cmake -S OrcaSlicerCli -B build -DORCASLICER_ROOT_DIR=/work/OrcaSlicer -DORCACLI_REQUIRE_LIBS=ON
+              cmake --build build --target orcaslicer-cli --config Release -- -j2
+            '
 
       - name: macOS | Setup CMake 3.31.x
         if: runner.os == 'macOS'
@@ -74,11 +81,12 @@ jobs:
 
       # --- Now build our CLI against the built libs ---
       - name: Configure (CMake)
+        if: runner.os != 'Linux'
         run: |
           cmake -S OrcaSlicerCli -B build -DORCASLICER_ROOT_DIR="${{ github.workspace }}/OrcaSlicer" -DORCACLI_REQUIRE_LIBS=ON
 
-      - name: Build (CMake) [Linux/macOS]
-        if: runner.os != 'Windows'
+      - name: Build (CMake) [macOS]
+        if: runner.os == 'macOS'
         run: |
           cmake --build build --target orcaslicer-cli --config Release -- -j2
 

@@ -14,29 +14,76 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-22.04, macos-14, windows-2022 ]
+        os: [ ubuntu-22.04 ]
     steps:
       - name: Checkout (with submodules)
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
+      - name: Compute OrcaSlicer submodule SHA
+        id: orcasha
+        run: |
+          echo "ORCA_SHA=$(git rev-parse HEAD:OrcaSlicer || git -C OrcaSlicer rev-parse HEAD)" >> $GITHUB_ENV
+
+      - name: Cache Orca deps downloads (DL_CACHE)
+        uses: actions/cache@v4
+        with:
+          path: OrcaSlicer/deps/DL_CACHE
+          key: ${{ runner.os }}-orca-dlcache-${{ env.ORCA_SHA }}
+          restore-keys: |
+            ${{ runner.os }}-orca-dlcache-
+
+      - name: Cache Orca build outputs
+        uses: actions/cache@v4
+        with:
+          path: |
+            OrcaSlicer/build
+            OrcaSlicer/deps/build/destdir
+          key: ${{ runner.os }}-orca-build-${{ env.ORCA_SHA }}
+          restore-keys: |
+            ${{ runner.os }}-orca-build-
+
       - name: Setup Node.js
+        if: runner.os != 'Linux'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      # --- Build OrcaSlicer (full) as per official docs ---
-      - name: Linux | Build OrcaSlicer (deps + slic3r)
+      # --- Build OrcaSlicer + addon inside Docker for Linux ---
+      - name: Linux | Build OrcaSlicer + addon inside Docker (Ubuntu 22.04)
         if: runner.os == 'Linux'
-        working-directory: OrcaSlicer
         run: |
-          sudo apt-get update
-          # Script handles deps install, but ensure base tools
-          sudo apt-get install -y build-essential ninja-build curl git pkg-config
-          chmod +x build_linux.sh
-          ./build_linux.sh -u
-          ./build_linux.sh -dsi
+          docker run --rm \
+            -e GITHUB_ACTIONS=true \
+            -v "${{ github.workspace }}":/work \
+            -w /work \
+            ubuntu:22.04 bash -lc '
+              set -euo pipefail
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update
+              # Base tools + sudo + build tools required by Orca deps (autoreconf/aclocal, libtool, gettext, texinfo, file)
+              apt-get install -y build-essential ninja-build curl git git-lfs pkg-config ca-certificates gnupg cmake sudo autoconf automake libtool gettext texinfo file
+              # Node.js 20 (for cmake-js / npm)
+              curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+              apt-get install -y nodejs
+              git lfs install || true
+              git lfs pull || true
+              # Limit parallelism to keep memory under control in CI runners
+              export CMAKE_BUILD_PARALLEL_LEVEL=1
+              export MAKEFLAGS=-j1
+              export NINJAFLAGS=-j1
+              # Build OrcaSlicer (full)
+              cd OrcaSlicer
+              chmod +x build_linux.sh
+              ./build_linux.sh -u
+              ./build_linux.sh -dsi
+              # Build addon prebuild
+              cd /work/OrcaSlicerCli/bindings/node
+              export CMAKE_JS_CMAKE_ARGS="--CDORCACLI_BUILD_NODE_ADDON=ON --CDORCASLICER_ROOT_DIR=/work/OrcaSlicer --CDORCACLI_REQUIRE_LIBS=ON"
+              npm ci
+              npm run prebuild:all
+            '
 
       - name: macOS | Setup CMake 3.31.x
         if: runner.os == 'macOS'
@@ -80,10 +127,12 @@ jobs:
 
       # --- Build Node addon prebuild ---
       - name: Install npm deps (bindings)
+        if: runner.os != 'Linux'
         working-directory: OrcaSlicerCli/bindings/node
         run: npm ci
 
       - name: Build and stage prebuild
+        if: runner.os != 'Linux'
         working-directory: OrcaSlicerCli/bindings/node
         run: npm run prebuild:all
 
