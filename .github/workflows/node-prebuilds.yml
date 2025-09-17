@@ -26,23 +26,59 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install build prereqs (Linux)
+      # --- Build OrcaSlicer (full) as per official docs ---
+      - name: Linux | Build OrcaSlicer (deps + slic3r)
         if: runner.os == 'Linux'
+        working-directory: OrcaSlicer
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build python3 pkg-config libfontconfig1-dev
+          # Script handles deps install, but ensure base tools
+          sudo apt-get install -y build-essential ninja-build curl git pkg-config
+          chmod +x build_linux.sh
+          ./build_linux.sh -u
+          ./build_linux.sh -dsi
 
-      - name: Prepare OrcaSlicer build dir (Linux/macOS)
-        if: runner.os != 'Windows'
+      - name: macOS | Setup CMake 3.31.x
+        if: runner.os == 'macOS'
+        uses: jwlawson/actions-setup-cmake@v1
+        with:
+          cmake-version: '3.31.7'
+
+      - name: macOS | Install tools required by docs
+        if: runner.os == 'macOS'
         run: |
-          mkdir -p OrcaSlicer/build
+          brew update
+          brew install gettext libtool automake autoconf texinfo || true
 
-      - name: Prepare OrcaSlicer build dir (Windows)
+      - name: macOS | Build OrcaSlicer
+        if: runner.os == 'macOS'
+        working-directory: OrcaSlicer
+        run: |
+          chmod +x build_release_macos.sh
+          ./build_release_macos.sh
+
+      - name: Windows | Setup CMake 3.31.x
+        if: runner.os == 'Windows'
+        uses: jwlawson/actions-setup-cmake@v1
+        with:
+          cmake-version: '3.31.7'
+
+      - name: Windows | Install required tools
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path 'OrcaSlicer\build' | Out-Null
+          choco install strawberryperl git-lfs -y --no-progress
+          git lfs install
+          git lfs pull
 
+      - name: Windows | Build OrcaSlicer (VS2022)
+        if: runner.os == 'Windows'
+        shell: cmd
+        working-directory: OrcaSlicer
+        run: |
+          build_release_vs2022.bat
+
+      # --- Build Node addon prebuild ---
       - name: Install npm deps (bindings)
         working-directory: OrcaSlicerCli/bindings/node
         run: npm ci

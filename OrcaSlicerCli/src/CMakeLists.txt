@@ -99,7 +99,11 @@ if(EXISTS "${LIBSLIC3R_PATH}" AND EXISTS "${SEMVER_PATH}")
     message(STATUS "libslic3r integration enabled")
 
 else()
-    message(WARNING "libslic3r or dependencies not found - CLI will have limited functionality")
+    if(ORCACLI_REQUIRE_LIBS)
+        message(FATAL_ERROR "Required OrcaSlicer libraries not found (libslic3r/semver). Set ORCACLI_REQUIRE_LIBS=OFF to allow limited build, or build OrcaSlicer first.")
+    else()
+        message(WARNING "libslic3r or dependencies not found - CLI will have limited functionality")
+    endif()
     target_compile_definitions(orcacli_core PRIVATE HAVE_LIBSLIC3R=0)
 endif()
 

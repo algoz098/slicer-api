@@ -18,6 +18,12 @@ option(ORCACLI_STATIC_LINKING "Use static linking" ON)
 # Optional: enable AddressSanitizer for local debugging
 option(ORCACLI_ENABLE_ASAN "Enable AddressSanitizer (for local debug builds)" OFF)
 
+# Require full OrcaSlicer libs (libslic3r/semver/etc.) to be present; if ON, CMake will fail if missing
+if(NOT DEFINED ORCACLI_REQUIRE_LIBS AND DEFINED ENV{ORCACLI_REQUIRE_LIBS})
+    set(ORCACLI_REQUIRE_LIBS "$ENV{ORCACLI_REQUIRE_LIBS}" CACHE BOOL "Fail if OrcaSlicer libs are not found" FORCE)
+endif()
+option(ORCACLI_REQUIRE_LIBS "Fail if OrcaSlicer libs are not found" OFF)
+
 # Node addon option
 option(ORCACLI_BUILD_NODE_ADDON "Build Node.js addon (.node) linking orcacli_core" OFF)
 
@@ -44,13 +50,24 @@ endif()
 set(ORCASLICER_SRC_DIR "${ORCASLICER_ROOT_DIR}/src")
 set(ORCASLICER_BUILD_DIR "${ORCASLICER_ROOT_DIR}/build")
 
-# Detect architecture-specific build directory
+# Detect architecture-specific build directory and set ORCASLICER_ARCH
 if(EXISTS "${ORCASLICER_BUILD_DIR}/arm64")
     set(ORCASLICER_BUILD_DIR "${ORCASLICER_BUILD_DIR}/arm64")
+    set(ORCASLICER_ARCH "arm64")
     message(STATUS "Using ARM64 build directory: ${ORCASLICER_BUILD_DIR}")
 elseif(EXISTS "${ORCASLICER_BUILD_DIR}/x64")
     set(ORCASLICER_BUILD_DIR "${ORCASLICER_BUILD_DIR}/x64")
+    set(ORCASLICER_ARCH "x64")
     message(STATUS "Using x64 build directory: ${ORCASLICER_BUILD_DIR}")
+else()
+    # Some platforms keep everything directly under build/
+    if(NOT DEFINED ORCASLICER_ARCH)
+        if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
+            set(ORCASLICER_ARCH "arm64")
+        else()
+            set(ORCASLICER_ARCH "x64")
+        endif()
+    endif()
 endif()
 
 # Check if OrcaSlicer is built

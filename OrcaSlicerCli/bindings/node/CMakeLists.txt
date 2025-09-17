@@ -21,6 +21,10 @@ if(NOT TARGET orcacli_core)
     if(NOT DEFINED ORCASLICER_ROOT_DIR)
         set(ORCASLICER_ROOT_DIR "${REPO_ROOT}/OrcaSlicer" CACHE PATH "Path to OrcaSlicer root directory" FORCE)
     endif()
+    # In CI, require full libs and fail-hard if missing
+    if(NOT DEFINED ORCACLI_REQUIRE_LIBS AND DEFINED ENV{GITHUB_ACTIONS})
+        set(ORCACLI_REQUIRE_LIBS ON CACHE BOOL "Fail if OrcaSlicer libs are not found" FORCE)
+    endif()
     # Ensure common dependencies expected by core are available
     find_package(Threads REQUIRED)
     add_subdirectory("${ROOT_DIR}/src" "${CMAKE_CURRENT_BINARY_DIR}/orcaslicercli_core")
