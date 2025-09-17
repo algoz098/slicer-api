@@ -20,7 +20,7 @@
     "pack:local": "npm run build && echo 'Artifacts under build/bindings/node'",
 
     "prebuild:stage": "node scripts/stage-prebuild.js",
-    "prebuild:all": "npm run configure && npm run build && npm run prebuild:stage"
+    "prebuild:all": "npx cmake-js prepare && npm run configure && npm run build && npm run prebuild:stage"
   },
   "repository": {
     "type": "git",

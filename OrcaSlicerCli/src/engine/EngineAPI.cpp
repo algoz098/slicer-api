@@ -11,7 +11,9 @@
 
 #include "core/CliCore.hpp"
 #include "Application.hpp"
+#ifdef HAVE_LIBSLIC3R
 namespace Slic3r { unsigned int level_string_to_boost(std::string level); void set_logging_level(unsigned int level); }
+#endif
 
 
 using OrcaSlicerCli::CliCore;
@@ -59,6 +61,7 @@ orcacli_operation_result orcacli_initialize(orcacli_handle h, const char* resour
         return orcacli_operation_result{false, dup_cstr("invalid handle"), nullptr};
     }
 
+#ifdef HAVE_LIBSLIC3R
     // Configure libslic3r logging level from environment.
     try {
         unsigned int level = 1; // default to 'error'
@@ -80,6 +83,7 @@ orcacli_operation_result orcacli_initialize(orcacli_handle h, const char* resour
         if (q && *q && std::string(q) != "0") level = 1; // quiet => errors only
         Slic3r::set_logging_level(level);
     } catch (...) { /* ignore logging setup errors */ }
+#endif
 
     Engine* e = static_cast<Engine*>(h);
     auto res = e->core.initialize(resources_path ? std::string(resources_path) : std::string());

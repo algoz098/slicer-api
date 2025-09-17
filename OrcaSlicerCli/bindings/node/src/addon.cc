@@ -7,7 +7,11 @@
 
 #include <cstring>
 #include <filesystem>
-#include <dlfcn.h>
+#if defined(_WIN32)
+  #include <windows.h>
+#else
+  #include <dlfcn.h>
+#endif
 
 // Thin addon will dlopen the engine library at runtime; no direct core linkage.
 static std::mutex g_mutex; // serialize heavy operations
@@ -62,12 +66,26 @@ struct FFI {
 static FFI g_ffi;
 
 static std::string module_dir_path() {
+#if defined(_WIN32)
+  HMODULE hMod = nullptr;
+  if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                         (LPCSTR)&module_dir_path, &hMod)) {
+    char buf[MAX_PATH];
+    DWORD len = GetModuleFileNameA(hMod, buf, MAX_PATH);
+    if (len > 0 && len < MAX_PATH) {
+      std::filesystem::path p(buf);
+      return p.parent_path().string();
+    }
+  }
+  return std::string();
+#else
   Dl_info info{};
   if (dladdr((void*)&module_dir_path, &info) && info.dli_fname) {
     std::filesystem::path p(info.dli_fname);
     return p.parent_path().string();
   }
   return std::string();
+#endif
 }
 
 static bool ensure_engine_loaded(std::string* err_out) {
@@ -92,9 +110,15 @@ static bool ensure_engine_loaded(std::string* err_out) {
   }
   const char* last_err = nullptr; std::string last_path;
   for (const auto& p : candidates) {
+#if defined(_WIN32)
+    g_ffi.lib = (void*)LoadLibraryA(p.c_str());
+    if (g_ffi.lib) break;
+    last_err = nullptr; last_path = p;
+#else
     g_ffi.lib = dlopen(p.c_str(), RTLD_NOW);
     if (g_ffi.lib) break;
     last_err = dlerror(); last_path = p;
+#endif
   }
   if (!g_ffi.lib) {
     if (err_out) {
@@ -105,7 +129,11 @@ static bool ensure_engine_loaded(std::string* err_out) {
     }
     return false;
   }
+#if defined(_WIN32)
+  auto load_sym = [](void* lib, const char* name){ return (void*)GetProcAddress((HMODULE)lib, name); };
+#else
   auto load_sym = [](void* lib, const char* name){ return dlsym(lib, name); };
+#endif
   g_ffi.create         = reinterpret_cast<PF_orcacli_create>(load_sym(g_ffi.lib, "orcacli_create"));
   g_ffi.destroy        = reinterpret_cast<PF_orcacli_destroy>(load_sym(g_ffi.lib, "orcacli_destroy"));
   g_ffi.initialize     = reinterpret_cast<PF_orcacli_initialize>(load_sym(g_ffi.lib, "orcacli_initialize"));
@@ -118,13 +146,21 @@ static bool ensure_engine_loaded(std::string* err_out) {
   g_ffi.free_result    = reinterpret_cast<PF_orcacli_free_result>(load_sym(g_ffi.lib, "orcacli_free_result"));
   if (!g_ffi.create || !g_ffi.destroy || !g_ffi.initialize || !g_ffi.load_model || !g_ffi.get_model_info || !g_ffi.slice || !g_ffi.version || !g_ffi.free_string || !g_ffi.free_model_info || !g_ffi.free_result) {
     if (err_out) *err_out = "Missing symbols in engine library";
+#if defined(_WIN32)
+    FreeLibrary((HMODULE)g_ffi.lib); g_ffi = FFI{}; // reset
+#else
     dlclose(g_ffi.lib); g_ffi = FFI{}; // reset
+#endif
     return false;
   }
   g_ffi.inst = g_ffi.create();
   if (!g_ffi.inst) {
     if (err_out) *err_out = "Failed to create engine instance";
+#if defined(_WIN32)
+    FreeLibrary((HMODULE)g_ffi.lib); g_ffi = FFI{}; return false;
+#else
     dlclose(g_ffi.lib); g_ffi = FFI{}; return false;
+#endif
   }
   return true;
 }
