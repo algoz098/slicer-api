@@ -1,0 +1,60 @@
+name: Node addon prebuilds
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ node-api ]
+  pull_request:
+    branches: [ node-api ]
+
+jobs:
+  prebuild:
+    name: Prebuild ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-22.04, macos-13, macos-14, windows-2022 ]
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install build prereqs (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build python3 pkg-config
+
+      - name: Prepare OrcaSlicer build dir (satisfy CMake check)
+        run: |
+          mkdir -p OrcaSlicer/build
+
+      - name: Install npm deps (bindings)
+        working-directory: OrcaSlicerCli/bindings/node
+        run: npm ci
+
+      - name: Build and stage prebuild
+        working-directory: OrcaSlicerCli/bindings/node
+        run: npm run prebuild
+
+      - name: List staged prebuilds
+        working-directory: OrcaSlicerCli/bindings/node
+        run: |
+          echo "Platform: ${{ runner.os }}"
+          ls -R prebuilds || true
+
+      - name: Upload artifact (prebuild)
+        uses: actions/upload-artifact@v4
+        with:
+          name: prebuild-${{ runner.os }}
+          path: |
+            OrcaSlicerCli/bindings/node/prebuilds/**
+          if-no-files-found: error
+

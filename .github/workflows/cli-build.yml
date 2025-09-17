@@ -1,0 +1,54 @@
+name: C++ CLI build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ node-api ]
+  pull_request:
+    branches: [ node-api ]
+
+jobs:
+  build:
+    name: Build CLI on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-22.04, macos-13, macos-14, windows-2022 ]
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build tools (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build python3 pkg-config
+
+      - name: Prepare OrcaSlicer build dir (satisfy CMake check)
+        run: |
+          mkdir -p OrcaSlicer/build
+
+      - name: Configure (CMake)
+        run: |
+          cmake -S OrcaSlicerCli -B build -DORCASLICER_ROOT_DIR="${{ github.workspace }}/OrcaSlicer"
+
+      - name: Build (CMake)
+        run: |
+          cmake --build build --target orcaslicer-cli --config Release -- -j2
+
+      - name: Show outputs
+        run: |
+          echo "Tree under build:" && (ls -R build | sed -n '1,200p' || true)
+
+      - name: Upload artifact (CLI)
+        uses: actions/upload-artifact@v4
+        with:
+          name: orcaslicer-cli-${{ runner.os }}
+          path: |
+            build/bin/**/orcaslicer-cli*
+            build/bin/orcaslicer-cli*
+          if-no-files-found: warn
+
