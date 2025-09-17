@@ -6,6 +6,9 @@
 #include <exception>
 #include <cmath>
 
+#include <algorithm>
+#include <cctype>
+
 
 
 #if HAVE_LIBSLIC3R
@@ -1753,6 +1756,7 @@ CliCore::OperationResult CliCore::slice(const SlicingParams& params) {
     }
 #endif
 
+#if HAVE_LIBSLIC3R
     // Re-apply 3MF print-level overrides (e.g., sparse_infill_density, top_shell_layers) on top of selected profiles
     try {
         if (!m_impl->print_overrides_keys.empty()) {
@@ -1765,7 +1769,7 @@ CliCore::OperationResult CliCore::slice(const SlicingParams& params) {
     } catch (const std::exception &e) {
         std::cout << "WARN: Failed to re-apply 3MF print overrides: " << e.what() << std::endl;
     }
-
+#endif
 
     // Load config file if specified
     if (!params.config_file.empty()) {
@@ -1850,7 +1854,11 @@ CliCore::OperationResult CliCore::slice(const SlicingParams& params) {
 }
 
 std::string CliCore::getVersion() {
+#if HAVE_LIBSLIC3R
     return "OrcaSlicerCli 1.0.0 (based on OrcaSlicer " + std::string(SLIC3R_VERSION) + ")";
+#else
+    return "OrcaSlicerCli 1.0.0 (libslic3r not linked)";
+#endif
 }
 
 std::string CliCore::getBuildInfo() {
