@@ -10,10 +10,12 @@ const prebuilt = path.join(__dirname, "prebuilds", `${process.platform}-${proces
 
 // 1) cmake-js default output during local dev
 const mod1 = path.join(__dirname, "build", "Release", "orcaslicer_node.node");
+// 1b) cmake-js with custom LIBRARY_OUTPUT_DIRECTORY (our CMake places under build/bindings/node)
+const mod1b = path.join(__dirname, "build", "bindings", "node", "orcaslicer_node.node");
 // 2) top-level CMake output copied next to addon by src/CMakeLists during mono-repo builds
 const mod2 = path.join(__dirname, "../../build/bindings/node/orcaslicer_node.node");
 
-const candidatePaths = [prebuilt, mod1, mod2];
+const candidatePaths = [prebuilt, mod1, mod1b, mod2];
 for (const p of candidatePaths) {
   if (fs.existsSync(p)) {
     const m = tryRequire(p);

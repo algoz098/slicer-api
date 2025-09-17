@@ -22,9 +22,9 @@ dist/
 OrcaSlicer/build/
 OrcaSlicerCli/build/
 output_files/
-comparable_files/*.gcode
-example_files/*.3mf
-example_files/*.stl
+# comparable_files/*.gcode
+# example_files/*.3mf
+# example_files/*.stl
 
 # Archives
 *.tgz
@@ -37,3 +37,10 @@ example_files/*.stl
 # Local backups
 OrcaSlicer_local_backup_*/
 
+
+build
+build_failhard
+build_failhard_linux
+build-linux
+Prebuilds
+Using
