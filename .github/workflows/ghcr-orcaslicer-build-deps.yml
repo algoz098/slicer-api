@@ -60,7 +60,7 @@ jobs:
         id: check
         shell: bash
         run: |
-          IMAGE="ghcr.io/${{ github.repository_owner }}/orcaslicer-build:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}-deps"
+          IMAGE="ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}"
           echo "Checking $IMAGE"
           if docker manifest inspect "$IMAGE" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
@@ -78,10 +78,10 @@ jobs:
           platforms: linux/amd64
           pull: true
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/orcaslicer-build:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}-deps
+          tags: ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}
           cache-from: |
             type=gha,scope=orca-deps-amd64
-            type=registry,ref=ghcr.io/${{ github.repository_owner }}/orcaslicer-build:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}-deps
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}
           cache-to: |
             type=gha,mode=max,scope=orca-deps-amd64
             type=inline
@@ -206,7 +206,7 @@ jobs:
             type=gha,scope=orca-cli-amd64
             type=registry,ref=ghcr.io/${{ github.repository_owner }}/orcaslicer-cli:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}
             type=registry,ref=ghcr.io/${{ github.repository_owner }}/orcaslicer-build:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}
-            type=registry,ref=ghcr.io/${{ github.repository_owner }}/orcaslicer-build:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}-deps
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}
           cache-to: |
             type=gha,mode=max,scope=orca-cli-amd64
             type=inline
@@ -273,7 +273,7 @@ jobs:
             type=gha,scope=orca-addon-amd64
             type=registry,ref=ghcr.io/${{ github.repository_owner }}/orcaslicer-addon:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}
             type=registry,ref=ghcr.io/${{ github.repository_owner }}/orcaslicer-build:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}
-            type=registry,ref=ghcr.io/${{ github.repository_owner }}/orcaslicer-build:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}-deps
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}
           cache-to: |
             type=gha,mode=max,scope=orca-addon-amd64
             type=inline
