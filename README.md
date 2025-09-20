@@ -2,6 +2,12 @@
 
 Uma interface de linha de comando para o OrcaSlicer, permitindo fatiar arquivos STL e gerar G-code sem interface gráfica.
 
+## Política: sem placeholders
+- Não aceitamos fallbacks, gambiarra, código temporário ou integrações sintéticas.
+- É proibido gerar “placeholders” (ex.: G-code fictício). Se dependências obrigatórias (como libslic3r) não estiverem disponíveis, o build deve FALHAR.
+- Execução deve produzir apenas resultados reais de slicing.
+
+
 ## 📁 Estrutura do Projeto
 
 ```

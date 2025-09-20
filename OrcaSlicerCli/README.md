@@ -2,6 +2,12 @@
 
 ## 🎉 **Status: Infraestrutura Completa e Funcional**
 
+## Política: sem placeholders
+- Não aceitamos fallbacks, gambiarra, código temporário ou integrações sintéticas.
+- É proibido qualquer conteúdo de “placeholder” (ex.: G‑code fictício). Caso bibliotecas obrigatórias (libslic3r etc.) não estejam disponíveis, o build deve falhar.
+- O binário resultante deve sempre produzir resultados reais de slicing.
+
+
 ✅ **Compilado e testado com sucesso** (executável de 612KB)
 ✅ **Integração arquitetural com OrcaSlicer** (linking com libslic3r)
 ✅ **Comandos básicos funcionais** (slice, info, version, help)

@@ -95,10 +95,15 @@ find_package(Threads REQUIRED)
 
 # Try to find Boost headers (required by libslic3r)
 set(BOOST_ROOT "/opt/homebrew")
-find_path(BOOST_INCLUDE_DIR boost/optional.hpp
-    PATHS /opt/homebrew/include
-          /usr/local/include
-          /usr/include
+# Look for Boost headers in standard locations AND in OrcaSlicer deps install tree
+find_path(BOOST_INCLUDE_DIR NAMES boost/optional.hpp
+    HINTS
+        "${ORCASLICER_BUILD_DIR}/deps/usr/local/include"
+        "${ORCASLICER_ROOT_DIR}/deps/build/destdir/usr/local/include"
+    PATHS
+        /opt/homebrew/include
+        /usr/local/include
+        /usr/include
 )
 
 if(BOOST_INCLUDE_DIR)

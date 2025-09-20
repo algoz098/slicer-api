@@ -67,14 +67,48 @@ if(BOOST_INCLUDE_DIR)
     target_link_libraries(orcacli_core boost_headeronly)
 endif()
 
-# Try to find and link OrcaSlicer libraries if they exist
-set(LIBSLIC3R_PATH "${ORCASLICER_BUILD_DIR}/src/libslic3r/Release/liblibslic3r.a")
-set(LIBSLIC3R_CGAL_PATH "${ORCASLICER_BUILD_DIR}/src/libslic3r/Release/liblibslic3r_cgal.a")
-set(SEMVER_PATH "${ORCASLICER_BUILD_DIR}/lib/Release/libsemver.a")
+# Try to find and link OrcaSlicer libraries if they exist (support single-config Ninja and multi-config "Release")
+set(_LIBSLIC3R_CANDIDATES
+    "${ORCASLICER_BUILD_DIR}/src/libslic3r/Release/liblibslic3r.a"
+    "${ORCASLICER_BUILD_DIR}/src/libslic3r/liblibslic3r.a"
+)
+set(_LIBSLIC3R_CGAL_CANDIDATES
+    "${ORCASLICER_BUILD_DIR}/src/libslic3r/Release/liblibslic3r_cgal.a"
+    "${ORCASLICER_BUILD_DIR}/src/libslic3r/liblibslic3r_cgal.a"
+)
+set(_SEMVER_CANDIDATES
+    "${ORCASLICER_BUILD_DIR}/lib/Release/libsemver.a"
+    "${ORCASLICER_BUILD_DIR}/lib/libsemver.a"
+    # Also check deps install prefixes produced by OrcaSlicer/deps build
+    "${ORCASLICER_BUILD_DIR}/deps/usr/local/lib/libsemver.a"
+    "${ORCASLICER_ROOT_DIR}/deps/build/destdir/usr/local/lib/libsemver.a"
+    "${ORCASLICER_ROOT_DIR}/deps/build/${ORCASLICER_ARCH}/OrcaSlicer_dep/usr/local/lib/libsemver.a"
+)
+set(LIBSLIC3R_PATH "")
+foreach(p IN LISTS _LIBSLIC3R_CANDIDATES)
+    if(EXISTS "${p}")
+        set(LIBSLIC3R_PATH "${p}")
+        break()
+    endif()
+endforeach()
+set(LIBSLIC3R_CGAL_PATH "")
+foreach(p IN LISTS _LIBSLIC3R_CGAL_CANDIDATES)
+    if(EXISTS "${p}")
+        set(LIBSLIC3R_CGAL_PATH "${p}")
+        break()
+    endif()
+endforeach()
+set(SEMVER_PATH "")
+foreach(p IN LISTS _SEMVER_CANDIDATES)
+    if(EXISTS "${p}")
+        set(SEMVER_PATH "${p}")
+        break()
+    endif()
+endforeach()
 
 # Check for required dependencies
 set(ENABLE_LIBSLIC3R OFF)
-if(EXISTS "${LIBSLIC3R_PATH}" AND EXISTS "${SEMVER_PATH}")
+if(LIBSLIC3R_PATH AND SEMVER_PATH)
     set(ENABLE_LIBSLIC3R ON)
     message(STATUS "Found libslic3r at: ${LIBSLIC3R_PATH}")
     message(STATUS "Found semver at: ${SEMVER_PATH}")
@@ -84,6 +118,21 @@ if(EXISTS "${LIBSLIC3R_PATH}" AND EXISTS "${SEMVER_PATH}")
     target_link_libraries(orcacli_core ${SEMVER_PATH})
     target_compile_definitions(orcacli_core PRIVATE HAVE_LIBSLIC3R=1)
 
+    # Resolve deps install prefix from common OrcaSlicer layouts (Linux destdir; arch-specific; build tree)
+    set(_DEPS_PREFIX_CANDIDATE1 "${ORCASLICER_BUILD_DIR}/deps/usr/local")
+    set(_DEPS_PREFIX_CANDIDATE2 "${ORCASLICER_ROOT_DIR}/deps/build/destdir/usr/local")
+    set(_DEPS_PREFIX_CANDIDATE3 "${ORCASLICER_ROOT_DIR}/deps/build/${ORCASLICER_ARCH}/OrcaSlicer_dep/usr/local")
+    if(EXISTS "${_DEPS_PREFIX_CANDIDATE1}")
+        set(ORCASLICER_DEPS_PREFIX "${_DEPS_PREFIX_CANDIDATE1}")
+    elseif(EXISTS "${_DEPS_PREFIX_CANDIDATE2}")
+        set(ORCASLICER_DEPS_PREFIX "${_DEPS_PREFIX_CANDIDATE2}")
+    else()
+        set(ORCASLICER_DEPS_PREFIX "${_DEPS_PREFIX_CANDIDATE3}")
+    endif()
+
+    # Common prefix for 3rd party static libs installed by deps build
+    set(ORCASLICER_DEPS_LIBDIR "${ORCASLICER_DEPS_PREFIX}/lib")
+
     # Add additional include directories
     target_include_directories(orcacli_core PRIVATE
         ${ORCASLICER_ROOT_DIR}/deps_src
@@ -91,20 +140,15 @@ if(EXISTS "${LIBSLIC3R_PATH}" AND EXISTS "${SEMVER_PATH}")
         ${ORCASLICER_ROOT_DIR}/deps_src/libigl
         ${ORCASLICER_ROOT_DIR}/deps_src/nanosvg
         ${ORCASLICER_ROOT_DIR}/deps_src/qoi
-        ${ORCASLICER_ROOT_DIR}/deps/build/arm64/OrcaSlicer_dep/usr/local/include
-        ${ORCASLICER_ROOT_DIR}/deps/build/arm64/OrcaSlicer_dep/usr/local/include/opencascade
+        ${ORCASLICER_DEPS_PREFIX}/include
+        ${ORCASLICER_DEPS_PREFIX}/include/opencascade
         ${ORCASLICER_BUILD_DIR}/src/libslic3r
     )
 
     message(STATUS "libslic3r integration enabled")
 
 else()
-    if(ORCACLI_REQUIRE_LIBS)
-        message(FATAL_ERROR "Required OrcaSlicer libraries not found (libslic3r/semver). Set ORCACLI_REQUIRE_LIBS=OFF to allow limited build, or build OrcaSlicer first.")
-    else()
-        message(WARNING "libslic3r or dependencies not found - CLI will have limited functionality")
-    endif()
-    target_compile_definitions(orcacli_core PRIVATE HAVE_LIBSLIC3R=0)
+    message(FATAL_ERROR "Required OrcaSlicer libraries not found (libslic3r/semver). Placeholders are not allowed — build must link libs successfully.")
 endif()
 
 if(EXISTS "${LIBSLIC3R_CGAL_PATH}")
@@ -115,19 +159,88 @@ if(EXISTS "${LIBSLIC3R_CGAL_PATH}")
 endif()
 
 # Find additional required libraries for libslic3r
+# Core dep library locations (prefer deps install prefix, fallback to arch-specific cache)
+set(LIBTBB_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libtbb.a")
+set(LIBTBBMALLOC_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libtbbmalloc.a")
+# miniz (both multi-config and single-config layouts)
+set(_MINIZ_CANDIDATES
+    "${ORCASLICER_BUILD_DIR}/deps_src/miniz/Release/libminiz_static.a"
+    "${ORCASLICER_BUILD_DIR}/deps_src/miniz/libminiz_static.a"
+)
+set(LIBMINIZ_PATH "")
+foreach(p IN LISTS _MINIZ_CANDIDATES)
+    if(EXISTS "${p}")
+        set(LIBMINIZ_PATH "${p}")
+        break()
+    endif()
+endforeach()
+
+set(LIBPNG_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libpng16.a")
+set(LIBQHULL_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libqhullstatic_r.a")
+set(LIBMPFR_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libmpfr.a")
+set(LIBGMPXX_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libgmpxx.a")
+set(LIBGMP_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libgmp.a")
+
+# qoi
+set(_QOI_CANDIDATES
+    "${ORCASLICER_BUILD_DIR}/deps_src/qoi/Release/libqoi.a"
+    "${ORCASLICER_BUILD_DIR}/deps_src/qoi/libqoi.a"
+)
+set(LIBQOI_PATH "")
+foreach(p IN LISTS _QOI_CANDIDATES)
+    if(EXISTS "${p}")
+        set(LIBQOI_PATH "${p}")
+        break()
+    endif()
+endforeach()
+
+# glu-libtess
+set(_GLU_CANDIDATES
+    "${ORCASLICER_BUILD_DIR}/deps_src/glu-libtess/Release/libglu-libtess.a"
+    "${ORCASLICER_BUILD_DIR}/deps_src/glu-libtess/libglu-libtess.a"
+)
+set(LIBGLU_PATH "")
+foreach(p IN LISTS _GLU_CANDIDATES)
+    if(EXISTS "${p}")
+        set(LIBGLU_PATH "${p}")
+        break()
+    endif()
+endforeach()
+
+# mcut
+set(_MCUT_CANDIDATES
+    "${ORCASLICER_BUILD_DIR}/deps_src/mcut/Release/libmcut.a"
+    "${ORCASLICER_BUILD_DIR}/deps_src/mcut/libmcut.a"
+)
+set(LIBMCUT_PATH "")
+foreach(p IN LISTS _MCUT_CANDIDATES)
+    if(EXISTS "${p}")
+        set(LIBMCUT_PATH "${p}")
+        break()
+    endif()
+endforeach()
+set(LIBJPEG_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libjpeg.a")
+set(LIBQHULL_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libqhullstatic_r.a")
+set(QHULLCPP_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libqhullcpp.a")
+
+# Fallback arch-specific cache locations
 set(LIBTBB_PATH "${ORCASLICER_ROOT_DIR}/deps/build/arm64/OrcaSlicer_dep/usr/local/lib/libtbb.a")
 set(LIBTBBMALLOC_PATH "${ORCASLICER_ROOT_DIR}/deps/build/arm64/OrcaSlicer_dep/usr/local/lib/libtbbmalloc.a")
-set(LIBMINIZ_PATH "${ORCASLICER_BUILD_DIR}/deps_src/miniz/Release/libminiz_static.a")
 set(LIBPNG_PATH "${ORCASLICER_ROOT_DIR}/deps/build/arm64/OrcaSlicer_dep/usr/local/lib/libpng16.a")
 set(LIBQHULL_PATH "${ORCASLICER_ROOT_DIR}/deps/build/arm64/OrcaSlicer_dep/usr/local/lib/libqhullstatic_r.a")
 set(LIBMPFR_PATH "${ORCASLICER_ROOT_DIR}/deps/build/arm64/OrcaSlicer_dep/usr/local/lib/libmpfr.a")
+set(LIBGMPXX_PATH "${ORCASLICER_ROOT_DIR}/deps/build/arm64/OrcaSlicer_dep/usr/local/lib/libgmpxx.a")
 set(LIBGMP_PATH "${ORCASLICER_ROOT_DIR}/deps/build/arm64/OrcaSlicer_dep/usr/local/lib/libgmp.a")
-set(LIBQOI_PATH "${ORCASLICER_BUILD_DIR}/deps_src/qoi/Release/libqoi.a")
-set(LIBGLU_PATH "${ORCASLICER_BUILD_DIR}/deps_src/glu-libtess/Release/libglu-libtess.a")
-set(LIBMCUT_PATH "${ORCASLICER_BUILD_DIR}/deps_src/mcut/Release/libmcut.a")
 set(LIBJPEG_PATH "${ORCASLICER_ROOT_DIR}/deps/build/arm64/OrcaSlicer_dep/usr/local/lib/libjpeg.a")
 
 # Boost libraries
+set(BOOST_FILESYSTEM_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libboost_filesystem.a")
+set(BOOST_LOG_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libboost_log.a")
+set(BOOST_LOG_SETUP_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libboost_log_setup.a")
+set(BOOST_THREAD_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libboost_thread.a")
+set(BOOST_LOCALE_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libboost_locale.a")
+set(BOOST_NOWIDE_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libboost_nowide.a")
+
 set(BOOST_FILESYSTEM_PATH "${ORCASLICER_ROOT_DIR}/deps/build/arm64/OrcaSlicer_dep/usr/local/lib/libboost_filesystem.a")
 set(BOOST_LOG_PATH "${ORCASLICER_ROOT_DIR}/deps/build/arm64/OrcaSlicer_dep/usr/local/lib/libboost_log.a")
 set(BOOST_LOG_SETUP_PATH "${ORCASLICER_ROOT_DIR}/deps/build/arm64/OrcaSlicer_dep/usr/local/lib/libboost_log_setup.a")
@@ -159,6 +272,8 @@ set(TKHLR_PATH "${ORCASLICER_ROOT_DIR}/deps/build/arm64/OrcaSlicer_dep/usr/local
 set(BOOST_LOCALE_PATH "${ORCASLICER_ROOT_DIR}/deps/build/arm64/OrcaSlicer_dep/usr/local/lib/libboost_locale.a")
 set(BOOST_NOWIDE_PATH "${ORCASLICER_ROOT_DIR}/deps/build/arm64/OrcaSlicer_dep/usr/local/lib/libboost_nowide.a")
 set(TKCDF_PATH "${ORCASLICER_ROOT_DIR}/deps/build/arm64/OrcaSlicer_dep/usr/local/lib/libTKCDF.a")
+
+
 set(TKXDESTEP_PATH "${ORCASLICER_ROOT_DIR}/deps/build/arm64/OrcaSlicer_dep/usr/local/lib/libTKXDESTEP.a")
 set(TKXMLXCAF_PATH "${ORCASLICER_ROOT_DIR}/deps/build/arm64/OrcaSlicer_dep/usr/local/lib/libTKXmlXCAF.a")
 set(TKBINXCAF_PATH "${ORCASLICER_ROOT_DIR}/deps/build/arm64/OrcaSlicer_dep/usr/local/lib/libTKBinXCAF.a")
@@ -178,28 +293,65 @@ set(TKXML_PATH "${ORCASLICER_ROOT_DIR}/deps/build/arm64/OrcaSlicer_dep/usr/local
 set(ADMESH_PATH "${ORCASLICER_ROOT_DIR}/build/arm64/deps_src/admesh/Release/libadmesh.a")
 set(FREETYPE_PATH "${ORCASLICER_ROOT_DIR}/deps/build/arm64/OrcaSlicer_dep/usr/local/lib/libfreetype.a")
 
-# Noise library
+# Noise library (prefer deps install prefix; support multiple possible names)
+set(_LIBNOISE_CANDIDATES2
+    "${ORCASLICER_DEPS_LIBDIR}/liblibnoise_static.a"
+    "${ORCASLICER_DEPS_LIBDIR}/libnoise_static.a"
+    "${ORCASLICER_DEPS_LIBDIR}/libnoise.a"
+)
+set(LIBNOISE_PATH2 "")
+foreach(p IN LISTS _LIBNOISE_CANDIDATES2)
+    if(EXISTS "${p}")
+        set(LIBNOISE_PATH2 "${p}")
+        break()
+    endif()
+endforeach()
+
+# Fallback (arch-specific cache)
 set(LIBNOISE_PATH "${ORCASLICER_ROOT_DIR}/deps/build/arm64/OrcaSlicer_dep/usr/local/lib/liblibnoise_static.a")
 
-# Clipper library
-set(LIBCLIPPER_PATH "${ORCASLICER_BUILD_DIR}/deps_src/clipper/Release/libclipper.a")
+# Clipper library (support both multi/single-config)
+set(_CLIPPER_CANDIDATES
+    "${ORCASLICER_BUILD_DIR}/deps_src/clipper/Release/libclipper.a"
+    "${ORCASLICER_BUILD_DIR}/deps_src/clipper/libclipper.a"
+)
+set(LIBCLIPPER_PATH "")
+foreach(p IN LISTS _CLIPPER_CANDIDATES)
+    if(EXISTS "${p}")
+        set(LIBCLIPPER_PATH "${p}")
+        break()
+    endif()
+endforeach()
 
-if(EXISTS "${LIBTBB_PATH}" AND ENABLE_LIBSLIC3R)
+# TBB
+if(EXISTS "${LIBTBB_PATH2}" AND ENABLE_LIBSLIC3R)
+    message(STATUS "Found libtbb at: ${LIBTBB_PATH2}")
+    target_link_libraries(orcacli_core ${LIBTBB_PATH2})
+elseif(EXISTS "${LIBTBB_PATH}" AND ENABLE_LIBSLIC3R)
     message(STATUS "Found libtbb at: ${LIBTBB_PATH}")
     target_link_libraries(orcacli_core ${LIBTBB_PATH})
 endif()
 
-if(EXISTS "${LIBTBBMALLOC_PATH}" AND ENABLE_LIBSLIC3R)
+# TBB malloc
+if(EXISTS "${LIBTBBMALLOC_PATH2}" AND ENABLE_LIBSLIC3R)
+    message(STATUS "Found libtbbmalloc at: ${LIBTBBMALLOC_PATH2}")
+    target_link_libraries(orcacli_core ${LIBTBBMALLOC_PATH2})
+elseif(EXISTS "${LIBTBBMALLOC_PATH}" AND ENABLE_LIBSLIC3R)
     message(STATUS "Found libtbbmalloc at: ${LIBTBBMALLOC_PATH}")
     target_link_libraries(orcacli_core ${LIBTBBMALLOC_PATH})
 endif()
 
+# miniz
 if(EXISTS "${LIBMINIZ_PATH}" AND ENABLE_LIBSLIC3R)
     message(STATUS "Found libminiz at: ${LIBMINIZ_PATH}")
     target_link_libraries(orcacli_core ${LIBMINIZ_PATH})
 endif()
 
-if(EXISTS "${LIBPNG_PATH}" AND ENABLE_LIBSLIC3R)
+# PNG (prefixed to prusaslicer_)
+if(EXISTS "${LIBPNG_PATH2}" AND ENABLE_LIBSLIC3R)
+    message(STATUS "Found libpng at: ${LIBPNG_PATH2}")
+    target_link_libraries(orcacli_core ${LIBPNG_PATH2})
+elseif(EXISTS "${LIBPNG_PATH}" AND ENABLE_LIBSLIC3R)
     message(STATUS "Found libpng at: ${LIBPNG_PATH}")
     target_link_libraries(orcacli_core ${LIBPNG_PATH})
 endif()
@@ -209,14 +361,31 @@ if(EXISTS "${LIBQHULL_PATH}" AND ENABLE_LIBSLIC3R)
     target_link_libraries(orcacli_core ${LIBQHULL_PATH})
 endif()
 
-if(EXISTS "${LIBMPFR_PATH}" AND ENABLE_LIBSLIC3R)
-    message(STATUS "Found libmpfr at: ${LIBMPFR_PATH}")
-    target_link_libraries(orcacli_core ${LIBMPFR_PATH})
-endif()
+# MPFR/GMP: prefer deps install prefix, include gmpxx when available. Order matters for static linking.
+if(ENABLE_LIBSLIC3R)
+    if(EXISTS "${LIBMPFR_PATH2}")
+        message(STATUS "Found libmpfr at: ${LIBMPFR_PATH2}")
+        target_link_libraries(orcacli_core ${LIBMPFR_PATH2})
+    elseif(EXISTS "${LIBMPFR_PATH}")
+        message(STATUS "Found libmpfr at: ${LIBMPFR_PATH}")
+        target_link_libraries(orcacli_core ${LIBMPFR_PATH})
+    endif()
 
-if(EXISTS "${LIBGMP_PATH}" AND ENABLE_LIBSLIC3R)
-    message(STATUS "Found libgmp at: ${LIBGMP_PATH}")
-    target_link_libraries(orcacli_core ${LIBGMP_PATH})
+    if(EXISTS "${LIBGMPXX_PATH2}")
+        message(STATUS "Found libgmpxx at: ${LIBGMPXX_PATH2}")
+        target_link_libraries(orcacli_core ${LIBGMPXX_PATH2})
+    elseif(EXISTS "${LIBGMPXX_PATH}")
+        message(STATUS "Found libgmpxx at: ${LIBGMPXX_PATH}")
+        target_link_libraries(orcacli_core ${LIBGMPXX_PATH})
+    endif()
+
+    if(EXISTS "${LIBGMP_PATH2}")
+        message(STATUS "Found libgmp at: ${LIBGMP_PATH2}")
+        target_link_libraries(orcacli_core ${LIBGMP_PATH2})
+    elseif(EXISTS "${LIBGMP_PATH}")
+        message(STATUS "Found libgmp at: ${LIBGMP_PATH}")
+        target_link_libraries(orcacli_core ${LIBGMP_PATH})
+    endif()
 endif()
 
 if(EXISTS "${LIBQOI_PATH}" AND ENABLE_LIBSLIC3R)
@@ -234,36 +403,200 @@ if(EXISTS "${LIBMCUT_PATH}" AND ENABLE_LIBSLIC3R)
     target_link_libraries(orcacli_core ${LIBMCUT_PATH})
 endif()
 
-if(EXISTS "${LIBJPEG_PATH}" AND ENABLE_LIBSLIC3R)
+# JPEG
+if(EXISTS "${LIBJPEG_PATH2}" AND ENABLE_LIBSLIC3R)
+    message(STATUS "Found libjpeg at: ${LIBJPEG_PATH2}")
+    target_link_libraries(orcacli_core ${LIBJPEG_PATH2})
+elseif(EXISTS "${LIBJPEG_PATH}" AND ENABLE_LIBSLIC3R)
     message(STATUS "Found libjpeg at: ${LIBJPEG_PATH}")
     target_link_libraries(orcacli_core ${LIBJPEG_PATH})
 endif()
 
-# Link Boost libraries
-if(EXISTS "${BOOST_FILESYSTEM_PATH}" AND ENABLE_LIBSLIC3R)
+# Link Boost libraries (prefer deps install prefix)
+
+# Prefer OCCT libs from deps install prefix if present (override paths)
+set(_OCCT_LIBDIR "${ORCASLICER_DEPS_LIBDIR}")
+if(EXISTS "${_OCCT_LIBDIR}/libTKernel.a")
+    set(TKKERNEL_PATH "${_OCCT_LIBDIR}/libTKernel.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKBO.a")
+    set(TKBO_PATH "${_OCCT_LIBDIR}/libTKBO.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKSTEP.a")
+    set(TKSTEP_PATH "${_OCCT_LIBDIR}/libTKSTEP.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKSTEPBase.a")
+    set(TKSTEPBASE_PATH "${_OCCT_LIBDIR}/libTKSTEPBase.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKXCAF.a")
+    set(TKXCAF_PATH "${_OCCT_LIBDIR}/libTKXCAF.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKBinL.a")
+    set(TKBINL_PATH "${_OCCT_LIBDIR}/libTKBinL.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKXmlL.a")
+    set(TKXMLL_PATH "${_OCCT_LIBDIR}/libTKXmlL.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKCAF.a")
+    set(TKCAF_PATH "${_OCCT_LIBDIR}/libTKCAF.a")
+
+
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKLCAF.a")
+    set(TKLCAF_PATH "${_OCCT_LIBDIR}/libTKLCAF.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKBRep.a")
+    set(TKBREP_PATH "${_OCCT_LIBDIR}/libTKBRep.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKTopAlgo.a")
+    set(TKTOPALGO_PATH "${_OCCT_LIBDIR}/libTKTopAlgo.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKService.a")
+    set(TKSERVICE_PATH "${_OCCT_LIBDIR}/libTKService.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKV3d.a")
+    set(TKV3D_PATH "${_OCCT_LIBDIR}/libTKV3d.a")
+endif()
+
+# admesh (support both multi/single-config)
+set(_ADMESH_CANDIDATES
+    "${ORCASLICER_BUILD_DIR}/deps_src/admesh/Release/libadmesh.a"
+    "${ORCASLICER_BUILD_DIR}/deps_src/admesh/libadmesh.a"
+)
+set(ADMESH_PATH2 "")
+foreach(p IN LISTS _ADMESH_CANDIDATES)
+    if(EXISTS "${p}")
+        set(ADMESH_PATH2 "${p}")
+        break()
+    endif()
+endforeach()
+
+if(EXISTS "${_OCCT_LIBDIR}/libTKGeomAlgo.a")
+    set(TKGEOMALGO_PATH "${_OCCT_LIBDIR}/libTKGeomAlgo.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKGeomBase.a")
+    set(TKGEOMBASE_PATH "${_OCCT_LIBDIR}/libTKGeomBase.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKMesh.a")
+    set(TKMESH_PATH "${_OCCT_LIBDIR}/libTKMesh.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKPrim.a")
+    set(TKPRIM_PATH "${_OCCT_LIBDIR}/libTKPrim.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKG3d.a")
+    set(TKG3D_PATH "${_OCCT_LIBDIR}/libTKG3d.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKMath.a")
+    set(TKMATH_PATH "${_OCCT_LIBDIR}/libTKMath.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKShHealing.a")
+    set(TKSHHEALING_PATH "${_OCCT_LIBDIR}/libTKShHealing.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKG2d.a")
+    set(TKG2D_PATH "${_OCCT_LIBDIR}/libTKG2d.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKHLR.a")
+    set(TKHLR_PATH "${_OCCT_LIBDIR}/libTKHLR.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKCDF.a")
+    set(TKCDF_PATH "${_OCCT_LIBDIR}/libTKCDF.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKXDESTEP.a")
+    set(TKXDESTEP_PATH "${_OCCT_LIBDIR}/libTKXDESTEP.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKXmlXCAF.a")
+    set(TKXMLXCAF_PATH "${_OCCT_LIBDIR}/libTKXmlXCAF.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKBinXCAF.a")
+    set(TKBINXCAF_PATH "${_OCCT_LIBDIR}/libTKBinXCAF.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKVCAF.a")
+    set(TKVCAF_PATH "${_OCCT_LIBDIR}/libTKVCAF.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKXSBase.a")
+    set(TKXSBASE_PATH "${_OCCT_LIBDIR}/libTKXSBase.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKBin.a")
+    set(TKBIN_PATH "${_OCCT_LIBDIR}/libTKBin.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKBool.a")
+    set(TKBOOL_PATH "${_OCCT_LIBDIR}/libTKBool.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKIGES.a")
+    set(TKIGES_PATH "${_OCCT_LIBDIR}/libTKIGES.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKSTEP209.a")
+    set(TKSTEP209_PATH "${_OCCT_LIBDIR}/libTKSTEP209.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKSTEPAttr.a")
+    set(TKSTEPATTR_PATH "${_OCCT_LIBDIR}/libTKSTEPAttr.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKSTL.a")
+    set(TKSTL_PATH "${_OCCT_LIBDIR}/libTKSTL.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKRWMesh.a")
+    set(TKRWMESH_PATH "${_OCCT_LIBDIR}/libTKRWMesh.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKVRML.a")
+    set(TKVRML_PATH "${_OCCT_LIBDIR}/libTKVRML.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKXDEIGES.a")
+    set(TKXDEIGES_PATH "${_OCCT_LIBDIR}/libTKXDEIGES.a")
+endif()
+if(EXISTS "${_OCCT_LIBDIR}/libTKXml.a")
+    set(TKXML_PATH "${_OCCT_LIBDIR}/libTKXml.a")
+endif()
+
+# Prefer Freetype from deps install prefix
+if(EXISTS "${ORCASLICER_DEPS_LIBDIR}/libfreetype.a")
+    set(FREETYPE_PATH "${ORCASLICER_DEPS_LIBDIR}/libfreetype.a")
+endif()
+
+if(EXISTS "${BOOST_FILESYSTEM_PATH2}" AND ENABLE_LIBSLIC3R)
+    message(STATUS "Found boost_filesystem at: ${BOOST_FILESYSTEM_PATH2}")
+    target_link_libraries(orcacli_core ${BOOST_FILESYSTEM_PATH2})
+elseif(EXISTS "${BOOST_FILESYSTEM_PATH}" AND ENABLE_LIBSLIC3R)
     message(STATUS "Found boost_filesystem at: ${BOOST_FILESYSTEM_PATH}")
     target_link_libraries(orcacli_core ${BOOST_FILESYSTEM_PATH})
 endif()
 
-if(EXISTS "${BOOST_LOG_PATH}" AND ENABLE_LIBSLIC3R)
+if(EXISTS "${BOOST_LOG_PATH2}" AND ENABLE_LIBSLIC3R)
+    message(STATUS "Found boost_log at: ${BOOST_LOG_PATH2}")
+    target_link_libraries(orcacli_core ${BOOST_LOG_PATH2})
+elseif(EXISTS "${BOOST_LOG_PATH}" AND ENABLE_LIBSLIC3R)
     message(STATUS "Found boost_log at: ${BOOST_LOG_PATH}")
     target_link_libraries(orcacli_core ${BOOST_LOG_PATH})
+
+
 endif()
 
-if(EXISTS "${BOOST_LOG_SETUP_PATH}" AND ENABLE_LIBSLIC3R)
+if(EXISTS "${BOOST_LOG_SETUP_PATH2}" AND ENABLE_LIBSLIC3R)
+    message(STATUS "Found boost_log_setup at: ${BOOST_LOG_SETUP_PATH2}")
+    target_link_libraries(orcacli_core ${BOOST_LOG_SETUP_PATH2})
+elseif(EXISTS "${BOOST_LOG_SETUP_PATH}" AND ENABLE_LIBSLIC3R)
     message(STATUS "Found boost_log_setup at: ${BOOST_LOG_SETUP_PATH}")
     target_link_libraries(orcacli_core ${BOOST_LOG_SETUP_PATH})
 endif()
 
-if(EXISTS "${BOOST_THREAD_PATH}" AND ENABLE_LIBSLIC3R)
+if(EXISTS "${BOOST_THREAD_PATH2}" AND ENABLE_LIBSLIC3R)
+    message(STATUS "Found boost_thread at: ${BOOST_THREAD_PATH2}")
+    target_link_libraries(orcacli_core ${BOOST_THREAD_PATH2})
+elseif(EXISTS "${BOOST_THREAD_PATH}" AND ENABLE_LIBSLIC3R)
     message(STATUS "Found boost_thread at: ${BOOST_THREAD_PATH}")
     target_link_libraries(orcacli_core ${BOOST_THREAD_PATH})
+endif()
+
+# Begin linker group to handle static OCCT cyclic deps
+if(ENABLE_LIBSLIC3R)
+    target_link_libraries(orcacli_core -Wl,--start-group)
 endif()
 
 # Link OpenCASCADE libraries
 if(EXISTS "${TKKERNEL_PATH}" AND ENABLE_LIBSLIC3R)
     message(STATUS "Found TKernel at: ${TKKERNEL_PATH}")
     target_link_libraries(orcacli_core ${TKKERNEL_PATH})
+
+
 endif()
 
 if(EXISTS "${TKBO_PATH}" AND ENABLE_LIBSLIC3R)
@@ -296,9 +629,15 @@ if(EXISTS "${TKXMLL_PATH}" AND ENABLE_LIBSLIC3R)
     target_link_libraries(orcacli_core ${TKXMLL_PATH})
 endif()
 
-if(EXISTS "${LIBNOISE_PATH}" AND ENABLE_LIBSLIC3R)
-    message(STATUS "Found libnoise at: ${LIBNOISE_PATH}")
-    target_link_libraries(orcacli_core ${LIBNOISE_PATH})
+# libnoise
+if(ENABLE_LIBSLIC3R)
+    if(EXISTS "${LIBNOISE_PATH2}")
+        message(STATUS "Found libnoise at: ${LIBNOISE_PATH2}")
+        target_link_libraries(orcacli_core ${LIBNOISE_PATH2})
+    elseif(EXISTS "${LIBNOISE_PATH}")
+        message(STATUS "Found libnoise at: ${LIBNOISE_PATH}")
+        target_link_libraries(orcacli_core ${LIBNOISE_PATH})
+    endif()
 endif()
 
 if(EXISTS "${LIBCLIPPER_PATH}" AND ENABLE_LIBSLIC3R)
@@ -381,12 +720,18 @@ if(EXISTS "${TKHLR_PATH}" AND ENABLE_LIBSLIC3R)
     target_link_libraries(orcacli_core ${TKHLR_PATH})
 endif()
 
-if(EXISTS "${BOOST_LOCALE_PATH}" AND ENABLE_LIBSLIC3R)
+if(EXISTS "${BOOST_LOCALE_PATH2}" AND ENABLE_LIBSLIC3R)
+    message(STATUS "Found boost_locale at: ${BOOST_LOCALE_PATH2}")
+    target_link_libraries(orcacli_core ${BOOST_LOCALE_PATH2})
+elseif(EXISTS "${BOOST_LOCALE_PATH}" AND ENABLE_LIBSLIC3R)
     message(STATUS "Found boost_locale at: ${BOOST_LOCALE_PATH}")
     target_link_libraries(orcacli_core ${BOOST_LOCALE_PATH})
 endif()
 
-if(EXISTS "${BOOST_NOWIDE_PATH}" AND ENABLE_LIBSLIC3R)
+if(EXISTS "${BOOST_NOWIDE_PATH2}" AND ENABLE_LIBSLIC3R)
+    message(STATUS "Found boost_nowide at: ${BOOST_NOWIDE_PATH2}")
+    target_link_libraries(orcacli_core ${BOOST_NOWIDE_PATH2})
+elseif(EXISTS "${BOOST_NOWIDE_PATH}" AND ENABLE_LIBSLIC3R)
     message(STATUS "Found boost_nowide at: ${BOOST_NOWIDE_PATH}")
     target_link_libraries(orcacli_core ${BOOST_NOWIDE_PATH})
 endif()
@@ -416,9 +761,25 @@ if(EXISTS "${TKVCAF_PATH}" AND ENABLE_LIBSLIC3R)
     target_link_libraries(orcacli_core ${TKVCAF_PATH})
 endif()
 
-if(EXISTS "${QHULLCPP_PATH}" AND ENABLE_LIBSLIC3R)
-    message(STATUS "Found qhullcpp at: ${QHULLCPP_PATH}")
-    target_link_libraries(orcacli_core ${QHULLCPP_PATH})
+if(ENABLE_LIBSLIC3R)
+    if(EXISTS "${QHULLCPP_PATH2}")
+        message(STATUS "Found qhullcpp at: ${QHULLCPP_PATH2}")
+        target_link_libraries(orcacli_core ${QHULLCPP_PATH2})
+    elseif(EXISTS "${QHULLCPP_PATH}")
+        message(STATUS "Found qhullcpp at: ${QHULLCPP_PATH}")
+        target_link_libraries(orcacli_core ${QHULLCPP_PATH})
+    endif()
+endif()
+
+
+if(ENABLE_LIBSLIC3R)
+    if(EXISTS "${LIBQHULL_PATH2}")
+        message(STATUS "Found qhullstatic_r at: ${LIBQHULL_PATH2}")
+        target_link_libraries(orcacli_core ${LIBQHULL_PATH2})
+    elseif(EXISTS "${LIBQHULL_PATH}")
+        message(STATUS "Found qhullstatic_r at: ${LIBQHULL_PATH}")
+        target_link_libraries(orcacli_core ${LIBQHULL_PATH})
+    endif()
 endif()
 
 if(EXISTS "${TKXSBASE_PATH}" AND ENABLE_LIBSLIC3R)
@@ -476,9 +837,14 @@ if(EXISTS "${TKXML_PATH}" AND ENABLE_LIBSLIC3R)
     target_link_libraries(orcacli_core ${TKXML_PATH})
 endif()
 
-if(EXISTS "${ADMESH_PATH}" AND ENABLE_LIBSLIC3R)
-    message(STATUS "Found admesh at: ${ADMESH_PATH}")
-    target_link_libraries(orcacli_core ${ADMESH_PATH})
+if(ENABLE_LIBSLIC3R)
+    if(EXISTS "${ADMESH_PATH2}")
+        message(STATUS "Found admesh at: ${ADMESH_PATH2}")
+        target_link_libraries(orcacli_core ${ADMESH_PATH2})
+    elseif(EXISTS "${ADMESH_PATH}")
+        message(STATUS "Found admesh at: ${ADMESH_PATH}")
+        target_link_libraries(orcacli_core ${ADMESH_PATH})
+    endif()
 endif()
 
 if(EXISTS "${FREETYPE_PATH}" AND ENABLE_LIBSLIC3R)
@@ -486,9 +852,16 @@ if(EXISTS "${FREETYPE_PATH}" AND ENABLE_LIBSLIC3R)
     target_link_libraries(orcacli_core ${FREETYPE_PATH})
 endif()
 
+# Close the linker group started before OCCT libs
+if(ENABLE_LIBSLIC3R)
+    target_link_libraries(orcacli_core -Wl,--end-group)
+endif()
+
 # Link system libraries for XML and crypto
 if(ENABLE_LIBSLIC3R)
     find_library(EXPAT_LIB expat)
+
+
     if(EXPAT_LIB)
         message(STATUS "Found system expat at: ${EXPAT_LIB}")
         target_link_libraries(orcacli_core ${EXPAT_LIB})

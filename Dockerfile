@@ -13,7 +13,7 @@
 # - Exposes ORCACLI_RESOURCES to point at the baked-in OrcaSlicer resources
 
 ARG NODE_VERSION=24
-FROM node:${NODE_VERSION}-bookworm AS builder
+FROM node:${NODE_VERSION}-bookworm AS deps
 
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Etc/UTC
@@ -28,6 +28,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     file \
     gettext \
     git \
+    ca-certificates \
+    xz-utils \
     libcurl4-openssl-dev \
     libdbus-1-dev \
     libglew-dev \
@@ -37,6 +39,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsecret-1-dev \
     libspnav-dev \
     libssl-dev \
+    libtool \
     libudev-dev \
     ninja-build \
     pkg-config \
@@ -44,41 +47,67 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
   && rm -rf /var/lib/apt/lists/*
 
+# Install WebKitGTK dev (needed for wxWidgets webview) — try 4.0 first, then 4.1 on newer distros
+RUN apt-get update \
+ && (apt-get install -y --no-install-recommends libwebkit2gtk-4.0-dev \
+     || apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev) \
+ && rm -rf /var/lib/apt/lists/*
+
 # Workdir for the monorepo
 WORKDIR /opt/orca
 
 # Copy only what we need for building the addon and resources
 COPY OrcaSlicer ./OrcaSlicer
-COPY OrcaSlicerCli ./OrcaSlicerCli
+
 
 # Limit parallelism to reduce memory usage during native builds (avoid OOM in Docker Desktop)
 ENV CMAKE_BUILD_PARALLEL_LEVEL=1
 
 # Build third-party dependencies used by OrcaSlicer (downloads and compiles into OrcaSlicer/deps/build)
 # Use clean build and strip any submodule .git pointer to avoid git apply errors inside deps
-RUN bash -lc 'cd OrcaSlicer && rm -rf .git .gitmodules && ./build_linux.sh -d -c -r'
+RUN bash -lc 'cd OrcaSlicer/deps && cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDEP_WX_GTK3=ON && cmake --build build --target deps --config Release'
+
+FROM deps AS orcaslicer
+WORKDIR /opt/orca
+
+
+# Build OrcaSlicer itself (libslic3r and friends) in Release; skip RAM check
+RUN bash -lc 'cmake -S OrcaSlicer -B OrcaSlicer/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSLIC3R_STATIC=ON -DSLIC3R_GTK=3 -DCMAKE_PREFIX_PATH=/opt/orca/OrcaSlicer/deps/build/destdir/usr/local && cmake --build OrcaSlicer/build --config Release'
+
+
+FROM orcaslicer AS builder
+WORKDIR /opt/orca
+COPY OrcaSlicerCli ./OrcaSlicerCli
+
+# Build the shared engine library (orcacli_engine) which the Node addon dlopens
+RUN cmake -S OrcaSlicerCli -B OrcaSlicerCli/build -G Ninja -DORCACLI_REQUIRE_LIBS=ON \
+ && cmake --build OrcaSlicerCli/build --config Release --target orcacli_engine
 
 # Build the Node addon using cmake-js and stage prebuild artifacts
 WORKDIR /opt/orca/OrcaSlicerCli/bindings/node
-RUN npm ci \
- && npm run prebuild:all
+# Ensure cmake-js build fails if full OrcaSlicer libs are not found (link real libslic3r)
+ENV ORCACLI_REQUIRE_LIBS=ON
+RUN npm install && npm run prebuild:all && \
+    (command -v strip >/dev/null 2>&1 && strip -s prebuilds/*/orcaslicer_node.node prebuilds/*/liborcacli_engine.so || true)
 
 # Optionally verify the prebuild exists for this platform
 RUN test -f "prebuilds/${TARGETPLATFORM:-linux}-$(uname -m | sed s/x86_64/x64/ | sed s/aarch64/arm64/)"/orcaslicer_node.node || true
 
 # Runtime/base layer that carries only what is needed to consume the addon
-FROM node:${NODE_VERSION}-bookworm AS base
+FROM node:${NODE_VERSION}-bookworm-slim AS base
 WORKDIR /opt/orca
 
 # Provide resources path as default (can be overridden by consumers)
 ENV ORCACLI_RESOURCES=/opt/orca/OrcaSlicer/resources
 
-# Copy resources and the staged Node addon package
+# Copy only resources and a minimal addon directory (index.js + prebuilds)
 COPY --from=builder /opt/orca/OrcaSlicer/resources ./OrcaSlicer/resources
-COPY --from=builder /opt/orca/OrcaSlicerCli/bindings/node ./OrcaSlicerCli/bindings/node
+RUN mkdir -p /opt/orca/OrcaSlicerCli/bindings/node/prebuilds
+COPY --from=builder /opt/orca/OrcaSlicerCli/bindings/node/index.js /opt/orca/OrcaSlicerCli/bindings/node/index.js
+COPY --from=builder /opt/orca/OrcaSlicerCli/bindings/node/prebuilds /opt/orca/OrcaSlicerCli/bindings/node/prebuilds
 
-# Optionally reduce weight by removing large build dirs (prebuilds already contains the .node and engine lib)
-RUN rm -rf /opt/orca/OrcaSlicerCli/bindings/node/build || true
+# Also ship the standalone CLI executable built during cmake-js
+COPY --from=builder /opt/orca/OrcaSlicerCli/bindings/node/build/bin/orcaslicer-cli /usr/local/bin/orcaslicer-cli
 
 # Show what was produced (helps diagnosing during image build)
 RUN ls -la /opt/orca/OrcaSlicerCli/bindings/node && \
@@ -93,5 +122,10 @@ RUN ls -la /opt/orca/OrcaSlicerCli/bindings/node && \
 #   RUN npm ci && npm run compile
 #   ENV NODE_ENV=production
 #   EXPOSE 3030
-#   CMD ["node", "lib/index.js"]
+
+# Minimal carrier image with only the Node addon prebuilds (no JS app code, no resources)
+FROM scratch AS addon-slim
+ENV ORCACLI_ADDON_DIR=/opt/orca/orcaslicer-addon
+# Copy only the prebuilt native addon (.node) and engine .so
+COPY --from=builder /opt/orca/OrcaSlicerCli/bindings/node/prebuilds ${ORCACLI_ADDON_DIR}/prebuilds
 

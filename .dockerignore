@@ -1,0 +1,51 @@
+# Reduce Docker build context; keep only sources needed to build inside container
+# VCS and CI
+.git
+.github
+.gitignore
+.gitattributes
+
+# Node
+node_modules
+**/node_modules
+npm-debug.log*
+yarn-error.log
+pnpm-lock.yaml
+
+# Local outputs and caches
+output_files
+**/.cache
+**/.ccache
+**/.cmake
+**/.ninja*
+**/CMakeFiles
+**/CMakeCache.txt
+**/build
+**/dist
+**/tmp
+**/logs
+*.log
+
+# OrcaSlicer heavy local build artifacts (rebuilt in-container)
+OrcaSlicer/build
+OrcaSlicer/deps/build
+OrcaSlicer/deps/bin
+OrcaSlicer/deps/lib
+OrcaSlicer/.git
+
+# OrcaSlicerCli local build outputs
+OrcaSlicerCli/build
+OrcaSlicerCli/bindings/node/build
+OrcaSlicerCli/bindings/node/prebuilds
+
+# Examples and large assets not needed for build
+example_files
+*.3mf
+*.stl
+*.gcode
+
+# macOS / IDE
+.DS_Store
+.vscode
+.idea
+

@@ -20,7 +20,7 @@
     "pack:local": "npm run build && echo 'Artifacts under build/bindings/node'",
 
     "prebuild:stage": "node scripts/stage-prebuild.js",
-    "prebuild:all": "npx cmake-js compile && npm run prebuild:stage"
+    "prebuild:all": "node -e \"(async()=>{const { CMake } = require('cmake-js'); const cm=new CMake({ runtime: 'node', CMakeOptions: ['-DORCACLI_BUILD_NODE_ADDON=ON','-DORCACLI_REQUIRE_LIBS=ON','-DORCASLICER_ROOT_DIR=../../../OrcaSlicer']}); await cm.compile();})()\" && npm run prebuild:stage"
   },
   "repository": {
     "type": "git",
@@ -31,7 +31,8 @@
   },
   "homepage": "https://github.com/<org>/<repo>#readme",
   "devDependencies": {
-    "cmake-js": "^7.3.1"
+    "cmake-js": "^7.3.1",
+    "node-api-headers": "^1.0.0"
   },
   "engines": {
     "node": ">=16"
