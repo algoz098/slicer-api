@@ -73,8 +73,8 @@ RUN if [ "${USE_PREBUILT_DEPS}" = "true" ]; then \
 # Workdir for the monorepo
 WORKDIR /opt/orca
 
-# Copy only what we need for building the addon and resources
-COPY OrcaSlicer/deps ./OrcaSlicer/deps
+# Copy full OrcaSlicer tree so deps image can also stage compiled core libs
+COPY OrcaSlicer ./OrcaSlicer
 
 
 # Enable ccache and configure cache directory (used across builds via BuildKit cache mount)
@@ -86,6 +86,10 @@ RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache ccache -M 10G
 RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache \
     --mount=type=cache,id=orcadeps-dlcache-amd64,target=/opt/orca/OrcaSlicer/deps/DL_CACHE \
     bash -lc 'if [ "${USE_PREBUILT_DEPS}" = "true" ]; then echo "Skipping deps build: using prebuilt base image"; else JOBS=${CI_MAX_JOBS:-$(nproc)}; cd OrcaSlicer/deps && cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDEP_WX_GTK3=ON -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && cmake --build build --target deps --config Release --parallel "$JOBS"; fi'
+
+# Build OrcaSlicer core (libs) into OrcaSlicer/build so downstream images can link without recompiling
+RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache \
+    bash -lc 'if [ "${USE_PREBUILT_DEPS}" = "true" ]; then echo "Skipping OrcaSlicer core build: using prebuilt base image"; else JOBS=${CI_MAX_JOBS:-$(nproc)}; cmake -S OrcaSlicer -B OrcaSlicer/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSLIC3R_STATIC=ON -DSLIC3R_GTK=3 -DCMAKE_PREFIX_PATH=/opt/orca/OrcaSlicer/deps/build/destdir/usr/local -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && cmake --build OrcaSlicer/build --config Release --parallel "$JOBS"; fi'
 
 
 ARG CI_MAX_JOBS
@@ -103,7 +107,7 @@ ARG CI_MAX_JOBS
 RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache bash -lc 'JOBS=${CI_MAX_JOBS:-$(nproc)}; cmake -S OrcaSlicer -B OrcaSlicer/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSLIC3R_STATIC=ON -DSLIC3R_GTK=3 -DCMAKE_PREFIX_PATH=/opt/orca/OrcaSlicer/deps/build/destdir/usr/local -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && cmake --build OrcaSlicer/build --config Release --parallel "$JOBS"'
 
 
-FROM orcaslicer AS builder
+FROM deps AS builder
 ARG CI_MAX_JOBS
 
 WORKDIR /opt/orca
