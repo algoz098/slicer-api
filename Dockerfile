@@ -67,11 +67,13 @@ COPY OrcaSlicer/deps ./OrcaSlicer/deps
 
 # Enable ccache and configure cache directory (used across builds via BuildKit cache mount)
 ENV CCACHE_DIR=/root/.ccache CCACHE_MAXSIZE=10G
-RUN --mount=type=cache,target=/root/.ccache ccache -M 10G
+RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache ccache -M 10G
 
 # Build third-party dependencies used by OrcaSlicer (downloads and compiles into OrcaSlicer/deps/build)
 # Use clean build and strip any submodule .git pointer to avoid git apply errors inside deps
-RUN --mount=type=cache,target=/root/.ccache bash -lc 'JOBS=${CI_MAX_JOBS:-$(nproc)}; cd OrcaSlicer/deps && cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDEP_WX_GTK3=ON -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && cmake --build build --target deps --config Release --parallel "$JOBS"'
+RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache \
+    --mount=type=cache,id=orcadeps-dlcache-amd64,target=/opt/orca/OrcaSlicer/deps/DL_CACHE \
+    bash -lc 'JOBS=${CI_MAX_JOBS:-$(nproc)}; cd OrcaSlicer/deps && cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDEP_WX_GTK3=ON -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && cmake --build build --target deps --config Release --parallel "$JOBS"'
 
 
 ARG CI_MAX_JOBS
@@ -86,7 +88,7 @@ COPY OrcaSlicer ./OrcaSlicer
 # Build OrcaSlicer itself (libslic3r and friends) in Release; skip RAM check
 ARG CI_MAX_JOBS
 
-RUN --mount=type=cache,target=/root/.ccache bash -lc 'JOBS=${CI_MAX_JOBS:-$(nproc)}; cmake -S OrcaSlicer -B OrcaSlicer/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSLIC3R_STATIC=ON -DSLIC3R_GTK=3 -DCMAKE_PREFIX_PATH=/opt/orca/OrcaSlicer/deps/build/destdir/usr/local -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && cmake --build OrcaSlicer/build --config Release --parallel "$JOBS"'
+RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache bash -lc 'JOBS=${CI_MAX_JOBS:-$(nproc)}; cmake -S OrcaSlicer -B OrcaSlicer/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSLIC3R_STATIC=ON -DSLIC3R_GTK=3 -DCMAKE_PREFIX_PATH=/opt/orca/OrcaSlicer/deps/build/destdir/usr/local -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && cmake --build OrcaSlicer/build --config Release --parallel "$JOBS"'
 
 
 FROM orcaslicer AS builder
@@ -96,7 +98,7 @@ WORKDIR /opt/orca
 COPY OrcaSlicerCli ./OrcaSlicerCli
 
 # Build the shared engine library (orcacli_engine) which the Node addon dlopens
-RUN --mount=type=cache,target=/root/.ccache bash -lc 'JOBS=${CI_MAX_JOBS:-$(nproc)}; cmake -S OrcaSlicerCli -B OrcaSlicerCli/build -G Ninja -DORCACLI_REQUIRE_LIBS=ON && cmake --build OrcaSlicerCli/build --config Release --target orcacli_engine --parallel "$JOBS"'
+RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache bash -lc 'JOBS=${CI_MAX_JOBS:-$(nproc)}; cmake -S OrcaSlicerCli -B OrcaSlicerCli/build -G Ninja -DORCACLI_REQUIRE_LIBS=ON && cmake --build OrcaSlicerCli/build --config Release --target orcacli_engine --parallel "$JOBS"'
 
 # Build the Node addon using cmake-js and stage prebuild artifacts
 WORKDIR /opt/orca/OrcaSlicerCli/bindings/node
@@ -137,6 +139,24 @@ RUN ls -la /opt/orca/OrcaSlicerCli/bindings/node && \
 #   RUN npm ci && npm run compile
 #   ENV NODE_ENV=production
 #   EXPOSE 3030
+
+
+# Minimal runtime image that ships only the standalone CLI (no Node addon)
+FROM debian:bookworm-slim AS cli
+WORKDIR /opt/orca
+
+# Provide resources path for the CLI
+ENV ORCACLI_RESOURCES=/opt/orca/OrcaSlicer/resources
+
+# Copy only what the CLI needs to run
+COPY --from=builder /opt/orca/OrcaSlicer/resources ./OrcaSlicer/resources
+COPY --from=builder /opt/orca/OrcaSlicerCli/bindings/node/build/bin/orcaslicer-cli /usr/local/bin/orcaslicer-cli
+
+# Keep it lean; install runtime essentials only if necessary (often not needed)
+# RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+
+# Default entrypoint is the CLI; consumers can override
+ENTRYPOINT ["/usr/local/bin/orcaslicer-cli"]
 
 # Minimal carrier image with only the Node addon prebuilds (no JS app code, no resources)
 FROM scratch AS addon-slim
