@@ -83,18 +83,7 @@ RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache ccache -M 10G
 
 # Build third-party dependencies used by OrcaSlicer (downloads and compiles into OrcaSlicer/deps/build)
 # If using prebuilt deps base image, skip rebuilding here to save time
-RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache \
-    --mount=type=cache,id=orcadeps-dlcache-amd64,target=/opt/orca/OrcaSlicer/deps/DL_CACHE \
-    bash -lc '
-      set -e
-      if [ "$USE_PREBUILT_DEPS" = "true" ]; then
-        exit 0
-      fi
-      JOBS="${CI_MAX_JOBS:-$(nproc)}"
-      cd OrcaSlicer/deps
-      cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDEP_WX_GTK3=ON -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-      cmake --build build --target deps --config Release --parallel "$JOBS"
-    '
+RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache --mount=type=cache,id=orcadeps-dlcache-amd64,target=/opt/orca/OrcaSlicer/deps/DL_CACHE bash -lc "set -e; if [ \"\$USE_PREBUILT_DEPS\" = \"true\" ]; then exit 0; fi; JOBS=\"\${CI_MAX_JOBS:-\$(nproc)}\"; cd OrcaSlicer/deps; cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDEP_WX_GTK3=ON -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache; cmake --build build --target deps --config Release --parallel \"\$JOBS\""
 # Core layer: build OrcaSlicer (libs) on top of deps
 FROM deps AS core
 WORKDIR /opt/orca
