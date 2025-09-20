@@ -62,7 +62,7 @@ jobs:
         run: |
           IMAGE="ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}"
           echo "Checking $IMAGE"
-          if docker manifest inspect "$IMAGE" >/dev/null 2>&1; then
+          if docker buildx imagetools inspect "$IMAGE" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
@@ -128,7 +128,7 @@ jobs:
         run: |
           IMAGE="ghcr.io/${{ github.repository_owner }}/orcaslicer-build:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}"
           echo "Checking $IMAGE"
-          if docker manifest inspect "$IMAGE" >/dev/null 2>&1; then
+          if docker buildx imagetools inspect "$IMAGE" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
@@ -185,7 +185,7 @@ jobs:
         run: |
           IMAGE="ghcr.io/${{ github.repository_owner }}/orcaslicer-cli:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}"
           echo "Checking $IMAGE"
-          if docker manifest inspect "$IMAGE" >/dev/null 2>&1; then
+          if docker buildx imagetools inspect "$IMAGE" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
@@ -251,7 +251,7 @@ jobs:
         run: |
           IMAGE="ghcr.io/${{ github.repository_owner }}/orcaslicer-addon:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}"
           echo "Checking $IMAGE"
-          if docker manifest inspect "$IMAGE" >/dev/null 2>&1; then
+          if docker buildx imagetools inspect "$IMAGE" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
