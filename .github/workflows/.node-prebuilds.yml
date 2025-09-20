@@ -7,6 +7,10 @@ on:
   pull_request:
     branches: [ node-api ]
 
+
+env:
+  ORCASLICER_SUFFIX: "a"
+
 jobs:
   prebuild:
     name: Prebuild ${{ matrix.os }}
@@ -44,15 +48,36 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-orca-build-
 
-      - name: Setup Node.js
-        if: runner.os != 'Linux'
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+
+      - name: Derive tag components (version, arch)
+        id: meta
+        shell: bash
+        run: |
+          BASE_VERSION=$(sed -nE 's/.*set\(SoftFever_VERSION "([0-9]+\.[0-9]+\.[0-9]+).*".*/\1/p' OrcaSlicer/version.inc)
+          if [ -z "$BASE_VERSION" ]; then
+            echo "Could not parse OrcaSlicer version" >&2
+            exit 1
+          fi
+          VERSION="${BASE_VERSION}${ORCASLICER_SUFFIX}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "arch=amd64" >> "$GITHUB_OUTPUT"
+
+      - name: Check if deps image exists in GHCR
+        id: depscheck
+        shell: bash
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}"
+          echo "Checking $IMAGE"
+          if docker buildx imagetools inspect "$IMAGE" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
 
       # --- Build OrcaSlicer + addon inside Docker for Linux ---
       - name: Linux | Build OrcaSlicer + addon inside Docker (Ubuntu 22.04)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && steps.depscheck.outputs.exists != 'true'
         run: |
           docker run --rm \
             -e GITHUB_ACTIONS=true \
@@ -85,64 +110,25 @@ jobs:
               npm run prebuild:all
             '
 
-      - name: macOS | Setup CMake 3.31.x
-        if: runner.os == 'macOS'
-        uses: jwlawson/actions-setup-cmake@v1
-        with:
-          cmake-version: '3.31.7'
+      - name: Linux | Skip (deps image exists in GHCR)
+        if: runner.os == 'Linux' && steps.depscheck.outputs.exists == 'true'
+        run: echo "Skipping Linux build: deps image exists in GHCR: ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}"
 
-      - name: macOS | Install tools required by docs
-        if: runner.os == 'macOS'
-        run: |
-          brew update
-          brew install gettext libtool automake autoconf texinfo || true
 
-      - name: macOS | Build OrcaSlicer
-        if: runner.os == 'macOS'
-        working-directory: OrcaSlicer
-        run: |
-          chmod +x build_release_macos.sh
-          ./build_release_macos.sh
 
-      - name: Windows | Setup CMake 3.31.x
-        if: runner.os == 'Windows'
-        uses: jwlawson/actions-setup-cmake@v1
-        with:
-          cmake-version: '3.31.7'
 
-      - name: Windows | Install required tools
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          choco install strawberryperl git-lfs -y --no-progress
-          git lfs install
-          git lfs pull
 
-      - name: Windows | Build OrcaSlicer (VS2022)
-        if: runner.os == 'Windows'
-        shell: cmd
-        working-directory: OrcaSlicer
-        run: |
-          build_release_vs2022.bat
 
-      # --- Build Node addon prebuild ---
-      - name: Install npm deps (bindings)
-        if: runner.os != 'Linux'
-        working-directory: OrcaSlicerCli/bindings/node
-        run: npm ci
-
-      - name: Build and stage prebuild
-        if: runner.os != 'Linux'
-        working-directory: OrcaSlicerCli/bindings/node
-        run: npm run prebuild:all
 
       - name: List staged prebuilds
+        if: runner.os == 'Linux' && steps.depscheck.outputs.exists != 'true'
         working-directory: OrcaSlicerCli/bindings/node
         run: |
           echo "Platform: ${{ runner.os }}"
           ls -R prebuilds || true
 
       - name: Upload artifact (prebuild)
+        if: runner.os == 'Linux' && steps.depscheck.outputs.exists != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: prebuild-${{ runner.os }}
