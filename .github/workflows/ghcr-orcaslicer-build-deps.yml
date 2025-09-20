@@ -3,10 +3,6 @@ name: Build and Push orcaslicer-build-deps (GHCR, linux/amd64)
 on:
   workflow_dispatch:
     inputs:
-      tag:
-        description: 'Image tag to push (e.g., 3.0.1a)'
-        required: true
-        default: '3.0.1a'
       ci_max_jobs:
         description: 'CI_MAX_JOBS passed to the build'
         required: false
@@ -15,6 +11,11 @@ on:
 permissions:
   contents: read
   packages: write
+
+
+env:
+  # Sufixo fixo da versão (ex.: 'a' para gerar 3.0.1a). Deixe vazio para não usar sufixo.
+  ORCASLICER_SUFFIX: "a"
 
 concurrency:
   group: ghcr-orcaslicer-build-deps-${{ github.ref }}
@@ -32,11 +33,12 @@ jobs:
         id: meta
         shell: bash
         run: |
-          VERSION=$(sed -nE 's/.*set\(SoftFever_VERSION "([0-9]+\.[0-9]+\.[0-9]+).*".*/\1/p' OrcaSlicer/version.inc)
-          if [ -z "$VERSION" ]; then
+          BASE_VERSION=$(sed -nE 's/.*set\(SoftFever_VERSION "([0-9]+\.[0-9]+\.[0-9]+).*".*/\1/p' OrcaSlicer/version.inc)
+          if [ -z "$BASE_VERSION" ]; then
             echo "Could not parse OrcaSlicer version" >&2
             exit 1
           fi
+          VERSION="${BASE_VERSION}${ORCASLICER_SUFFIX}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "arch=amd64" >> "$GITHUB_OUTPUT"
 
@@ -58,7 +60,7 @@ jobs:
         id: check
         shell: bash
         run: |
-          IMAGE="ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}"
+          IMAGE="ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}_${{ steps.meta.outputs.arch }}"
           echo "Checking $IMAGE"
           if docker manifest inspect "$IMAGE" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
@@ -76,10 +78,10 @@ jobs:
           platforms: linux/amd64
           pull: true
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}
+          tags: ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}_${{ steps.meta.outputs.arch }}
           cache-from: |
             type=gha,scope=orca-deps-amd64
-            type=registry,ref=ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}_${{ steps.meta.outputs.arch }}
           cache-to: |
             type=gha,mode=max,scope=orca-deps-amd64
             type=inline
@@ -110,11 +112,12 @@ jobs:
         id: meta
         shell: bash
         run: |
-          VERSION=$(sed -nE 's/.*set\(SoftFever_VERSION "([0-9]+\.[0-9]+\.[0-9]+).*".*/\1/p' OrcaSlicer/version.inc)
-          if [ -z "$VERSION" ]; then
+          BASE_VERSION=$(sed -nE 's/.*set\(SoftFever_VERSION "([0-9]+\.[0-9]+\.[0-9]+).*".*/\1/p' OrcaSlicer/version.inc)
+          if [ -z "$BASE_VERSION" ]; then
             echo "Could not parse OrcaSlicer version" >&2
             exit 1
           fi
+          VERSION="${BASE_VERSION}${ORCASLICER_SUFFIX}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "arch=amd64" >> "$GITHUB_OUTPUT"
 
@@ -123,7 +126,7 @@ jobs:
         id: check
         shell: bash
         run: |
-          IMAGE="ghcr.io/${{ github.repository_owner }}/orcaslicer-build:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}"
+          IMAGE="ghcr.io/${{ github.repository_owner }}/orcaslicer-build:${{ steps.meta.outputs.version }}_${{ steps.meta.outputs.arch }}"
           echo "Checking $IMAGE"
           if docker manifest inspect "$IMAGE" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
@@ -141,14 +144,14 @@ jobs:
           platforms: linux/amd64
           pull: true
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/orcaslicer-build:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}
+          tags: ghcr.io/${{ github.repository_owner }}/orcaslicer-build:${{ steps.meta.outputs.version }}_${{ steps.meta.outputs.arch }}
 
 
       - name: Check if image exists in GHCR (orcaslicer)
         id: check
         shell: bash
         run: |
-          IMAGE="ghcr.io/${{ github.repository_owner }}/orcaslicer-build:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}"
+          IMAGE="ghcr.io/${{ github.repository_owner }}/orcaslicer-build:${{ steps.meta.outputs.version }}_${{ steps.meta.outputs.arch }}"
           echo "Checking $IMAGE"
           if docker manifest inspect "$IMAGE" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
@@ -178,11 +181,12 @@ jobs:
         id: meta
         shell: bash
         run: |
-          VERSION=$(sed -nE 's/.*set\(SoftFever_VERSION "([0-9]+\.[0-9]+\.[0-9]+).*".*/\1/p' OrcaSlicer/version.inc)
-          if [ -z "$VERSION" ]; then
+          BASE_VERSION=$(sed -nE 's/.*set\(SoftFever_VERSION "([0-9]+\.[0-9]+\.[0-9]+).*".*/\1/p' OrcaSlicer/version.inc)
+          if [ -z "$BASE_VERSION" ]; then
             echo "Could not parse OrcaSlicer version" >&2
             exit 1
           fi
+          VERSION="${BASE_VERSION}${ORCASLICER_SUFFIX}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "arch=amd64" >> "$GITHUB_OUTPUT"
 
@@ -190,7 +194,7 @@ jobs:
         id: check
         shell: bash
         run: |
-          IMAGE="ghcr.io/${{ github.repository_owner }}/orcaslicer-cli:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}"
+          IMAGE="ghcr.io/${{ github.repository_owner }}/orcaslicer-cli:${{ steps.meta.outputs.version }}_${{ steps.meta.outputs.arch }}"
           echo "Checking $IMAGE"
           if docker manifest inspect "$IMAGE" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
@@ -208,12 +212,12 @@ jobs:
           platforms: linux/amd64
           pull: true
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/orcaslicer-cli:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}
+          tags: ghcr.io/${{ github.repository_owner }}/orcaslicer-cli:${{ steps.meta.outputs.version }}_${{ steps.meta.outputs.arch }}
           cache-from: |
             type=gha,scope=orca-cli-amd64
-            type=registry,ref=ghcr.io/${{ github.repository_owner }}/orcaslicer-cli:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}
-            type=registry,ref=ghcr.io/${{ github.repository_owner }}/orcaslicer-build:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}
-            type=registry,ref=ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/orcaslicer-cli:${{ steps.meta.outputs.version }}_${{ steps.meta.outputs.arch }}
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/orcaslicer-build:${{ steps.meta.outputs.version }}_${{ steps.meta.outputs.arch }}
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}_${{ steps.meta.outputs.arch }}
           cache-to: |
             type=gha,mode=max,scope=orca-cli-amd64
             type=inline
@@ -243,11 +247,12 @@ jobs:
         id: meta
         shell: bash
         run: |
-          VERSION=$(sed -nE 's/.*set\(SoftFever_VERSION "([0-9]+\.[0-9]+\.[0-9]+).*".*/\1/p' OrcaSlicer/version.inc)
-          if [ -z "$VERSION" ]; then
+          BASE_VERSION=$(sed -nE 's/.*set\(SoftFever_VERSION "([0-9]+\.[0-9]+\.[0-9]+).*".*/\1/p' OrcaSlicer/version.inc)
+          if [ -z "$BASE_VERSION" ]; then
             echo "Could not parse OrcaSlicer version" >&2
             exit 1
           fi
+          VERSION="${BASE_VERSION}${ORCASLICER_SUFFIX}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "arch=amd64" >> "$GITHUB_OUTPUT"
 
@@ -255,7 +260,7 @@ jobs:
         id: check
         shell: bash
         run: |
-          IMAGE="ghcr.io/${{ github.repository_owner }}/orcaslicer-addon:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}"
+          IMAGE="ghcr.io/${{ github.repository_owner }}/orcaslicer-addon:${{ steps.meta.outputs.version }}_${{ steps.meta.outputs.arch }}"
           echo "Checking $IMAGE"
           if docker manifest inspect "$IMAGE" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
@@ -274,12 +279,12 @@ jobs:
           platforms: linux/amd64
           pull: true
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/orcaslicer-addon:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}
+          tags: ghcr.io/${{ github.repository_owner }}/orcaslicer-addon:${{ steps.meta.outputs.version }}_${{ steps.meta.outputs.arch }}
           cache-from: |
             type=gha,scope=orca-addon-amd64
-            type=registry,ref=ghcr.io/${{ github.repository_owner }}/orcaslicer-addon:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}
-            type=registry,ref=ghcr.io/${{ github.repository_owner }}/orcaslicer-build:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}
-            type=registry,ref=ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/orcaslicer-addon:${{ steps.meta.outputs.version }}_${{ steps.meta.outputs.arch }}
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/orcaslicer-build:${{ steps.meta.outputs.version }}_${{ steps.meta.outputs.arch }}
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}_${{ steps.meta.outputs.arch }}
           cache-to: |
             type=gha,mode=max,scope=orca-addon-amd64
             type=inline
