@@ -15,7 +15,11 @@
 # - Exposes ORCACLI_RESOURCES to point at the baked-in OrcaSlicer resources
 
 ARG NODE_VERSION=24
-FROM node:${NODE_VERSION}-bookworm AS deps
+# When provided, use the prebuilt build-deps image as base to speed up builds
+ARG BASE_DEPS_IMAGE
+# Hint to skip rebuilding deps/toolchain if using the prebuilt base
+ARG USE_PREBUILT_DEPS=false
+FROM ${BASE_DEPS_IMAGE:-node:${NODE_VERSION}-bookworm} AS deps
 ARG CI_MAX_JOBS
 
 
@@ -23,40 +27,48 @@ ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Etc/UTC
 
 # System dependencies required by OrcaSlicer build scripts and toolchain
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    autoconf \
-    build-essential \
-    ccache \
-    cmake \
-    eglexternalplatform-dev \
-    extra-cmake-modules \
-    file \
-    gettext \
-    git \
-    ca-certificates \
-    xz-utils \
-    libcurl4-openssl-dev \
-    libdbus-1-dev \
-    libglew-dev \
-    libgstreamerd-3-dev \
-    libgtk-3-dev \
-    libmspack-dev \
-    libsecret-1-dev \
-    libspnav-dev \
-    libssl-dev \
-    libtool \
-    libudev-dev \
-    ninja-build \
-    pkg-config \
-    texinfo \
-    wget \
-  && rm -rf /var/lib/apt/lists/*
+RUN if [ "${USE_PREBUILT_DEPS}" = "true" ]; then \
+      echo "Using prebuilt deps base; skipping toolchain install"; \
+    else \
+      apt-get update && apt-get install -y --no-install-recommends \
+        autoconf \
+        build-essential \
+        ccache \
+        cmake \
+        eglexternalplatform-dev \
+        extra-cmake-modules \
+        file \
+        gettext \
+        git \
+        ca-certificates \
+        xz-utils \
+        libcurl4-openssl-dev \
+        libdbus-1-dev \
+        libglew-dev \
+        libgstreamerd-3-dev \
+        libgtk-3-dev \
+        libmspack-dev \
+        libsecret-1-dev \
+        libspnav-dev \
+        libssl-dev \
+        libtool \
+        libudev-dev \
+        ninja-build \
+        pkg-config \
+        texinfo \
+        wget \
+      && rm -rf /var/lib/apt/lists/*; \
+    fi
 
 # Install WebKitGTK dev (needed for wxWidgets webview) — try 4.0 first, then 4.1 on newer distros
-RUN apt-get update \
- && (apt-get install -y --no-install-recommends libwebkit2gtk-4.0-dev \
-     || apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev) \
- && rm -rf /var/lib/apt/lists/*
+RUN if [ "${USE_PREBUILT_DEPS}" = "true" ]; then \
+      echo "Using prebuilt deps base; skipping webkit install"; \
+    else \
+      apt-get update \
+      && (apt-get install -y --no-install-recommends libwebkit2gtk-4.0-dev \
+          || apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev) \
+      && rm -rf /var/lib/apt/lists/*; \
+    fi
 
 # Workdir for the monorepo
 WORKDIR /opt/orca
@@ -70,10 +82,10 @@ ENV CCACHE_DIR=/root/.ccache CCACHE_MAXSIZE=10G
 RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache ccache -M 10G
 
 # Build third-party dependencies used by OrcaSlicer (downloads and compiles into OrcaSlicer/deps/build)
-# Use clean build and strip any submodule .git pointer to avoid git apply errors inside deps
+# If using prebuilt deps base image, skip rebuilding here to save time
 RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache \
     --mount=type=cache,id=orcadeps-dlcache-amd64,target=/opt/orca/OrcaSlicer/deps/DL_CACHE \
-    bash -lc 'JOBS=${CI_MAX_JOBS:-$(nproc)}; cd OrcaSlicer/deps && cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDEP_WX_GTK3=ON -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && cmake --build build --target deps --config Release --parallel "$JOBS"'
+    bash -lc 'if [ "${USE_PREBUILT_DEPS}" = "true" ]; then echo "Skipping deps build: using prebuilt base image"; else JOBS=${CI_MAX_JOBS:-$(nproc)}; cd OrcaSlicer/deps && cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDEP_WX_GTK3=ON -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && cmake --build build --target deps --config Release --parallel "$JOBS"; fi'
 
 
 ARG CI_MAX_JOBS
