@@ -112,7 +112,8 @@ jobs:
 
       - name: Linux | Skip (deps image exists in GHCR)
         if: runner.os == 'Linux' && steps.depscheck.outputs.exists == 'true'
-        run: echo "Skipping Linux build: deps image exists in GHCR: ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}"
+        run: |
+          echo "Skipping Linux build: deps image exists in GHCR: ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}"
 
 
 
