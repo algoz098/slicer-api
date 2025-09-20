@@ -1,0 +1,97 @@
+name: GHCR retag (safe)
+
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: 'Nome da imagem (sem registry). Ex.: orcaslicer-build-deps'
+        required: true
+        default: 'orcaslicer-build-deps'
+      old_version:
+        description: 'Versão antiga (base X.Y.Z)'
+        required: true
+        default: '3.0.1'
+      new_version:
+        description: 'Nova versão (base X.Y.Z)'
+        required: true
+        default: '2.3.1'
+      suffix:
+        description: 'Sufixo (ex.: a) — vazio para não usar'
+        required: false
+        default: 'a'
+      arch:
+        description: 'Arquitetura'
+        required: true
+        default: 'amd64'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  retag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute tags
+        id: meta
+        shell: bash
+        run: |
+          OWNER="${{ github.repository_owner }}"
+          IMAGE_NAME="${{ inputs.image }}"
+          SUFFIX="${{ inputs.suffix }}"
+          ARCH="${{ inputs.arch }}"
+          OLD_BASE="${{ inputs.old_version }}"
+          NEW_BASE="${{ inputs.new_version }}"
+
+          if [ -n "$SUFFIX" ]; then
+            OLD_TAG="${OLD_BASE}${SUFFIX}-${ARCH}"
+            NEW_TAG="${NEW_BASE}${SUFFIX}-${ARCH}"
+          else
+            OLD_TAG="${OLD_BASE}-${ARCH}"
+            NEW_TAG="${NEW_BASE}-${ARCH}"
+          fi
+
+          echo "owner=$OWNER" >> "$GITHUB_OUTPUT"
+          echo "image=$IMAGE_NAME" >> "$GITHUB_OUTPUT"
+          echo "old_tag=$OLD_TAG" >> "$GITHUB_OUTPUT"
+          echo "new_tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check source tag exists
+        id: check
+        shell: bash
+        run: |
+          SRC="ghcr.io/${{ steps.meta.outputs.owner }}/${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.old_tag }}"
+          echo "Verificando origem: $SRC"
+          if docker buildx imagetools inspect "$SRC" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Retag (create new tag pointing to same manifest)
+        if: steps.check.outputs.exists == 'true'
+        run: |
+          SRC="ghcr.io/${{ steps.meta.outputs.owner }}/${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.old_tag }}"
+          DST="ghcr.io/${{ steps.meta.outputs.owner }}/${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.new_tag }}"
+          echo "+ docker buildx imagetools create --tag $DST $SRC"
+          docker buildx imagetools create --tag "$DST" "$SRC"
+
+      - name: Fail when source does not exist
+        if: steps.check.outputs.exists != 'true'
+        run: |
+          echo "ERRO: tag de origem não encontrada no GHCR." >&2
+          exit 1
+
