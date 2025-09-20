@@ -39,9 +39,12 @@ jobs:
           file: ./Dockerfile
           target: orcaslicer
           platforms: linux/amd64
+          pull: true
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:3.0.1a
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=orcaslicer-amd64
+          cache-to: type=gha,mode=max,scope=orcaslicer-amd64
+          build-args: |
+            CI_MAX_JOBS=2
           provenance: false
 

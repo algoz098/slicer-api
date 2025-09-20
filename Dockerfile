@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.4
+
 # Base image that builds the OrcaSlicer Node addon (N-API) and stages it
 # to prebuilds/<platform>-<arch>/ for reuse by other images.
 #
@@ -14,6 +16,8 @@
 
 ARG NODE_VERSION=24
 FROM node:${NODE_VERSION}-bookworm AS deps
+ARG CI_MAX_JOBS
+
 
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Etc/UTC
@@ -22,6 +26,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     autoconf \
     build-essential \
+    ccache \
     cmake \
     eglexternalplatform-dev \
     extra-cmake-modules \
@@ -57,31 +62,41 @@ RUN apt-get update \
 WORKDIR /opt/orca
 
 # Copy only what we need for building the addon and resources
-COPY OrcaSlicer ./OrcaSlicer
+COPY OrcaSlicer/deps ./OrcaSlicer/deps
 
 
-# Limit parallelism to reduce memory usage during native builds (avoid OOM in Docker Desktop)
-ENV CMAKE_BUILD_PARALLEL_LEVEL=1
+# Enable ccache and configure cache directory (used across builds via BuildKit cache mount)
+ENV CCACHE_DIR=/root/.ccache CCACHE_MAXSIZE=10G
+RUN --mount=type=cache,target=/root/.ccache ccache -M 10G
 
 # Build third-party dependencies used by OrcaSlicer (downloads and compiles into OrcaSlicer/deps/build)
 # Use clean build and strip any submodule .git pointer to avoid git apply errors inside deps
-RUN bash -lc 'cd OrcaSlicer/deps && cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDEP_WX_GTK3=ON && cmake --build build --target deps --config Release'
+RUN --mount=type=cache,target=/root/.ccache bash -lc 'JOBS=${CI_MAX_JOBS:-$(nproc)}; cd OrcaSlicer/deps && cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDEP_WX_GTK3=ON -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && cmake --build build --target deps --config Release --parallel "$JOBS"'
+
+
+ARG CI_MAX_JOBS
+
 
 FROM deps AS orcaslicer
 WORKDIR /opt/orca
+COPY OrcaSlicer ./OrcaSlicer
+
 
 
 # Build OrcaSlicer itself (libslic3r and friends) in Release; skip RAM check
-RUN bash -lc 'cmake -S OrcaSlicer -B OrcaSlicer/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSLIC3R_STATIC=ON -DSLIC3R_GTK=3 -DCMAKE_PREFIX_PATH=/opt/orca/OrcaSlicer/deps/build/destdir/usr/local && cmake --build OrcaSlicer/build --config Release'
+ARG CI_MAX_JOBS
+
+RUN --mount=type=cache,target=/root/.ccache bash -lc 'JOBS=${CI_MAX_JOBS:-$(nproc)}; cmake -S OrcaSlicer -B OrcaSlicer/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSLIC3R_STATIC=ON -DSLIC3R_GTK=3 -DCMAKE_PREFIX_PATH=/opt/orca/OrcaSlicer/deps/build/destdir/usr/local -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && cmake --build OrcaSlicer/build --config Release --parallel "$JOBS"'
 
 
 FROM orcaslicer AS builder
+ARG CI_MAX_JOBS
+
 WORKDIR /opt/orca
 COPY OrcaSlicerCli ./OrcaSlicerCli
 
 # Build the shared engine library (orcacli_engine) which the Node addon dlopens
-RUN cmake -S OrcaSlicerCli -B OrcaSlicerCli/build -G Ninja -DORCACLI_REQUIRE_LIBS=ON \
- && cmake --build OrcaSlicerCli/build --config Release --target orcacli_engine
+RUN --mount=type=cache,target=/root/.ccache bash -lc 'JOBS=${CI_MAX_JOBS:-$(nproc)}; cmake -S OrcaSlicerCli -B OrcaSlicerCli/build -G Ninja -DORCACLI_REQUIRE_LIBS=ON && cmake --build OrcaSlicerCli/build --config Release --target orcacli_engine --parallel "$JOBS"'
 
 # Build the Node addon using cmake-js and stage prebuild artifacts
 WORKDIR /opt/orca/OrcaSlicerCli/bindings/node
