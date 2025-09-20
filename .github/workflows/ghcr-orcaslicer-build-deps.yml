@@ -1,8 +1,16 @@
 name: Build and Push orcaslicer-build-deps (GHCR, linux/amd64)
 
 on:
-  # Build only when manually triggered to avoid unnecessary runs
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Image tag to push (e.g., 3.0.1a)'
+        required: true
+        default: '3.0.1a'
+      ci_max_jobs:
+        description: 'CI_MAX_JOBS passed to the build'
+        required: false
+        default: '2'
 
 permissions:
   contents: read
@@ -32,19 +40,19 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push (stage 'orcaslicer' → ghcr)
+      - name: Build and push (stage 'deps' → ghcr)
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
-          target: orcaslicer
+          target: deps
           platforms: linux/amd64
           pull: true
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:3.0.1a
+          tags: ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ inputs.tag }}-amd64
           cache-from: type=gha,scope=orcaslicer-amd64
           cache-to: type=gha,mode=max,scope=orcaslicer-amd64
           build-args: |
-            CI_MAX_JOBS=2
+            CI_MAX_JOBS=${{ inputs.ci_max_jobs }}
           provenance: false
 
