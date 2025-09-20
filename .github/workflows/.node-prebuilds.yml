@@ -75,6 +75,53 @@ jobs:
           fi
 
 
+      - name: Check if CLI image exists in GHCR
+        id: clicheck
+        shell: bash
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/orcaslicer-cli:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}"
+          echo "Checking $IMAGE"
+          if docker buildx imagetools inspect "$IMAGE" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Docker Buildx
+        if: runner.os == 'Linux'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: runner.os == 'Linux' && (steps.depscheck.outputs.exists != 'true' || steps.clicheck.outputs.exists != 'true')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push deps image (GHCR)
+        if: runner.os == 'Linux' && steps.depscheck.outputs.exists != 'true'
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}"
+          docker buildx build \
+            --platform linux/amd64 \
+            --target deps \
+            -t "$IMAGE" \
+            --push \
+            .
+
+      - name: Build and push orcaslicer-cli image (GHCR)
+        if: runner.os == 'Linux' && steps.clicheck.outputs.exists != 'true'
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/orcaslicer-cli:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}"
+          docker buildx build \
+            --platform linux/amd64 \
+            --target cli \
+            -t "$IMAGE" \
+            --push \
+            .
+
+
       # --- Build OrcaSlicer + addon inside Docker for Linux ---
       - name: Linux | Build OrcaSlicer + addon inside Docker (Ubuntu 22.04)
         if: runner.os == 'Linux' && steps.depscheck.outputs.exists != 'true'
