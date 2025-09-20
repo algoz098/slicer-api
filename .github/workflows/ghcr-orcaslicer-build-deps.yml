@@ -147,17 +147,6 @@ jobs:
           tags: ghcr.io/${{ github.repository_owner }}/orcaslicer-build:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}
 
 
-      - name: Check if image exists in GHCR (orcaslicer)
-        id: check
-        shell: bash
-        run: |
-          IMAGE="ghcr.io/${{ github.repository_owner }}/orcaslicer-build:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}"
-          echo "Checking $IMAGE"
-          if docker manifest inspect "$IMAGE" >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
 
   build-push-cli:
     runs-on: ubuntu-latest
