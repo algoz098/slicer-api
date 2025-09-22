@@ -9,7 +9,7 @@
   "scripts": {
     "configure": "node -e \"(async()=>{const { CMake } = require('cmake-js'); const cm=new CMake({ runtime: 'node', CMakeOptions: ['-DORCACLI_BUILD_NODE_ADDON=ON','-DORCASLICER_ROOT_DIR=../../../OrcaSlicer']}); await cm.configure();})()\"",
     "build": "node -e \"(async()=>{const { CMake } = require('cmake-js'); const cm=new CMake({ runtime: 'node', CMakeOptions: ['-DORCACLI_BUILD_NODE_ADDON=ON','-DORCASLICER_ROOT_DIR=../../../OrcaSlicer']}); await cm.build();})()\"",
-    "test": "node test/smoke.js && node test/unit.js && node test/e2e.js",
+    "test": "node test/smoke.js && node test/unit.js && node test/options.js && node test/e2e.js",
     "slice": "node test/slice_compare.js",
     "slice:resources": "ORCACLI_RESOURCES=../../../OrcaSlicer/resources node test/slice_compare.js",
     "slice:all": "cmake -S ../.. -B ../../build -DORCACLI_BUILD_NODE_ADDON=ON -DORCACLI_ENABLE_ASAN=OFF && cmake --build ../../build --target orcaslicer_node -j4 && node test/slice_compare.js",

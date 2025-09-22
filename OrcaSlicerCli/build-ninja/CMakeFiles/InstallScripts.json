@@ -1,0 +1,8 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicerCli/build-ninja/cmake_install.cmake",
+		"/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicerCli/build-ninja/src/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

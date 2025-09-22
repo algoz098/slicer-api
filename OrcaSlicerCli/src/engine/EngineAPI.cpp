@@ -137,6 +137,25 @@ orcacli_operation_result orcacli_slice(orcacli_handle h, const orcacli_slice_par
     p.plate_index = params->plate_index;
     p.verbose = params->verbose;
     p.dry_run = params->dry_run;
+    // Forward overrides into SlicingParams.custom_settings; validation will happen inside CliCore::slice()
+    if (params->overrides && params->overrides_count > 0) {
+        if (params->verbose) {
+            try {
+                std::cout << "DEBUG: [C API] overrides_count=" << params->overrides_count << std::endl;
+            } catch (...) {}
+        }
+        for (int32_t i = 0; i < params->overrides_count; ++i) {
+            const orcacli_kv& kv = params->overrides[i];
+            if (kv.key && kv.value) {
+                if (params->verbose) {
+                    try { std::cout << "DEBUG: [C API] override[" << i << "]: '" << kv.key << "'='" << kv.value << "'" << std::endl; } catch (...) {}
+                }
+                p.custom_settings[std::string(kv.key)] = std::string(kv.value);
+            }
+        }
+    } else if (params && params->verbose) {
+        try { std::cout << "DEBUG: [C API] overrides_count=0 or overrides=null" << std::endl; } catch (...) {}
+    }
     auto res = e->core.slice(p);
     return make_result(res);
 }

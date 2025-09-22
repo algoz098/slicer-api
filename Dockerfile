@@ -19,7 +19,13 @@ ARG NODE_VERSION=24
 ARG BASE_DEPS_IMAGE
 # Hint to skip rebuilding deps/toolchain if using the prebuilt base
 ARG USE_PREBUILT_DEPS=false
+ARG ENFORCE_PREBUILT_BASE=true
+
 FROM ${BASE_DEPS_IMAGE:-node:${NODE_VERSION}-bookworm} AS deps
+ARG ENFORCE_PREBUILT_BASE
+ARG BASE_DEPS_IMAGE
+RUN bash -lc 'if [ "${ENFORCE_PREBUILT_BASE}" = "true" ] && [ -z "${BASE_DEPS_IMAGE}" ]; then echo "ERROR: BASE_DEPS_IMAGE is required. This build is configured to not compile OrcaSlicer deps inside Docker. Provide --build-arg BASE_DEPS_IMAGE=<image-with-deps> (built elsewhere) or set ENFORCE_PREBUILT_BASE=false to allow building deps here."; exit 10; fi'
+
 ARG CI_MAX_JOBS
 
 
@@ -89,6 +95,10 @@ FROM deps AS core
 WORKDIR /opt/orca
 COPY OrcaSlicer ./OrcaSlicer
 ARG CI_MAX_JOBS
+ARG ENFORCE_PREBUILT_BASE
+ARG BASE_CORE_IMAGE
+RUN bash -lc 'if [ "${ENFORCE_PREBUILT_BASE}" = "true" ] && [ -z "${BASE_CORE_IMAGE}" ]; then echo "ERROR: BASE_CORE_IMAGE is required. This build is configured to not compile OrcaSlicer core inside Docker. Provide --build-arg BASE_CORE_IMAGE=<image-with-core> (built elsewhere) or set ENFORCE_PREBUILT_BASE=false to allow building core here."; exit 11; fi'
+
 RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache bash -lc 'JOBS=${CI_MAX_JOBS:-$(nproc)}; cmake -S OrcaSlicer -B OrcaSlicer/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSLIC3R_STATIC=ON -DSLIC3R_GTK=3 -DCMAKE_PREFIX_PATH=/opt/orca/OrcaSlicer/deps/build/destdir/usr/local -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && cmake --build OrcaSlicer/build --config Release --parallel "$JOBS"'
 
 

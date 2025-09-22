@@ -36,6 +36,13 @@ export const slicerStlDataSchema = Type.Object(
     printerProfile: Type.Optional(Type.String()),
     filamentProfile: Type.Optional(Type.String()),
     processProfile: Type.Optional(Type.String()),
+    // Opcional: overrides de configuração (coerção p/ string no addon)
+    options: Type.Optional(
+      Type.Record(
+        Type.String(),
+        Type.Union([Type.String(), Type.Number(), Type.Boolean()])
+      )
+    ),
     // Opcional: caminho de saída para salvar o G-code
     output: Type.Optional(Type.String())
   },

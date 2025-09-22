@@ -783,8 +783,8 @@ public:
 
 
 
-            // GUI parity: não normalizar instâncias aqui. Usaremos apenas plate_origin para coordenadas locais do plate.
-            // Mantemos as instâncias no espaço de assembly e aplicamos o offset apenas no export do G-code.
+            // GUI parity: do not normalize instances here. Use only plate_origin for plate-local coordinates.
+            // Keep instances in assembly space and apply the offset only during G-code export.
             std::cout << "DEBUG: 3MF project preset names captured: printer='" << project_printer_preset
                       << "', print='" << project_print_preset
                       << "', filament='" << project_filament_preset << "'" << std::endl;
@@ -850,7 +850,7 @@ public:
             // This matches the GUI's Export plate sliced file path, which keeps model instances in assembly space
             // and uses plate_origin to generate plate-local G-code.
 
-            // GUI parity: não normalize as instâncias; defina plate_origin a partir dos offsets de assembly.
+            // GUI parity: do not normalize instances; set plate_origin from assembly offsets.
             std::cout << "DEBUG: GUI parity: will set plate_origin from instance assembly offsets" << std::endl;
 
             // GUI parity: compute and set plate_origin BEFORE process, based on instance assembly offsets or plate index stride
@@ -888,11 +888,11 @@ public:
                             // Ensure selected plate index is propagated to Print & Model for GUI parity
                             model->curr_plate_index = idx0;
                             print->set_plate_index(idx0);
-                            // Primeiro, tente calcular a partir dos offsets reais das instâncias (assembly)
+                            // First, try to compute from real instance assembly offsets
                             bool ok = compute_and_set_plate_origin_from_model_instances();
                             if (!ok) {
 
-                                // Fallback determinístico: usar índice da placa e stride POSITIVO (writer subtrai este offset)
+                                // Deterministic fallback: use plate index and positive stride (writer subtracts this offset)
                                 const double origin_x =  (col * stride_x);
                                 const double origin_y = -(row * stride_y);
                                 print->set_plate_origin(Slic3r::Vec3d(origin_x, origin_y, 0.0));
@@ -1341,8 +1341,8 @@ CliCore::OperationResult CliCore::slice(const SlicingParams& params) {
         }
     #if HAVE_LIBSLIC3R
         // Respect 3MF object/volume overrides even when CLI profiles are provided.
-        // Ordem de precedência: 3MF parameter overrides > perfis override (CLI) > perfis do 3MF.
-        // Portanto, não limpar overrides do 3MF aqui.
+        // Precedence: 3MF parameter overrides > CLI profile overrides > 3MF presets.
+        // Therefore, do not clear 3MF overrides here.
     #endif
     }
 
@@ -1813,9 +1813,39 @@ CliCore::OperationResult CliCore::slice(const SlicingParams& params) {
                 continue;
             }
         #endif
-            auto result = setConfigOption(key, val);
+            // Compatibility layer: map common legacy/PrusaSlicer keys to OrcaSlicer equivalents.
+            std::string mapped_key = key;
+            std::string mapped_val = val;
+            if (key == "perimeters") {
+                mapped_key = "wall_loops";
+            } else if (key == "top_solid_layers") {
+                mapped_key = "top_shell_layers";
+            } else if (key == "bottom_solid_layers") {
+                mapped_key = "bottom_shell_layers";
+            } else if (key == "infill_pattern") {
+                mapped_key = "sparse_infill_pattern";
+            } else if (key == "fill_angle") {
+                // Map to sparse infill direction (degrees)
+                mapped_key = "infill_direction";
+            } else if (key == "external_perimeters_first") {
+                // Map boolean to wall sequence enum
+                mapped_key = "wall_sequence";
+                const std::string v = val;
+                const bool truthy = (v == "1" || v == "true" || v == "True" || v == "TRUE");
+                mapped_val = truthy ? "outer wall/inner wall" : "inner wall/outer wall";
+            } else if (key == "skirts") {
+                mapped_key = "skirt_loops";
+            } else if (key == "fan_speed") {
+                // Best effort: map to overhang/bridges fan speed. Accept a single integer.
+                mapped_key = "overhang_fan_speed";
+            } else if (key == "fan_always_on") {
+                // Map to Orca's setting that keeps fan from stopping completely.
+                mapped_key = "reduce_fan_stop_start_freq";
+            }
+
+            auto result = setConfigOption(mapped_key, mapped_val);
             if (!result.success) {
-                return OperationResult(false, "Failed to set config option: " + key, result.error_details);
+                return OperationResult(false, "Failed to set config option: " + mapped_key, result.error_details);
             }
         }
     }
@@ -2171,6 +2201,10 @@ CliCore::OperationResult CliCore::setConfigOption(const std::string& key, const 
     try {
         if (!m_impl->config) {
             return OperationResult(false, "No active configuration to modify");
+        }
+        // Validate that key exists in current DynamicPrintConfig (reject unknown keys explicitly)
+        if (m_impl->config->optptr(key.c_str()) == nullptr) {
+            return OperationResult(false, std::string("Unknown config key: ") + key);
         }
         // Use set_deserialize to let libslic3r parse and validate the value
         Slic3r::ConfigSubstitutionContext ctx{Slic3r::ForwardCompatibilitySubstitutionRule::Enable};

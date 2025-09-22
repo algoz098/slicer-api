@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto'
 
 import type { Application } from '../../../declarations'
 import type { Slicer3Mf, Slicer3MfData, Slicer3MfPatch, Slicer3MfQuery } from './3mf.schema'
+import { BadRequest } from '@feathersjs/errors'
 
 export type { Slicer3Mf, Slicer3MfData, Slicer3MfPatch, Slicer3MfQuery }
 
@@ -87,14 +88,26 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
     const defaultOut = path.join(os.tmpdir(), `orca-${randomUUID()}.gcode.3mf`)
     const outPath = data.output ?? defaultOut
 
-    const { output } = await orca.slice({
-      input: inputPath,
-      output: outPath,
-      plate: data.plate,
-      printerProfile: data.printerProfile,
-      filamentProfile: data.filamentProfile,
-      processProfile: data.processProfile
-    })
+    let output: string
+    try {
+      const res = await orca.slice({
+        input: inputPath,
+        output: outPath,
+        plate: data.plate,
+        printerProfile: data.printerProfile,
+        filamentProfile: data.filamentProfile,
+        processProfile: data.processProfile,
+        options: (data as any).options
+      })
+      output = res.output
+    } catch (err: any) {
+      const msg = String(err?.message || err)
+      const lower = msg.toLowerCase()
+      if (lower.includes('unknown') || lower.includes('invalid') || lower.includes('unrecognized') || lower.includes('failed to set')) {
+        throw new BadRequest(`Invalid override option(s): ${msg}`)
+      }
+      throw err
+    }
 
     // Garante existência do arquivo antes de responder.
     if (!fs.existsSync(output)) {

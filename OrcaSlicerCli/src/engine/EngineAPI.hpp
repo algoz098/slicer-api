@@ -27,6 +27,12 @@ typedef struct {
     bool     is_valid;
 } orcacli_model_info;
 
+// Key/value override pair for config options
+typedef struct {
+    const char* key;   // non-owning pointer
+    const char* value; // non-owning pointer
+} orcacli_kv;
+
 // Slicing parameters
 typedef struct {
     const char* input_file;
@@ -39,6 +45,9 @@ typedef struct {
     int32_t     plate_index;      // 1-based
     bool        verbose;
     bool        dry_run;
+    // Optional config overrides (applied after profiles). The memory is owned by caller and must live through the call.
+    const orcacli_kv* overrides;  // optional
+    int32_t     overrides_count;  // number of entries in overrides
 } orcacli_slice_params;
 
 // Lifecycle

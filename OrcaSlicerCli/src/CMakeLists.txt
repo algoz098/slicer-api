@@ -586,8 +586,8 @@ elseif(EXISTS "${BOOST_THREAD_PATH}" AND ENABLE_LIBSLIC3R)
     target_link_libraries(orcacli_core ${BOOST_THREAD_PATH})
 endif()
 
-# Begin linker group to handle static OCCT cyclic deps
-if(ENABLE_LIBSLIC3R)
+# Begin linker group to handle static OCCT cyclic deps (not supported on Apple ld)
+if(ENABLE_LIBSLIC3R AND NOT APPLE)
     target_link_libraries(orcacli_core -Wl,--start-group)
 endif()
 
@@ -853,27 +853,43 @@ if(EXISTS "${FREETYPE_PATH}" AND ENABLE_LIBSLIC3R)
 endif()
 
 # Close the linker group started before OCCT libs
-if(ENABLE_LIBSLIC3R)
+if(ENABLE_LIBSLIC3R AND NOT APPLE)
     target_link_libraries(orcacli_core -Wl,--end-group)
 endif()
 
 # Link system libraries for XML and crypto
 if(ENABLE_LIBSLIC3R)
     find_library(EXPAT_LIB expat)
-
-
     if(EXPAT_LIB)
         message(STATUS "Found system expat at: ${EXPAT_LIB}")
         target_link_libraries(orcacli_core ${EXPAT_LIB})
     endif()
 
-    # Link system crypto library for MD5
-    find_library(CRYPTO_LIB crypto)
-    if(CRYPTO_LIB)
-        message(STATUS "Found system crypto at: ${CRYPTO_LIB}")
-        target_link_libraries(orcacli_core ${CRYPTO_LIB})
+    # On macOS: link against Homebrew OpenSSL's libcrypto (MD5 used by libslic3r)
+    if(APPLE)
+        # Clear cache to avoid picking up previously found (bad) libcrypto from deps
+        unset(CRYPTO_LIB CACHE)
+        find_library(CRYPTO_LIB
+            NAMES crypto libcrypto
+            PATHS
+                /opt/homebrew/opt/openssl@3/lib
+                /opt/homebrew/opt/openssl@1.1/lib
+                /usr/local/opt/openssl@3/lib
+                /usr/local/opt/openssl@1.1/lib
+            NO_DEFAULT_PATH)
+        if(CRYPTO_LIB)
+            message(STATUS "Using OpenSSL crypto at: ${CRYPTO_LIB}")
+            target_link_libraries(orcacli_core ${CRYPTO_LIB})
+        else()
+            message(FATAL_ERROR "OpenSSL libcrypto not found on macOS. Please `brew install openssl@3`.")
+        endif()
     else()
-        target_link_libraries(orcacli_core "-framework Security")
+        # Link system crypto library for MD5 (non-Apple)
+        find_library(CRYPTO_LIB crypto)
+        if(CRYPTO_LIB)
+            message(STATUS "Found system crypto at: ${CRYPTO_LIB}")
+            target_link_libraries(orcacli_core ${CRYPTO_LIB})
+        endif()
     endif()
 endif()
 

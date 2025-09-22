@@ -21,6 +21,9 @@ export interface SliceParams {
   processProfile?: string;
   verbose?: boolean;
   dryRun?: boolean;
+  // Preferred: options (values coerced to string internally)
+  options?: Record<string, string | number | boolean>;
+  // Back-compat: custom (string-only)
   custom?: Record<string, string>;
 }
 

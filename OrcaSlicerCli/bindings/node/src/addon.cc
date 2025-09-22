@@ -28,12 +28,27 @@ static std::mutex g_mutex; // serialize heavy operations
     }                                                                            \
   } while(0)
 
+// Same as NAPI_CALL but for void-returning scopes (e.g., lambdas)
+#define NAPI_CALL_VOID(env, call)                                                \
+  do {                                                                           \
+    napi_status status = (call);                                                 \
+    if (status != napi_ok) {                                                     \
+      const napi_extended_error_info* info;                                      \
+      napi_get_last_error_info((env), &info);                                    \
+      const char* msg = info && info->error_message ? info->error_message : "napi error"; \
+      napi_throw_error((env), nullptr, msg);                                     \
+      return;                                                                    \
+    }                                                                            \
+  } while(0)
+
 
 // C FFI mirrors EngineAPI.hpp (kept locally to avoid compile-time dependency)
 typedef void* orcacli_handle;
 typedef struct { bool success; const char* message; const char* error_details; } orcacli_operation_result;
 typedef struct { const char* filename; uint32_t object_count; uint32_t triangle_count; double volume; const char* bounding_box; bool is_valid; } orcacli_model_info;
-typedef struct { const char* input_file; const char* output_file; const char* config_file; const char* preset_name; const char* printer_profile; const char* filament_profile; const char* process_profile; int32_t plate_index; bool verbose; bool dry_run; } orcacli_slice_params;
+// key/value override
+typedef struct { const char* key; const char* value; } orcacli_kv;
+typedef struct { const char* input_file; const char* output_file; const char* config_file; const char* preset_name; const char* printer_profile; const char* filament_profile; const char* process_profile; int32_t plate_index; bool verbose; bool dry_run; const orcacli_kv* overrides; int32_t overrides_count; } orcacli_slice_params;
 
 typedef orcacli_handle       (*PF_orcacli_create)();
 typedef void                 (*PF_orcacli_destroy)(orcacli_handle);
@@ -105,6 +120,10 @@ static bool ensure_engine_loaded(std::string* err_out) {
     std::filesystem::path p2 = base / ".." / "src" / libname;                  // <module>/../src/lib...
     std::filesystem::path p3 = base / ".." / ".." / "src" / libname;          // <module>/../../src/lib...
     std::filesystem::path p4 = base / ".." / "bindings" / "node" / libname;   // <module>/../bindings/node/lib...
+    // Also consider Ninja build output dir used in this repo layout
+    std::filesystem::path p5 = base / ".." / ".." / ".." / "build-ninja" / "src" / libname; // <module>/../../../build-ninja/src/lib...
+    // Prefer the Ninja engine (freshly built in this monorepo) before local copies to avoid stale engines during dev
+    candidates.push_back(p5.lexically_normal().string());
     candidates.push_back(p1.lexically_normal().string());
     candidates.push_back(p2.lexically_normal().string());
     candidates.push_back(p3.lexically_normal().string());
@@ -274,7 +293,18 @@ static napi_value GetModelInfo(napi_env env, napi_callback_info info) {
 }
 
 // slice(params): Promise<{output: string}>
-struct SliceWork { napi_async_work work; napi_deferred deferred; struct { std::string input_file; std::string output_file; std::string printer_profile; std::string filament_profile; std::string process_profile; int plate_index=1; bool verbose=false; bool dry_run=false; } p; std::string err; };
+struct SliceWork {
+  napi_async_work work; napi_deferred deferred;
+  struct {
+    std::string input_file; std::string output_file;
+    std::string printer_profile; std::string filament_profile; std::string process_profile;
+    int plate_index=1; bool verbose=false; bool dry_run=false;
+  } p;
+  // store options as strings and build C array for FFI
+  std::vector<std::pair<std::string,std::string>> opts;
+  std::vector<orcacli_kv> kvs;
+  std::string err;
+};
 
 static void SliceExecute(napi_env env, void* data) {
   SliceWork* w = static_cast<SliceWork*>(data);
@@ -290,7 +320,20 @@ static void SliceExecute(napi_env env, void* data) {
   p.plate_index = w->p.plate_index;
   p.verbose = w->p.verbose;
   p.dry_run = w->p.dry_run;
-  if (w->p.verbose) { fprintf(stderr, "DEBUG: [addon] calling g_ffi.slice input='%s' plate=%d\n", p.input_file ? p.input_file : "(null)", p.plate_index); fflush(stderr); }
+  // Build overrides array (pointers valid due to storage in w->opts)
+  if (!w->opts.empty()) {
+    w->kvs.clear(); w->kvs.reserve(w->opts.size());
+    for (auto &kv : w->opts) {
+      orcacli_kv ckv{ kv.first.c_str(), kv.second.c_str() };
+      w->kvs.push_back(ckv);
+    }
+    p.overrides = w->kvs.data();
+    p.overrides_count = (int32_t)w->kvs.size();
+  } else {
+    p.overrides = nullptr;
+    p.overrides_count = 0;
+  }
+  if (w->p.verbose) { fprintf(stderr, "DEBUG: [addon] calling g_ffi.slice input='%s' plate=%d overrides=%d\n", p.input_file ? p.input_file : "(null)", p.plate_index, p.overrides_count); fflush(stderr); }
   auto r = g_ffi.slice(g_ffi.inst, &p);
   if (w->p.verbose) { fprintf(stderr, "DEBUG: [addon] returned from g_ffi.slice (success=%d)\n", (int)r.success); fflush(stderr); }
   if (!r.success) w->err = r.message ? r.message : "slice failed";
@@ -340,12 +383,40 @@ static napi_value Slice(napi_env env, napi_callback_info info) {
   set_int("plate", work->p.plate_index);
   set_bool("verbose", work->p.verbose);
   set_bool("dryRun", work->p.dry_run);
+
+  // Collect options from params.options and params.custom
+  auto collect_kv = [&](napi_value mapObj){
+    if (!mapObj) return;
+    napi_valuetype vt; if (napi_typeof(env, mapObj, &vt) != napi_ok || vt != napi_object) return;
+    napi_value names; NAPI_CALL_VOID(env, napi_get_property_names(env, mapObj, &names));
+    uint32_t len=0; NAPI_CALL_VOID(env, napi_get_array_length(env, names, &len));
+    for (uint32_t i=0;i<len;++i){
+      napi_value k; NAPI_CALL_VOID(env, napi_get_element(env, names, i, &k));
+      std::string key = get_string(env, k);
+      napi_value v; NAPI_CALL_VOID(env, napi_get_named_property(env, mapObj, key.c_str(), &v));
+      napi_valuetype vt2; NAPI_CALL_VOID(env, napi_typeof(env, v, &vt2));
+      std::string sval;
+      if (vt2 == napi_string) {
+        sval = get_string(env, v);
+      } else if (vt2 == napi_boolean) {
+        bool b=false; get_bool(env, v, &b); sval = b?"1":"0";
+      } else if (vt2 == napi_number) {
+        double d=0; napi_get_value_double(env, v, &d); sval = std::to_string(d);
+      } else {
+        continue; // ignore other types
+      }
+      work->opts.emplace_back(std::move(key), std::move(sval));
+    }
+  };
+  bool has=false; napi_value map;
+  napi_has_named_property(env, obj, "options", &has); if (has) { napi_get_named_property(env, obj, "options", &map); collect_kv(map); }
+  napi_has_named_property(env, obj, "custom", &has);  if (has) { napi_get_named_property(env, obj, "custom",  &map); collect_kv(map); }
+
   if (work->p.verbose) {
-    fprintf(stderr, "DEBUG: [addon] Slice() scheduling: input='%s' output='%s' plate=%d\n",
-            work->p.input_file.c_str(), work->p.output_file.c_str(), work->p.plate_index);
+    fprintf(stderr, "DEBUG: [addon] Slice() scheduling: input='%s' output='%s' plate=%d opts=%zu\n",
+            work->p.input_file.c_str(), work->p.output_file.c_str(), work->p.plate_index, work->opts.size());
     fflush(stderr);
   }
-
 
   if (work->p.input_file.empty()) { delete work; napi_throw_type_error(env, nullptr, "params.input is required"); return nullptr; }
 

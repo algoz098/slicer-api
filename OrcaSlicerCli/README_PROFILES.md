@@ -1,98 +1,108 @@
-# 🔧 OrcaSlicer CLI - Guia de Perfis
+# OrcaSlicer CLI - Profiles Guide
 
-## Scripts de Teste Disponíveis
+## Available test scripts
 
-### 1. `test_simple.sh` - Script Simples
-Script básico para teste rápido com perfis.
+### 1) `test_simple.sh`  Simple script
+Basic quick test with profiles.
 
-**Uso padrão (usa perfis do 3DBenchy.gcode de referência):**
+Default usage (uses the same profiles as the reference 3DBenchy.gcode):
 ```bash
 ./test_simple.sh
 ```
 
-**Uso com perfis customizados:**
+Custom profiles:
 ```bash
 ./test_simple.sh "PRINTER" "FILAMENT" "PROCESS"
 ```
 
-**Exemplos:**
+Examples:
 ```bash
-# Usar perfis padrão (mesmos do arquivo de referência)
+# Use default reference profiles
 ./test_simple.sh
 
-# Usar PLA Basic em vez de Matte
+# Use PLA Basic instead of Matte
 ./test_simple.sh "Bambu Lab X1 Carbon 0.4 nozzle" "Bambu PLA Basic @BBL X1C" "0.20mm Standard @BBL X1C"
 
-# Usar qualidade Fine
+# Use Fine quality
 ./test_simple.sh "Bambu Lab X1 Carbon 0.4 nozzle" "Bambu PLA Matte @BBL X1C" "0.15mm Fine @BBL X1C"
 
-# Usar ABS
+# Use ABS
 ./test_simple.sh "Bambu Lab X1 Carbon 0.4 nozzle" "Bambu ABS @BBL X1C" "0.20mm Standard @BBL X1C"
 ```
 
-### 2. `test_slice.sh` - Script Completo com Comparação
-Script completo que inclui comparação detalhada com arquivo de referência.
+### 2) `test_slice.sh`  Full script with comparison
+Performs slicing and detailed comparison with a reference file.
 
-**Uso:**
+Usage:
 ```bash
 ./test_slice.sh [PRINTER] [FILAMENT] [PROCESS]
 ```
 
-## Perfis Padrão
+## Default profiles
 
-Os scripts usam por padrão os **mesmos perfis** do arquivo `3DBenchy.gcode` de referência:
+By default the scripts use the same profiles as the reference `3DBenchy.gcode`:
 
-- **Printer**: `Bambu Lab X1 Carbon 0.4 nozzle`
-- **Filament**: `Bambu PLA Matte @BBL X1C`
-- **Process**: `0.20mm Standard @BBL X1C`
+- Printer: `Bambu Lab X1 Carbon 0.4 nozzle`
+- Filament: `Bambu PLA Matte @BBL X1C`
+- Process: `0.20mm Standard @BBL X1C`
 
-## Perfis Disponíveis
+## Common profiles
 
-### 🖨️ Printers Comuns:
+Printers:
 - `Bambu Lab X1 Carbon 0.4 nozzle`
 - `Bambu Lab X1 Carbon`
 - `Bambu Lab X1 0.4 nozzle`
 - `Bambu Lab P1S 0.4 nozzle`
 
-### 🧵 Filaments Comuns:
+Filaments:
 - `Bambu PLA Matte @BBL X1C`
 - `Bambu PLA Basic @BBL X1C`
 - `Bambu ABS @BBL X1C`
 - `Bambu PETG Basic @BBL X1C`
 
-### ⚙️ Processes Comuns:
+Processes:
 - `0.20mm Standard @BBL X1C`
 - `0.15mm Fine @BBL X1C`
 - `0.28mm Draft @BBL X1C`
 - `0.10mm Extra Fine @BBL X1C`
 
-## Listar Perfis Disponíveis
+## Listing available profiles
 
 ```bash
-# Listar todos os printers
+# List all printers
 cd build && ./bin/orcaslicer-cli list-profiles --type printer
 
-# Listar todos os filaments
+# List all filaments
 cd build && ./bin/orcaslicer-cli list-profiles --type filament
 
-# Listar todos os processes
+# List all processes
 cd build && ./bin/orcaslicer-cli list-profiles --type process
 ```
 
-## Arquivos de Saída
-
-- **test_simple.sh**: `../output_files/test_slice.gcode`
-- **test_slice.sh**: `../output_files/test_with_profiles.gcode`
-
-## Exemplo de Teste Completo
+## Quick overrides (CLI)
 
 ```bash
-# 1. Teste com perfis padrão (recomendado)
+# Adjust infill density and layer height
+./bin/orcaslicer-cli slice \
+  --input ../../example_files/3DBenchy.stl \
+  --output ../../output_files/test_slice.gcode \
+  --set "infill_density=30,layer_height=0.24"
+```
+
+## Output files
+
+- test_simple.sh: `../output_files/test_slice.gcode`
+- test_slice.sh: `../output_files/test_with_profiles.gcode`
+
+## Full test example
+
+```bash
+# 1) Test with default profiles (recommended)
 ./test_simple.sh
 
-# 2. Teste com comparação detalhada
+# 2) Test with detailed comparison
 ./test_slice.sh
 
-# 3. Teste com perfil diferente
+# 3) Test with a different profile set
 ./test_simple.sh "Bambu Lab X1 Carbon 0.4 nozzle" "Bambu PLA Basic @BBL X1C" "0.15mm Fine @BBL X1C"
 ```
