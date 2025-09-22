@@ -1,19 +1,19 @@
-# Overrides de Parâmetros (CLI, Addon e HTTP API)
+# Parameter Overrides (CLI, Addon and HTTP API)
 
-Este documento descreve como enviar overrides de parâmetros de slicing e quais chaves são aceitas em todas as interfaces:
+This document describes how to send slicing parameter overrides and which keys are accepted across all interfaces:
 - CLI: orcaslicer-cli
-- Addon Node (N-API): require('@orcaslicer/cli')
+- Node Addon (N-API): require('@orcaslicer/cli')
 - HTTP API (node-api)
 
-Resumo importante:
-- Aceitamos TODAS as chaves de configuração reconhecidas pelo OrcaSlicer (libslic3r) na versão embutida neste repositório.
-- As chaves são as mesmas que aparecem no INI exportado pelo OrcaSlicer GUI e em PrintConfig.cpp (DynamicPrintConfig).
-- Também oferecemos aliases de compatibilidade para chaves comuns de outros slicers (tabela abaixo).
-- Precedência: overrides (CLI --set / addon options / API options) > perfis explícitos (printer/filament/process) > configurações embutidas no 3MF > defaults.
-- Erros: chave desconhecida ou valor inválido resulta em falha do CLI (exit code != 0), rejeição no Addon (throw) e HTTP 400 na API.
+Important summary:
+- We accept ALL configuration keys recognized by OrcaSlicer (libslic3r) in the version embedded in this repository.
+- The keys are the same as those that appear in the INI exported by the OrcaSlicer GUI and in PrintConfig.cpp (DynamicPrintConfig).
+- We also offer compatibility aliases for common keys from other slicers (table below).
+- Precedence: overrides (CLI --set / addon options / API options) > explicit profiles (printer/filament/process) > settings embedded in the 3MF > defaults.
+- Errors: unknown key or invalid value results in CLI failure (exit code != 0), rejection in the Addon (throw), and HTTP 400 in the API.
 
 
-## Formatos de uso
+## Usage formats
 
 - CLI
   ```bash
@@ -23,11 +23,11 @@ Resumo importante:
     --printer "Bambu Lab X1 Carbon 0.4 nozzle" \
     --set "sparse_infill_density=30,layer_height=0.24,skirt_loops=1,infill_direction=45"
   ```
-  Observações:
-  - Passe múltiplos pares `k=v` separados por vírgula dentro de uma única opção `--set`.
-  - Faça aspas quando o valor contiver espaços. Ex.: `--set "curr_bed_type=High Temp Plate"`.
+  Notes:
+  - Pass multiple `k=v` pairs separated by commas within a single `--set` option.
+  - Quote values when they contain spaces. Example: `--set "curr_bed_type=High Temp Plate"`.
 
-- Addon Node (N-API)
+- Node Addon (N-API)
   ```js
   const { slice } = require('OrcaSlicerCli/bindings/node')
   await slice({
@@ -62,93 +62,93 @@ Resumo importante:
   ```
 
 
-## Tipos de valores
+## Value types
 
-- Boolean: `true`/`false` (ou `1`/`0`).
-- Percentual (coPercent): usar número com `%` (ex.: `30%`). Números sem `%` podem ser aceitos como atalho em alguns campos, porém prefira `%` quando a opção for percentual no Orca.
-- Número (coInt / coFloat): números inteiros ou decimais (ponto como separador). Ex.: `0.24`.
-- Enumerações (coEnum): valores aceitos são os rótulos/serializações usados pelo Orca. Ex.: `sparse_infill_pattern: "grid"`.
-- Texto (coString / coStrings): usar strings. Para múltiplos valores, seguir a codificação esperada pelo Orca (por exemplo listas separadas por vírgula quando aplicável).
+- Boolean: `true`/`false` (or `1`/`0`).
+- Percentage (coPercent): use a number with `%` (e.g., `30%`). Numbers without `%` may be accepted as a shortcut in some fields; however, prefer `%` when the option is percentage-based in Orca.
+- Number (coInt / coFloat): integers or decimals (dot as separator). Example: `0.24`.
+- Enumerations (coEnum): accepted values are the labels/serializations used by Orca. Example: `sparse_infill_pattern: "grid"`.
+- Text (coString / coStrings): use strings. For multiple values, follow the encoding expected by Orca (for example, comma-separated lists when applicable).
 
-Dica: verifique o CONFIG_BLOCK dentro do G-code gerado; ele exibe a configuração efetiva e ajuda a confirmar a chave/valor aplicados.
-
-
-## Chaves aceitas (escopo)
-
-Aceitamos todas as chaves de configuração expostas por `DynamicPrintConfig` do OrcaSlicer (libslic3r). Exemplos representativos:
-
-- Alturas e camadas: `layer_height`, `top_shell_layers`, `bottom_shell_layers`
-- Paredes: `wall_loops`, `wall_sequence`, `outer_wall_line_width`, `inner_wall_line_width`
-- Infill (sparse e sólido): `sparse_infill_density`, `sparse_infill_pattern`, `infill_direction`, `solid_infill_direction`, `internal_solid_infill_pattern`, `sparse_infill_line_width`, `internal_solid_infill_line_width`
-- Primeira camada: `initial_layer_height`, `initial_layer_line_width`, `initial_layer_print_speed`
-- Temperatura: `nozzle_temperature`, `bed_temperature`, `first_layer_temperature`, `first_layer_bed_temperature`
-- Ventilação: `fan_speedup_time`, `overhang_fan_speed`, `reduce_fan_stop_start_freq`
-- Materiais/extrusores: `wall_filament`, `sparse_infill_filament`, `solid_infill_filament`
-- Suportes: `support_material`, `support_pattern`, `support_overhang_angle`
-- Velocidades e acelerações: `default_speed`, `sparse_infill_speed`, `internal_solid_infill_speed`, `acceleration`, `jerk`
-- Diversos: `brim_width`, `skirt_loops`, `seam_position`, `ironing_angle`, `ironing_pattern`
-
-Observação: a lista completa é extensa (500+ opções) e depende da versão do OrcaSlicer incluída aqui. Consulte as fontes oficiais abaixo para a lista exata da sua versão.
+Tip: check the CONFIG_BLOCK inside the generated G-code; it shows the effective configuration and helps confirm the applied key/value.
 
 
-## Fontes oficiais / Como descobrir todas as chaves
+## Accepted keys (scope)
 
-1) Exportar um INI pelo OrcaSlicer GUI (File → Export Config). As chaves exibidas são aceitas como overrides.
-2) Conferir o código do OrcaSlicer neste repositório, arquivo:
-   - `OrcaSlicer/src/libslic3r/PrintConfig.cpp` (busque por `this->add("…", …)`).
-3) Inspecionar o CONFIG_BLOCK do G-code gerado — útil para validar a aplicação do override.
+We accept all configuration keys exposed by OrcaSlicer’s `DynamicPrintConfig` (libslic3r). Representative examples:
 
-Essas fontes garantem sincronismo com a versão embutida, evitando divergência documental.
+- Heights and layers: `layer_height`, `top_shell_layers`, `bottom_shell_layers`
+- Walls: `wall_loops`, `wall_sequence`, `outer_wall_line_width`, `inner_wall_line_width`
+- Infill (sparse and solid): `sparse_infill_density`, `sparse_infill_pattern`, `infill_direction`, `solid_infill_direction`, `internal_solid_infill_pattern`, `sparse_infill_line_width`, `internal_solid_infill_line_width`
+- First layer: `initial_layer_height`, `initial_layer_line_width`, `initial_layer_print_speed`
+- Temperature: `nozzle_temperature`, `bed_temperature`, `first_layer_temperature`, `first_layer_bed_temperature`
+- Cooling: `fan_speedup_time`, `overhang_fan_speed`, `reduce_fan_stop_start_freq`
+- Materials/extruders: `wall_filament`, `sparse_infill_filament`, `solid_infill_filament`
+- Supports: `support_material`, `support_pattern`, `support_overhang_angle`
+- Speeds and accelerations: `default_speed`, `sparse_infill_speed`, `internal_solid_infill_speed`, `acceleration`, `jerk`
+- Misc: `brim_width`, `skirt_loops`, `seam_position`, `ironing_angle`, `ironing_pattern`
+
+Note: the full list is extensive (500+ options) and depends on the OrcaSlicer version included here. Refer to the official sources below for the exact list for your version.
 
 
-## Aliases de compatibilidade (mapeamentos)
+## Official sources / How to discover all keys
 
-Aceitamos os aliases abaixo e os mapeamos para chaves equivalentes do Orca:
+1) Export an INI from the OrcaSlicer GUI (File → Export Config). The keys shown there are accepted as overrides.
+2) Check the OrcaSlicer code in this repository, file:
+   - `OrcaSlicer/src/libslic3r/PrintConfig.cpp` (search for `this->add("…", …)`).
+3) Inspect the CONFIG_BLOCK of the generated G-code — useful to validate the application of the override.
+
+These sources ensure synchronization with the embedded version, avoiding documentation drift.
+
+
+## Compatibility aliases (mappings)
+
+We accept the aliases below and map them to equivalent Orca keys:
 
 - `perimeters` → `wall_loops`
 - `top_solid_layers` → `top_shell_layers`
 - `bottom_solid_layers` → `bottom_shell_layers`
 - `skirts` → `skirt_loops`
 - `infill_pattern` → `sparse_infill_pattern`
-- `external_perimeters_first` → `wall_sequence` (mapeado para: `outer wall/inner wall` ou `inner wall/outer wall`)
+- `external_perimeters_first` → `wall_sequence` (mapped to: `outer wall/inner wall` or `inner wall/outer wall`)
 - `fill_angle` → `infill_direction`
 - `fan_always_on` → `reduce_fan_stop_start_freq`
 
-Se um alias não estiver na tabela, use a chave nativa do OrcaSlicer (conforme INI/PrintConfig.cpp).
+If an alias is not in the table, use the native OrcaSlicer key (as per INI/PrintConfig.cpp).
 
 
-## Regras de validação e mensagens de erro
+## Validation rules and error messages
 
-- Chaves desconhecidas ou incompatíveis com o preset/configuração atual resultarão em erro:
-  - CLI: retorno com exit code != 0 e mensagem detalhada
-  - Addon: Promise rejeitada com mensagem contendo a chave/valor problemáticos
-  - HTTP API: status 400 Bad Request com mensagem “Invalid override option(s): …”
-- Valores fora de faixa ou enums inválidos também falham.
-- Quando aplicável, alguns valores serão normalizados internamente pelo Orca (ex.: limites, conversões), refletindo no CONFIG_BLOCK.
+- Unknown keys or keys incompatible with the current preset/configuration will result in an error:
+  - CLI: returns exit code != 0 with a detailed message
+  - Addon: Promise rejected with a message containing the problematic key/value
+  - HTTP API: 400 Bad Request with message “Invalid override option(s): …”
+- Out-of-range values or invalid enums also fail.
+- When applicable, some values will be normalized internally by Orca (e.g., limits, conversions), reflected in the CONFIG_BLOCK.
 
 
-## Exemplos adicionais
+## Additional examples
 
-- Percentuais e enums:
+- Percentages and enums:
   ```bash
   --set "sparse_infill_density=15%,sparse_infill_pattern=grid"
   ```
-- Ajustes de paredes e sobreposição:
+- Wall tweaks and overlap:
   ```bash
   --set "wall_loops=3,infill_wall_overlap=15%"
   ```
-- Ventilação orientada a overhang/bridges:
+- Cooling targeted at overhangs/bridges:
   ```bash
   --set "overhang_fan_speed=80"
   ```
 
 
-## Dúvidas e contribuições
+## Questions and contributions
 
-Se encontrar uma chave válida no INI/PrintConfig.cpp que não funcione como override, abra uma issue com:
-- versão/commit do repositório,
-- exemplo mínimo (CLI `--set` ou corpo JSON da API),
-- trecho do CONFIG_BLOCK do G-code gerado.
+If you find a key that is valid in the INI/PrintConfig.cpp but does not work as an override, open an issue with:
+- repository version/commit,
+- a minimal example (CLI `--set` or API JSON body),
+- a snippet of the CONFIG_BLOCK from the generated G-code.
 
-Isso ajuda a manter a paridade total com o OrcaSlicer GUI.
+This helps maintain full parity with the OrcaSlicer GUI.
 
