@@ -3,8 +3,6 @@ name: Docker images (addon + slicer-api)
 on:
   push:
     branches: ["main"]
-  pull_request:
-    branches: ["main"]
 
 concurrency:
   group: docker-${{ github.workflow }}-${{ github.ref }}
