@@ -1,4 +1,4 @@
-name: CI (macOS)
+name: DOCKER CI
 
 on:
   push:
@@ -9,68 +9,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-test:
-    runs-on: macos-latest
-    timeout-minutes: 90
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24.x
-          check-latest: true
-          cache: npm
-          cache-dependency-path: |
-            OrcaSlicerCli/bindings/node/package-lock.json
-            node-api/package-lock.json
-
-      - name: Ensure Ninja is available
-        run: |
-          if ! command -v ninja >/dev/null 2>&1; then
-            brew update
-            brew install ninja
-          fi
-
-      - name: Configure CLI build (Ninja)
-        run: |
-          cmake -S OrcaSlicerCli -B OrcaSlicerCli/build-ninja -G Ninja \
-            -DORCASLICER_ROOT_DIR=OrcaSlicer \
-            -DORCACLI_BUILD_CLI=ON \
-            -DORCACLI_BUILD_NODE_ADDON=OFF
-
-      - name: Build CLI
-        run: cmake --build OrcaSlicerCli/build-ninja --target orcaslicer-cli -j3
-
-      - name: Install addon dev deps
-        working-directory: OrcaSlicerCli/bindings/node
-        run: npm ci
-
-      - name: Build Node addon (N-API)
-        working-directory: OrcaSlicerCli/bindings/node
-        run: npm run build
-
-      - name: Test Node addon
-        working-directory: OrcaSlicerCli/bindings/node
-        env:
-          # Keep logs quieter in CI
-          ORCACLI_LOG_LEVEL: "1"
-          ORCACLI_QUIET: "1"
-        run: npm test
-
-      - name: Install node-api deps
-        working-directory: node-api
-        run: npm ci
-
-      - name: Test node-api (HTTP + CLI)
-        working-directory: node-api
-        env:
-          ORCACLI_LOG_LEVEL: "1"
-          ORCACLI_QUIET: "1"
-        run: npm test
-
 
   build-docker:
     strategy:
@@ -86,7 +24,6 @@ jobs:
     name: Build addon base and slicer-api images
     runs-on: ubuntu-latest
     timeout-minutes: 180
-    needs: build-and-test
     permissions:
       contents: read
       packages: write
@@ -115,7 +52,6 @@ jobs:
         shell: bash
 
       - name: Compute image tags from source (owner/version/arch)
-        id: tags
         run: |
           lower_owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           echo "DEPS_TAG=ghcr.io/${lower_owner}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}a-${{ matrix.arch }}" >> "$GITHUB_ENV"
@@ -180,6 +116,3 @@ jobs:
           tags: |
             ${{ env.SLICER_TAG }}
 
-      - name: Show local images
-        run: |
-          docker images | head -n 30
