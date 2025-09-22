@@ -73,13 +73,23 @@ jobs:
 
 
   build-docker:
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            platform: linux/amd64
+          - arch: arm64
+            platform: linux/arm64
+
+
     name: Build addon base and slicer-api images
     runs-on: ubuntu-latest
     timeout-minutes: 180
     needs: build-and-test
     permissions:
       contents: read
-      packages: read
+      packages: write
 
     steps:
       - name: Checkout
@@ -87,6 +97,9 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
 
       - name: Login to GHCR (optional; enables pulling/pushing if needed)
         uses: docker/login-action@v3
@@ -105,8 +118,10 @@ jobs:
         id: tags
         run: |
           lower_owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          echo "DEPS_TAG=ghcr.io/${lower_owner}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}" >> "$GITHUB_ENV"
-          echo "CORE_TAG=ghcr.io/${lower_owner}/orcaslicer-core:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}" >> "$GITHUB_ENV"
+          echo "DEPS_TAG=ghcr.io/${lower_owner}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}a-${{ matrix.arch }}" >> "$GITHUB_ENV"
+          echo "CORE_TAG=ghcr.io/${lower_owner}/orcaslicer-core:${{ steps.meta.outputs.version }}a-${{ matrix.arch }}" >> "$GITHUB_ENV"
+          echo "ADDON_BASE_TAG=ghcr.io/${lower_owner}/orca-addon-base:${{ steps.meta.outputs.version }}a-${{ matrix.arch }}" >> "$GITHUB_ENV"
+          echo "SLICER_TAG=ghcr.io/${lower_owner}/slicer-api:${{ steps.meta.outputs.version }}a-${{ matrix.arch }}" >> "$GITHUB_ENV"
         shell: bash
 
       - name: Build DEPS image (target=deps)
@@ -115,9 +130,10 @@ jobs:
           context: .
           file: ./Dockerfile
           target: deps
+          platforms: ${{ matrix.platform }}
           build-args: |
             ENFORCE_PREBUILT_BASE=false
-          load: true
+          push: true
           tags: |
             ${{ env.DEPS_TAG }}
 
@@ -127,11 +143,12 @@ jobs:
           context: .
           file: ./Dockerfile
           target: core
+          platforms: ${{ matrix.platform }}
           build-args: |
             ENFORCE_PREBUILT_BASE=false
             BASE_DEPS_IMAGE=${{ env.DEPS_TAG }}
             USE_PREBUILT_DEPS=true
-          load: true
+          push: true
           tags: |
             ${{ env.CORE_TAG }}
 
@@ -141,25 +158,27 @@ jobs:
           context: .
           file: ./Dockerfile
           target: base
+          platforms: ${{ matrix.platform }}
           build-args: |
             ENFORCE_PREBUILT_BASE=true
             USE_PREBUILT_DEPS=true
             BASE_DEPS_IMAGE=${{ env.DEPS_TAG }}
             BASE_CORE_IMAGE=${{ env.CORE_TAG }}
-          load: true
+          push: true
           tags: |
-            orca-addon:ci
+            ${{ env.ADDON_BASE_TAG }}
 
       - name: Build slicer-api image (consumes addon base)
         uses: docker/build-push-action@v6
         with:
           context: .
           file: node-api/Dockerfile
+          platforms: ${{ matrix.platform }}
           build-args: |
-            ADDON_BASE=orca-addon:ci
-          load: true
+            ADDON_BASE=${{ env.ADDON_BASE_TAG }}
+          push: true
           tags: |
-            slicer-api:ci
+            ${{ env.SLICER_TAG }}
 
       - name: Show local images
         run: |
