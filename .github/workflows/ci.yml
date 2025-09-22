@@ -62,8 +62,29 @@ jobs:
           echo "ADDON_BASE_TAG=ghcr.io/${lower_owner}/orca-addon-base:${{ steps.meta.outputs.version }}a-${{ matrix.arch }}" >> "$GITHUB_ENV"
           echo "SLICER_TAG=ghcr.io/${lower_owner}/slicer-api:${{ steps.meta.outputs.version }}a-${{ matrix.arch }}" >> "$GITHUB_ENV"
         shell: bash
+      - name: Check if DEPS image exists
+        id: check_deps
+        run: bash scripts/ci/check_image_exists.sh "${{ env.DEPS_TAG }}"
+        shell: bash
+
+      - name: Check if CORE image exists
+        id: check_core
+        run: bash scripts/ci/check_image_exists.sh "${{ env.CORE_TAG }}"
+        shell: bash
+
+      - name: Check if ADDON BASE image exists
+        id: check_addon_base
+        run: bash scripts/ci/check_image_exists.sh "${{ env.ADDON_BASE_TAG }}"
+        shell: bash
+
+      - name: Check if SLICER API image exists
+        id: check_slicer
+        run: bash scripts/ci/check_image_exists.sh "${{ env.SLICER_TAG }}"
+        shell: bash
+
 
       - name: Build DEPS image (target=deps)
+        if: steps.check_deps.outputs.exists != 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -77,6 +98,7 @@ jobs:
             ${{ env.DEPS_TAG }}
 
       - name: Build CORE image (target=core, reusing deps)
+        if: steps.check_core.outputs.exists != 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -92,6 +114,7 @@ jobs:
             ${{ env.CORE_TAG }}
 
       - name: Build ADDON base image (target=base)
+        if: steps.check_addon_base.outputs.exists != 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -108,6 +131,7 @@ jobs:
             ${{ env.ADDON_BASE_TAG }}
 
       - name: Build slicer-api image (consumes addon base)
+        if: steps.check_slicer.outputs.exists != 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
