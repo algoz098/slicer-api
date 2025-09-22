@@ -23,6 +23,9 @@ jobs:
           node-version: 24.x
           check-latest: true
           cache: npm
+          cache-dependency-path: |
+            OrcaSlicerCli/bindings/node/package-lock.json
+            node-api/package-lock.json
 
       - name: Ensure Ninja is available
         run: |
