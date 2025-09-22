@@ -106,7 +106,7 @@ jobs:
           target: core
           platforms: ${{ matrix.platform }}
           build-args: |
-            ENFORCE_PREBUILT_BASE=false
+            ENFORCE_PREBUILT_BASE=true
             BASE_DEPS_IMAGE=${{ env.DEPS_TAG }}
             USE_PREBUILT_DEPS=true
           push: true
