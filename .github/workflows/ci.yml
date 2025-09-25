@@ -57,10 +57,10 @@ jobs:
       - name: Compute image tags from source (owner/version/arch)
         run: |
           lower_owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          echo "DEPS_TAG=ghcr.io/${lower_owner}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}a-${{ matrix.arch }}" >> "$GITHUB_ENV"
-          echo "CORE_TAG=ghcr.io/${lower_owner}/orcaslicer-core:${{ steps.meta.outputs.version }}a-${{ matrix.arch }}" >> "$GITHUB_ENV"
-          echo "ADDON_BASE_TAG=ghcr.io/${lower_owner}/orca-addon-base:${{ steps.meta.outputs.version }}a-${{ matrix.arch }}" >> "$GITHUB_ENV"
-          echo "SLICER_TAG=ghcr.io/${lower_owner}/slicer-api:${{ steps.meta.outputs.version }}a-${{ matrix.arch }}" >> "$GITHUB_ENV"
+          echo "DEPS_TAG=ghcr.io/${lower_owner}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}b-${{ matrix.arch }}" >> "$GITHUB_ENV"
+          echo "CORE_TAG=ghcr.io/${lower_owner}/orcaslicer-core:${{ steps.meta.outputs.version }}b-${{ matrix.arch }}" >> "$GITHUB_ENV"
+          echo "ADDON_BASE_TAG=ghcr.io/${lower_owner}/orca-addon-base:${{ steps.meta.outputs.version }}b-${{ matrix.arch }}" >> "$GITHUB_ENV"
+          echo "SLICER_TAG=ghcr.io/${lower_owner}/slicer-api:${{ steps.meta.outputs.version }}b-${{ matrix.arch }}" >> "$GITHUB_ENV"
         shell: bash
       - name: Check if DEPS image exists
         id: check_deps

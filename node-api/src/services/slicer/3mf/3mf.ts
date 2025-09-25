@@ -29,6 +29,7 @@ export const slicer3Mf = (app: Application) => {
     // You can add additional custom events to be sent to clients here
     events: []
   })
+
   // Initialize hooks
   app.service(slicer3MfPath).hooks({
     around: {
@@ -45,6 +46,20 @@ export const slicer3Mf = (app: Application) => {
       find: [],
       get: [],
       create: [
+        (ctx: any) => {
+          const { data } = ctx
+
+          if (data.options) {
+            if (typeof data.options === 'string') {
+              try {
+                data.options = JSON.parse(data.options)
+              } catch (err: any) {
+                throw new Error('Failed to parse "options" as JSON')
+              }
+            }
+            console.log(2, Object.keys(data.options))
+          }
+        },
         schemaHooks.validateData(slicer3MfDataValidator),
         schemaHooks.resolveData(slicer3MfDataResolver)
       ],

@@ -57,6 +57,8 @@ static orcacli_operation_result make_result(const OrcaSlicerCli::CliCore::Operat
 }
 
 orcacli_operation_result orcacli_initialize(orcacli_handle h, const char* resources_path) {
+    std::cout << "DEBUG: [C API] orcacli_initialize(resources_path=" << (resources_path?resources_path:"(null)") << ")" << std::endl;
+
     if (!h) {
         return orcacli_operation_result{false, dup_cstr("invalid handle"), nullptr};
     }
@@ -85,9 +87,13 @@ orcacli_operation_result orcacli_initialize(orcacli_handle h, const char* resour
     } catch (...) { /* ignore logging setup errors */ }
 #endif
 
+
     Engine* e = static_cast<Engine*>(h);
     auto res = e->core.initialize(resources_path ? std::string(resources_path) : std::string());
+    std::cout << "DEBUG: [C API] orcacli_initialize result success=" << (res.success?1:0) << ", msg='" << res.message << "'" << std::endl;
+
     return make_result(res);
+
 }
 
 orcacli_operation_result orcacli_load_model(orcacli_handle h, const char* filename) {
@@ -158,6 +164,62 @@ orcacli_operation_result orcacli_slice(orcacli_handle h, const orcacli_slice_par
     }
     auto res = e->core.slice(p);
     return make_result(res);
+}
+
+orcacli_operation_result orcacli_load_vendor(orcacli_handle h, const char* vendor_id) {
+    if (!h || !vendor_id) {
+
+        return orcacli_operation_result{false, dup_cstr("invalid args"), nullptr};
+    }
+    Engine* e = static_cast<Engine*>(h);
+
+    auto res = e->core.loadVendor(std::string(vendor_id));
+    std::cout << "DEBUG: [C API] orcacli_load_vendor('" << vendor_id << "') success=" << (res.success?1:0) << ", msg='" << res.message << "'" << std::endl;
+
+    return make_result(res);
+
+}
+
+
+orcacli_operation_result orcacli_load_printer_profile(orcacli_handle h, const char* printer_name) {
+    if (!h || !printer_name) {
+
+        return orcacli_operation_result{false, dup_cstr("invalid args"), nullptr};
+    }
+    Engine* e = static_cast<Engine*>(h);
+    auto res = e->core.loadPrinterProfile(std::string(printer_name));
+    std::cout << "DEBUG: [C API] orcacli_load_printer_profile('" << printer_name << "') success=" << (res.success?1:0) << ", msg='" << res.message << "'" << std::endl;
+
+    return make_result(res);
+
+
+}
+
+orcacli_operation_result orcacli_load_filament_profile(orcacli_handle h, const char* filament_name) {
+
+    if (!h || !filament_name) {
+        return orcacli_operation_result{false, dup_cstr("invalid args"), nullptr};
+    }
+    Engine* e = static_cast<Engine*>(h);
+
+    auto res = e->core.loadFilamentProfile(std::string(filament_name));
+    std::cout << "DEBUG: [C API] orcacli_load_filament_profile('" << filament_name << "') success=" << (res.success?1:0) << ", msg='" << res.message << "'" << std::endl;
+
+
+    return make_result(res);
+
+}
+
+orcacli_operation_result orcacli_load_process_profile(orcacli_handle h, const char* process_name) {
+    if (!h || !process_name) {
+        return orcacli_operation_result{false, dup_cstr("invalid args"), nullptr};
+    }
+    Engine* e = static_cast<Engine*>(h);
+    auto res = e->core.loadProcessProfile(std::string(process_name));
+    std::cout << "DEBUG: [C API] orcacli_load_process_profile('" << process_name << "') success=" << (res.success?1:0) << ", msg='" << res.message << "'" << std::endl;
+
+    return make_result(res);
+
 }
 
 #ifndef ORCACLI_VERSION_STRING

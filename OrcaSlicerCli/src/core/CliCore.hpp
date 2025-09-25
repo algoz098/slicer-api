@@ -18,7 +18,7 @@ namespace OrcaSlicerCli {
 
 /**
  * @brief Core class that provides high-level interface to OrcaSlicer functionality
- * 
+ *
  * This class encapsulates the main OrcaSlicer engine and provides a simplified
  * interface for CLI operations like slicing, configuration management, and
  * file operations.
@@ -32,7 +32,7 @@ public:
         bool success = false;
         std::string message;
         std::string error_details;
-        
+
         OperationResult() = default;
         OperationResult(bool success, const std::string& message = "", const std::string& error_details = "")
             : success(success), message(message), error_details(error_details) {}
@@ -152,6 +152,14 @@ public:
      * @return Operation result
      */
     OperationResult loadProcessProfile(const std::string& process_name);
+
+	    /**
+	     * @brief Load a vendor's presets into the bundle (lazy, on-demand)
+	     * @param vendor_id Vendor identifier as used in resources/profiles (e.g., "BBL", "Flashforge")
+	     * @return Operation result
+	     */
+	    OperationResult loadVendor(const std::string& vendor_id);
+
 
     /**
      * @brief Set a configuration option

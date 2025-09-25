@@ -59,9 +59,16 @@ orcacli_operation_result orcacli_initialize(orcacli_handle h, const char* resour
 orcacli_operation_result orcacli_load_model(orcacli_handle h, const char* filename);
 orcacli_model_info       orcacli_get_model_info(orcacli_handle h);
 orcacli_operation_result orcacli_slice(orcacli_handle h, const orcacli_slice_params* params);
+// Lazy loading of vendors/presets
+orcacli_operation_result orcacli_load_vendor(orcacli_handle h, const char* vendor_id);
 
 // Metadata
 const char* orcacli_version(); // static string, no free required
+
+// Profile loading (on-demand)
+orcacli_operation_result orcacli_load_printer_profile(orcacli_handle h, const char* printer_name);
+orcacli_operation_result orcacli_load_filament_profile(orcacli_handle h, const char* filament_name);
+orcacli_operation_result orcacli_load_process_profile(orcacli_handle h, const char* process_name);
 
 // Memory management helpers
 void orcacli_free_string(const char* s);

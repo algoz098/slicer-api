@@ -54,6 +54,7 @@
     "@feathersjs/schema": "^5.0.35",
     "@feathersjs/transport-commons": "^5.0.35",
     "@feathersjs/typebox": "^5.0.35",
+    "jszip": "^3.10.1",
     "koa-body": "^6.0.1",
     "winston": "^3.17.0"
   },

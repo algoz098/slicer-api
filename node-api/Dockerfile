@@ -25,6 +25,9 @@ FROM ${ADDON_BASE} AS runtime
 ENV NODE_ENV=production \
     ORCACLI_RESOURCES=/opt/orca/OrcaSlicer/resources
 
+# Install unzip tools as a fallback in case jszip is not available at runtime
+RUN apt-get update && apt-get install -y --no-install-recommends unzip p7zip-full && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /opt/orca/node-api
 COPY --from=builder /opt/orca/node-api /opt/orca/node-api
 

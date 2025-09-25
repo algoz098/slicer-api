@@ -9,6 +9,15 @@
 #include <algorithm>
 #include <cctype>
 
+#include <set>
+
+#include <optional>
+
+#include <string>
+#include <vector>
+#include <limits>
+#include <cstdlib>
+
 
 #if !HAVE_LIBSLIC3R
 #error "libslic3r is required. Placeholders are not allowed."
@@ -92,6 +101,7 @@ public:
     // Important: app_config must be destroyed after preset_bundle
     Slic3r::AppConfig app_config;
     Slic3r::PresetBundle preset_bundle;
+    std::set<std::string> loaded_vendors;
     // Preset names embedded in a 3MF project (if any). Used for auto-apply when no CLI presets are provided.
     std::string project_printer_preset;
     std::string project_print_preset;
@@ -306,6 +316,15 @@ public:
                           << "' root_exists=" << (root_ok?1:0)
                           << " BBL.json_exists=" << (bbl_ok?1:0) << std::endl;
             } catch (...) {}
+            // Extra DEBUG: dump env relevant to strict/eager loading
+            try {
+                auto getenv_or = [](const char* n){ const char* v = std::getenv(n); return v? v : "(unset)"; };
+                std::cout << "DEBUG: initializeSlic3r env: ORCACLI_STRICT_VENDORS_ONLY=" << getenv_or("ORCACLI_STRICT_VENDORS_ONLY") << std::endl;
+                std::cout << "DEBUG: initializeSlic3r env: ORCACLI_DISABLE_AUTOLOAD=" << getenv_or("ORCACLI_DISABLE_AUTOLOAD") << std::endl;
+                std::cout << "DEBUG: initializeSlic3r env: ORCACLI_EAGER_LOAD_PRESETS=" << getenv_or("ORCACLI_EAGER_LOAD_PRESETS") << std::endl;
+                std::cout << "DEBUG: initializeSlic3r env: ORCACLI_VENDORS=" << getenv_or("ORCACLI_VENDORS") << std::endl;
+            } catch (...) {}
+
 
 #if HAVE_LIBSLIC3R
             // Force deterministic numeric formatting independent of OS locale
@@ -319,6 +338,7 @@ public:
             fs::path data_dir = cwd / ".orcaslicercli";
             if (!fs::exists(data_dir)) fs::create_directories(data_dir);
             Slic3r::set_data_dir(data_dir.string());
+            std::cout << "DEBUG: Set data_dir to '" << data_dir.string() << "'" << std::endl; // TEST TRACE
             // Ensure a writable temporary directory for libslic3r (needed by 3MF loader backup/extract paths)
             try {
                 fs::path tmp_dir = data_dir / "tmp";
@@ -340,132 +360,179 @@ public:
             if (fs::exists(fs::path(resources_path) / "custom_gcodes"))
                 Slic3r::set_custom_gcodes_dir((fs::path(resources_path) / "custom_gcodes").string());
 
-            Slic3r::set_logging_level(4); // Debug level to surface vendor/system preset logs
-
-            // Seed PresetBundle system directory from resources if empty/missing
-            try {
-                preset_bundle.setup_directories();
-                namespace fs = std::filesystem;
-                fs::path profiles_dir = fs::path(resources_path) / "profiles";
-                fs::path sys_dir      = fs::path(Slic3r::data_dir()) / "system";
-                if (!fs::exists(sys_dir)) fs::create_directories(sys_dir);
-                // Copy vendor list JSONs (e.g., BBL.json, Prusa.json, etc.) into data_dir/system where libslic3r expects them,
-                // AND also copy the corresponding vendor subdirectories (machine/process/filament) so LoadSystem can paste presets.
-                size_t copied_jsons = 0;
-                size_t copied_dirs  = 0;
-                if (fs::exists(profiles_dir) && fs::is_directory(profiles_dir)) {
-                    // 1) Copy root vendor index JSONs
-                    for (const auto &entry : fs::directory_iterator(profiles_dir)) {
-                        if (!entry.is_regular_file()) continue;
-                        if (entry.path().extension() != ".json") continue;
-                        const std::string fname = entry.path().filename().string();
-                        if (fname == "OrcaFilamentLibrary.json") continue; // avoid known ASan issue in this environment
-                        try {
-                            fs::path dst = sys_dir / fname;
-                            if (!fs::exists(dst)) {
-                                fs::copy_file(entry.path(), dst, fs::copy_options::overwrite_existing);
-                                ++copied_jsons;
-                            }
-                        } catch (...) { /* ignore individual copy errors */ }
-                    }
-                    // 2) Copy vendor folders recursively (BBL/, Prusa/, etc.) so subfiles referenced by the index JSONs exist under data_dir/system
-                    for (const auto &entry : fs::directory_iterator(profiles_dir)) {
-                        if (!entry.is_directory()) continue;
-                        const std::string dname = entry.path().filename().string();
-                        if (dname == "OrcaFilamentLibrary") continue; // skip library; handled specially by libslic3r
-                        try {
-                            fs::path dst_dir = sys_dir / dname;
-                            // Copy recursively and overwrite to keep in sync with resources
-                            fs::copy(entry.path(), dst_dir, fs::copy_options::recursive | fs::copy_options::overwrite_existing);
-                            ++copied_dirs;
-                        } catch (...) { /* ignore individual copy errors */ }
-                    }
+            {
+                unsigned int lvl = 4;
+                if (const char* lv = std::getenv("ORCACLI_LOGLEVEL")) {
+                    try { lvl = (unsigned int)std::stoi(lv); } catch (...) {}
                 }
-                std::cout << "DEBUG: Seeded vendor profiles into '" << sys_dir.string() << "' (jsons=" << copied_jsons << ", dirs=" << copied_dirs << ")" << std::endl;
-                // List root vendor JSONs to verify presence (e.g., BBL.json)
+                Slic3r::set_logging_level(lvl);
+            }
+
+
+            // Strict mode to disable any seeding or env-driven autoloads
+            bool strict_no_autoload = false;
+            if (const char* s = std::getenv("ORCACLI_STRICT_VENDORS_ONLY")) {
+                if (s[0]=='1' || s[0]=='T' || s[0]=='t' || s[0]=='Y' || s[0]=='y') strict_no_autoload = true;
+            }
+            if (const char* s2 = std::getenv("ORCACLI_DISABLE_AUTOLOAD")) {
+                if (s2[0]=='1' || s2[0]=='T' || s2[0]=='t' || s2[0]=='Y' || s2[0]=='y') strict_no_autoload = true;
+            }
+            std::cout << "DEBUG: [TEST TRACE] strict_no_autoload=" << (strict_no_autoload?1:0) << std::endl;
+
+                // Enforce API-only control: disable any env-driven autoloads unconditionally
+                strict_no_autoload = true;
+                std::cout << "DEBUG: [TEST TRACE] overriding strict_no_autoload=1 (API-only control)" << std::endl;
+
+
+            if (strict_no_autoload) {
+                std::cout << "DEBUG: Strict no-autoload mode enabled: skipping seeding and env-driven vendor/preset loads" << std::endl;
                 try {
-                    std::vector<std::string> root_jsons;
-                    for (const auto &e : fs::directory_iterator(sys_dir)) {
-                        if (e.is_regular_file() && e.path().extension() == ".json") {
-                            root_jsons.push_back(e.path().filename().string());
+                    namespace fs = std::filesystem;
+                    fs::path sys_dir = fs::path(Slic3r::data_dir()) / "system";
+                    if (fs::exists(sys_dir)) {
+                        std::cout << "DEBUG: Strict mode: clearing system presets directory '" << sys_dir.string() << "'" << std::endl;
+                        std::error_code ec;
+                        fs::remove_all(sys_dir, ec);
+                        (void)ec;
+                    }
+                    fs::create_directories(sys_dir);
+                } catch (...) { /* best-effort cleanup */ }
+            }
+
+            // Seed PresetBundle system directory from resources if explicitly enabled (truthy: 1/true/yes)
+            if (!strict_no_autoload) {
+                if (const char* seed = std::getenv("ORCACLI_SEED_ALL"); seed && (seed[0]=='1' || seed[0]=='T' || seed[0]=='t' || seed[0]=='Y' || seed[0]=='y')) { try {
+                    preset_bundle.setup_directories();
+                    namespace fs = std::filesystem;
+                    fs::path profiles_dir = fs::path(resources_path) / "profiles";
+                    fs::path sys_dir      = fs::path(Slic3r::data_dir()) / "system";
+                    if (!fs::exists(sys_dir)) fs::create_directories(sys_dir);
+                    // Copy vendor list JSONs (e.g., BBL.json, Prusa.json, etc.) into data_dir/system where libslic3r expects them,
+                    // AND also copy the corresponding vendor subdirectories (machine/process/filament) so LoadSystem can paste presets.
+                    size_t copied_jsons = 0;
+                    size_t copied_dirs  = 0;
+                    if (fs::exists(profiles_dir) && fs::is_directory(profiles_dir)) {
+                        // 1) Copy root vendor index JSONs
+                        for (const auto &entry : fs::directory_iterator(profiles_dir)) {
+                            if (!entry.is_regular_file()) continue;
+                            if (entry.path().extension() != ".json") continue;
+                            const std::string fname = entry.path().filename().string();
+                            if (fname == "OrcaFilamentLibrary.json") continue; // avoid known ASan issue in this environment
+                            try {
+                                fs::path dst = sys_dir / fname;
+                                if (!fs::exists(dst)) {
+                                    fs::copy_file(entry.path(), dst, fs::copy_options::overwrite_existing);
+                                    ++copied_jsons;
+                                }
+                            } catch (...) { /* ignore individual copy errors */ }
+                        }
+                        // 2) Copy vendor folders recursively (BBL/, Prusa/, etc.) so subfiles referenced by the index JSONs exist under data_dir/system
+                        for (const auto &entry : fs::directory_iterator(profiles_dir)) {
+                            if (!entry.is_directory()) continue;
+                            const std::string dname = entry.path().filename().string();
+                            if (dname == "OrcaFilamentLibrary") continue; // skip library; handled specially by libslic3r
+                            try {
+                                fs::path dst_dir = sys_dir / dname;
+                                // Copy recursively and overwrite to keep in sync with resources
+                                fs::copy(entry.path(), dst_dir, fs::copy_options::recursive | fs::copy_options::overwrite_existing);
+                                ++copied_dirs;
+                            } catch (...) { /* ignore individual copy errors */ }
                         }
                     }
-                    std::sort(root_jsons.begin(), root_jsons.end());
-                    bool has_bbl = std::find(root_jsons.begin(), root_jsons.end(), std::string("BBL.json")) != root_jsons.end();
-                    std::cout << "DEBUG: system root JSONs (" << root_jsons.size() << ") has BBL.json=" << (has_bbl?"yes":"no") << std::endl;
-                    size_t show = std::min<size_t>(root_jsons.size(), 10);
-                    for (size_t i=0;i<show;i++) std::cout << "  - " << root_jsons[i] << std::endl;
-                } catch (...) {}
-
-                // Optional: validation mode to focus vendor loading diagnostics
-                if (const char* v = std::getenv("ORCACLI_VALIDATE_VENDOR")) {
+                    std::cout << "DEBUG: Seeded vendor profiles into '" << sys_dir.string() << "' (jsons=" << copied_jsons << ", dirs=" << copied_dirs << ")" << std::endl;
+                    // List root vendor JSONs to verify presence (e.g., BBL.json)
                     try {
-                        preset_bundle.set_is_validation_mode(true);
-                        preset_bundle.set_vendor_to_validate(std::string(v));
-                        std::cout << "DEBUG: Validation mode enabled for vendor '" << v << "'" << std::endl;
-                    } catch (...) {}
-                }
-                // If system root is missing key vendors (first-run), seed from resources via official loader
-                try {
-                    bool need_bbl = true;
-                    try {
-                        bool has_bbl = false;
+                        std::vector<std::string> root_jsons;
                         for (const auto &e : fs::directory_iterator(sys_dir)) {
-                            if (e.is_regular_file() && e.path().filename() == "BBL.json") { has_bbl = true; break; }
+                            if (e.is_regular_file() && e.path().extension() == ".json") {
+                                root_jsons.push_back(e.path().filename().string());
+                            }
                         }
-                        need_bbl = !has_bbl;
+                        std::sort(root_jsons.begin(), root_jsons.end());
+                        bool has_bbl = std::find(root_jsons.begin(), root_jsons.end(), std::string("BBL.json")) != root_jsons.end();
+                        std::cout << "DEBUG: system root JSONs (" << root_jsons.size() << ") has BBL.json=" << (has_bbl?"yes":"no") << std::endl;
+                        size_t show = std::min<size_t>(root_jsons.size(), 10);
+                        for (size_t i=0;i<show;i++) std::cout << "  - " << root_jsons[i] << std::endl;
                     } catch (...) {}
 
-                    fs::path res_profiles = fs::path(Slic3r::resources_dir()) / "profiles";
-                    if (!res_profiles.empty() && fs::exists(res_profiles)) {
-                        if (need_bbl && fs::exists(res_profiles / "BBL.json")) {
-                            std::cout << "DEBUG: Seeding BBL vendor directly from resources into system dir..." << std::endl;
-                            auto seeded = preset_bundle.load_vendor_configs_from_json(res_profiles.string(), "BBL", Slic3r::PresetBundle::LoadSystem, Slic3r::ForwardCompatibilitySubstitutionRule::EnableSystemSilent);
-                            (void)seeded;
-                        }
-                        // Ensure OrcaFilamentLibrary is present too as some presets depend on it
-                        bool have_orca_lib = false;
+                    // Optional: validation mode to focus vendor loading diagnostics
+                    if (const char* v = std::getenv("ORCACLI_VALIDATE_VENDOR")) {
                         try {
-                            for (const auto &e : fs::directory_iterator(sys_dir)) {
-                                if (e.is_regular_file() && e.path().filename() == "OrcaFilamentLibrary.json") { have_orca_lib = true; break; }
-                            }
+                            preset_bundle.set_is_validation_mode(true);
+                            preset_bundle.set_vendor_to_validate(std::string(v));
+                            std::cout << "DEBUG: Validation mode enabled for vendor '" << v << "'" << std::endl;
                         } catch (...) {}
-                        if (!have_orca_lib && fs::exists(res_profiles / "OrcaFilamentLibrary.json")) {
-                            std::cout << "DEBUG: Seeding OrcaFilamentLibrary from resources..." << std::endl;
-                            auto seeded2 = preset_bundle.load_vendor_configs_from_json(res_profiles.string(), "OrcaFilamentLibrary", Slic3r::PresetBundle::LoadSystem, Slic3r::ForwardCompatibilitySubstitutionRule::EnableSystemSilent);
-                            (void)seeded2;
-                        }
                     }
-                } catch (...) {}
-
-
-            } catch (...) { /* ignore seeding errors */ }
+                    // Intentionally do NOT auto-load any vendors here.
+                    // We only stage files into the system dir; actual vendor loading must be explicit
+                    // (via ORCACLI_VENDORS, ORCACLI_EAGER_LOAD_PRESETS, or API calls like loadVendor()).
+                    (void)sys_dir; // suppress unused warning if compiled with reduced logs
+                } catch (...) { /* ignore seeding errors */ }
+                }
+            }
 
             // Initialize AppConfig and load defaults (and existing file if any)
             app_config.reset();
 
+
+            // Lazy load only vendors requested via env ORCACLI_VENDORS (comma-separated)
+            std::cout << "DEBUG: [TEST TRACE] entering env-driven vendor autoload section, strict_no_autoload=" << (strict_no_autoload?1:0) << std::endl;
+
+            if (!strict_no_autoload) {
+                if (const char* ev = std::getenv("ORCACLI_VENDORS")) {
+                    try {
+                        std::string s(ev);
+                        std::vector<std::string> vendors; vendors.reserve(4);
+                        std::string cur;
+                        for (char c : s) {
+                            if (c == ',') { if (!cur.empty()) { vendors.push_back(cur); cur.clear(); } }
+                            else if (!std::isspace((unsigned char)c)) { cur.push_back(c); }
+                        }
+                        if (!cur.empty()) vendors.push_back(cur);
+                        namespace fs = std::filesystem;
+                        fs::path res_profiles = fs::path(resources_path) / "profiles";
+                        for (const auto &v : vendors) {
+                            try {
+                                preset_bundle.load_vendor_configs_from_json(res_profiles.string(), v, Slic3r::PresetBundle::LoadSystem, Slic3r::ForwardCompatibilitySubstitutionRule::EnableSystemSilent);
+                                loaded_vendors.insert(v);
+                            } catch (...) {}
+                        }
+                        // Materialize installed printers for selected vendors
+                        try { preset_bundle.load_installed_printers(app_config); } catch (...) {}
+                    } catch (...) {}
+                }
+            }
+
             // Load system and user presets using PresetBundle's official API (handles vendor order and merges internally).
-            preset_bundle.load_presets(app_config, Slic3r::ForwardCompatibilitySubstitutionRule::EnableSystemSilent);
+            std::cout << "DEBUG: [TEST TRACE] considering eager load: strict_no_autoload=" << (strict_no_autoload?1:0) << std::endl;
+            if (!strict_no_autoload) {
+                if (const char* eager = std::getenv("ORCACLI_EAGER_LOAD_PRESETS")) {
+                    std::cout << "DEBUG: [TEST TRACE] ORCACLI_EAGER_LOAD_PRESETS='" << eager << "'" << std::endl;
+                    if (eager[0]=='1' || eager[0]=='T' || eager[0]=='t' || eager[0]=='Y' || eager[0]=='y') {
+                        std::cout << "DEBUG: [TEST TRACE] calling preset_bundle.load_presets(...)" << std::endl;
+                        preset_bundle.load_presets(app_config, Slic3r::ForwardCompatibilitySubstitutionRule::EnableSystemSilent);
+                    }
+                } else {
+                    std::cout << "DEBUG: [TEST TRACE] ORCACLI_EAGER_LOAD_PRESETS not set" << std::endl;
+                }
+            } else {
+                std::cout << "DEBUG: [TEST TRACE] Skipping eager load due to strict_no_autoload=1" << std::endl;
+            }
             try {
                 size_t total = preset_bundle.printers.size();
                 size_t visible = 0; for (const auto &p : preset_bundle.printers) if (p.is_visible) ++visible;
                 std::cout << "DEBUG: After load_presets: printers total=" << total << " visible=" << visible << std::endl;
             } catch (...) {}
 
-                // Ensure system models are loaded (required for BBL vendor printers to materialize)
-                try {
-                    auto res_models = preset_bundle.load_system_models_from_json(Slic3r::ForwardCompatibilitySubstitutionRule::EnableSystemSilent);
-                    std::cout << "DEBUG: load_system_models_from_json done" << std::endl;
-                } catch (...) {
-                    std::cout << "WARN: load_system_models_from_json failed (continuing)" << std::endl;
+                // Defer model/printer materialization until vendors are explicitly loaded or EAGER preset load is requested
+                if (!loaded_vendors.empty()) {
+                    try {
+                        preset_bundle.load_installed_printers(app_config);
+                        size_t totalp = preset_bundle.printers.size();
+                        size_t visiblep = 0; for (const auto &p : preset_bundle.printers) if (p.is_visible) ++visiblep;
+                        std::cout << "DEBUG: After guarded load_installed_printers: printers total=" << totalp << " visible=" << visiblep << std::endl;
+                    } catch (...) {}
                 }
-                // Prime installed printers based on current AppConfig (may be empty visibility, will be adjusted later)
-                try {
-                    preset_bundle.load_installed_printers(app_config);
-                    size_t totalp = preset_bundle.printers.size();
-                    size_t visiblep = 0; for (const auto &p : preset_bundle.printers) if (p.is_visible) ++visiblep;
-                    std::cout << "DEBUG: After initial load_installed_printers: printers total=" << totalp << " visible=" << visiblep << std::endl;
-                } catch (...) {}
 
 
 
@@ -475,26 +542,26 @@ public:
             // under the hood and did not paste printer configs; removing it avoids
             // confusion and duplicate state.
 
-            // Ensure installed printers (and related presets) are materialized based on AppConfig.
-            // If the vendor section is missing in AppConfig, libslic3r will enable all models/variants by default per vendor.
-            try {
-                // Materialize installed printers so system presets are present in the collection.
-                preset_bundle.load_installed_printers(app_config);
-                size_t total = preset_bundle.printers.size();
-                size_t visible = 0; for (const auto &p : preset_bundle.printers) if (p.is_visible) ++visible;
-                std::cout << "DEBUG: After load_installed_printers: printers total=" << total << " visible=" << visible << std::endl;
-                // Note: load_installed_filaments() is private in some Orca forks; skip here to keep compatibility.
-            } catch (...) {
-                // Non-fatal: continue with defaults
+            // Skip implicit materialization; do it only after explicit vendor/profile loads.
+            if (!loaded_vendors.empty()) {
+                try {
+                    preset_bundle.load_installed_printers(app_config);
+                    size_t total = preset_bundle.printers.size();
+                    size_t visible = 0; for (const auto &p : preset_bundle.printers) if (p.is_visible) ++visible;
+                    std::cout << "DEBUG: After guarded load_installed_printers (2): printers total=" << total << " visible=" << visible << std::endl;
+                } catch (...) {}
             }
 
-            // Compose full config
+            // Always ensure base objects exist; fill config from presets only when vendors are loaded
             config = std::make_unique<Slic3r::DynamicPrintConfig>();
-            *config = preset_bundle.full_config_secure();
-
-            // Initialize model and print objects
             model = std::make_unique<Slic3r::Model>();
             print = std::make_unique<Slic3r::Print>();
+            if (!loaded_vendors.empty()) {
+                *config = preset_bundle.full_config_secure();
+                std::cout << "DEBUG: Materialized config/model/print with loaded vendors" << std::endl;
+            } else {
+                std::cout << "DEBUG: Created empty config and base model/print (no vendors loaded yet)" << std::endl;
+            }
 #endif
 
             return true;
@@ -1843,6 +1910,12 @@ CliCore::OperationResult CliCore::slice(const SlicingParams& params) {
                 mapped_key = "reduce_fan_stop_start_freq";
             }
 
+        #if HAVE_LIBSLIC3R
+            if (m_impl->config && !m_impl->config->has(mapped_key)) {
+                std::cout << "DEBUG: Ignoring unknown override key: " << mapped_key << std::endl;
+                continue;
+            }
+        #endif
             auto result = setConfigOption(mapped_key, mapped_val);
             if (!result.success) {
                 return OperationResult(false, "Failed to set config option: " + mapped_key, result.error_details);
@@ -2154,6 +2227,8 @@ CliCore::OperationResult CliCore::loadProcessProfile(const std::string& process_
         return OperationResult(false, "CLI Core not initialized");
     }
 
+
+
 #if HAVE_LIBSLIC3R
     try {
         // Ensure a printer is selected to attach process settings to
@@ -2214,6 +2289,8 @@ CliCore::OperationResult CliCore::setConfigOption(const std::string& key, const 
     } catch (const std::exception& e) {
         return OperationResult(false, std::string("Failed to set config option: ") + key, e.what());
     }
+
+
 #else
     return OperationResult(false, "libslic3r not available");
 #endif
@@ -2240,6 +2317,8 @@ std::vector<std::string> CliCore::getAvailablePrinterProfiles() const {
     }
 
     try {
+
+
         std::string profiles_dir = m_impl->resources_path + "/profiles/BBL/machine";
         if (!std::filesystem::exists(profiles_dir)) {
             return profiles;
@@ -2361,6 +2440,34 @@ CliCore::ModelInfo CliCore::validateModel(const std::string& filename) const {
     }
 
     return info;
+}
+
+
+CliCore::OperationResult CliCore::loadVendor(const std::string& vendor_id) {
+    if (!m_impl->initialized) {
+        return OperationResult(false, "CLI Core not initialized");
+    }
+#if HAVE_LIBSLIC3R
+        std::cout << "DEBUG: CliCore::loadVendor request vendor_id='" << vendor_id << "'" << std::endl;
+
+    try {
+        namespace fs = std::filesystem;
+        fs::path res_profiles = fs::path(m_impl->resources_path) / "profiles";
+        if (!fs::exists(res_profiles)) {
+            return OperationResult(false, "Resources profiles directory not found", res_profiles.string());
+        }
+        std::cout << "DEBUG: [TEST TRACE] loadVendor('" << vendor_id << "') from '" << res_profiles.string() << "'" << std::endl;
+        std::cout << "DEBUG: [TEST TRACE] calling PresetBundle::load_vendor_configs_from_json with vendor '" << vendor_id << "'" << std::endl;
+        m_impl->preset_bundle.load_vendor_configs_from_json(res_profiles.string(), vendor_id, Slic3r::PresetBundle::LoadSystem, Slic3r::ForwardCompatibilitySubstitutionRule::EnableSystemSilent);
+        m_impl->loaded_vendors.insert(vendor_id);
+        try { m_impl->preset_bundle.load_installed_printers(m_impl->app_config); } catch (...) {}
+        return OperationResult(true, std::string("Vendor loaded: ") + vendor_id);
+    } catch (const std::exception& e) {
+        return OperationResult(false, std::string("Error loading vendor: ") + vendor_id, e.what());
+    }
+#else
+    return OperationResult(false, "libslic3r not available");
+#endif
 }
 
 } // namespace OrcaSlicerCli

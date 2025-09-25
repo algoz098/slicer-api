@@ -1,0 +1,64 @@
+# syntax=docker/dockerfile:1.7
+
+# Dev image that rebuilds the native addon from source (no prebuilt),
+# reusing a prebuilt CORE image to avoid recompiling deps on each change,
+# and ships on top of the ADDON base (which carries Node + resources).
+ARG NODE_VERSION=24
+ARG BASE_CORE_IMAGE
+ARG ADDON_BASE
+
+# 1) Addon builder: compile engine + Node addon on top of CORE
+FROM ${BASE_CORE_IMAGE} AS builder
+ARG CI_MAX_JOBS
+WORKDIR /opt/orca
+
+# Build prerequisites (Node + toolchain) — CORE image may not ship Node/npm
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates \
+      curl \
+      bash \
+      git \
+      build-essential \
+      python3 \
+      cmake \
+      ninja-build \
+      nodejs \
+      npm \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY OrcaSlicerCli ./OrcaSlicerCli
+
+# Build the shared engine library required by the Node addon
+RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache bash -lc 'JOBS=${CI_MAX_JOBS:-$(nproc)}; cmake -S OrcaSlicerCli -B OrcaSlicerCli/build -G Ninja -DORCACLI_REQUIRE_LIBS=ON && cmake --build OrcaSlicerCli/build --config Release --target orcacli_engine --parallel "$JOBS"'
+
+# Build the Node addon and stage prebuild artifacts
+WORKDIR /opt/orca/OrcaSlicerCli/bindings/node
+ENV ORCACLI_REQUIRE_LIBS=ON
+RUN npm install && npm run prebuild:all && \
+    (command -v strip >/dev/null 2>&1 && strip -s prebuilds/*/orcaslicer_node.node prebuilds/*/liborcacli_engine.so || true)
+
+# 2) Dev runtime: start from ADDON base (Node + resources) and overwrite prebuilds
+FROM ${ADDON_BASE} AS dev
+WORKDIR /opt/orca
+ENV ORCACLI_RESOURCES=/opt/orca/OrcaSlicer/resources \
+    ORCACLI_ADDON_DIR=/opt/orca/OrcaSlicerCli/bindings/node \
+    NODE_ENV=development
+
+# Install runtime libraries likely required by the engine
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      libstdc++6 \
+      libgcc-s1 \
+      libexpat1 \
+      libssl3 \
+      libfontconfig1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Overwrite the prebuilt addon with the freshly built one
+COPY --from=builder /opt/orca/OrcaSlicerCli/bindings/node/index.js /opt/orca/OrcaSlicerCli/bindings/node/index.js
+COPY --from=builder /opt/orca/OrcaSlicerCli/bindings/node/prebuilds /opt/orca/OrcaSlicerCli/bindings/node/prebuilds
+# Ensure engine .so is present at a stable path for ORCACLI_ENGINE_PATH override
+RUN mkdir -p /opt/orca/OrcaSlicerCli/bindings/node && true
+COPY --from=builder /opt/orca/OrcaSlicerCli/build/bindings/node/liborcacli_engine.so /opt/orca/OrcaSlicerCli/bindings/node/liborcacli_engine.so
+
+# Workspace will be bind-mounted by docker-compose
+WORKDIR /workspace/node-api

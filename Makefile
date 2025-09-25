@@ -5,7 +5,7 @@
 
 # ---- Configuracao ----
 # Pode sobrescrever via ambiente: make OWNER=me ORCASLICER_SUFFIX=b
-ORCASLICER_SUFFIX ?= a
+ORCASLICER_SUFFIX ?= b
 REGISTRY ?= ghcr.io
 # Tenta deduzir o owner a partir do git remote
 OWNER ?= $(shell git config --get remote.origin.url | sed -E 's#.*[:/]([^/]+)/[^/]+(.git)?#\1#')

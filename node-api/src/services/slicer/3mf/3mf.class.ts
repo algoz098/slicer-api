@@ -10,18 +10,6 @@ import type { Slicer3Mf, Slicer3MfData, Slicer3MfPatch, Slicer3MfQuery } from '.
 import { BadRequest } from '@feathersjs/errors'
 
 export type { Slicer3Mf, Slicer3MfData, Slicer3MfPatch, Slicer3MfQuery }
-
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const orca = require('../../../../../OrcaSlicerCli/bindings/node')
-let orcaInitialized = false
-const ensureOrcaInitialized = () => {
-  if (!orcaInitialized) {
-    const resourcesPath = process.env.ORCACLI_RESOURCES || path.resolve(__dirname, '../../../../../OrcaSlicer/resources')
-    orca.initialize({ resourcesPath, verbose: false })
-    orcaInitialized = true
-  }
-}
-
 export interface Slicer3MfServiceOptions {
   app: Application
 }
@@ -55,7 +43,9 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
       return Promise.all(data.map(current => this.create(current, params)))
     }
 
-    ensureOrcaInitialized()
+    const orca = await this.options.app.get('orca')
+    console.log(orca)
+
 
     const reqField = data.field ?? 'file'
     const anyParams: any = params ?? {}
@@ -71,6 +61,7 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
         fileObj = Array.isArray(first) ? first[0] : first
       }
     }
+    console.log(3)
 
     let inputPath: string | undefined = data.filePath
     let originalFilename: string | undefined
@@ -79,6 +70,7 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
       inputPath = fileObj.filepath || fileObj.path || fileObj.tempFilePath || inputPath
       originalFilename = fileObj.originalFilename || fileObj.name || fileObj.filename || originalFilename
     }
+    console.log(4)
 
     if (!inputPath) {
       throw new Error('Nenhum arquivo recebido. Envie um multipart field "file" ou informe "filePath".')
@@ -90,6 +82,7 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
 
     let output: string
     try {
+    console.log(5)
       const res = await orca.slice({
         input: inputPath,
         output: outPath,
@@ -100,7 +93,9 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
         options: (data as any).options
       })
       output = res.output
+    console.log(6)
     } catch (err: any) {
+    console.log(err)
       const msg = String(err?.message || err)
       const lower = msg.toLowerCase()
       if (lower.includes('unknown') || lower.includes('invalid') || lower.includes('unrecognized') || lower.includes('failed to set')) {

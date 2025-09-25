@@ -1,84 +1,52 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -e
+set -u
+(set -o pipefail) 2>/dev/null || true
 
-# Simple orchestrator for Docker builds in this repo.
-# Modes:
-#   full        -> Build everything (deps + OrcaSlicer + engine + node addon + final base layer)
-#   orcaslicer  -> Build ONLY the OrcaSlicer application using its upstream Dockerfile
-#   continue    -> Continue build reusing cached layers for deps/OrcaSlicer; rebuild engine/addon if needed
-#   addon-slim  -> Build minimal base with ONLY the addon prebuilds (.node + engine .so), no JS app/resources
-#
-# Usage examples:
-#   scripts/build.sh full
-#   scripts/build.sh orcaslicer
-#   scripts/build.sh continue
-#
-# Optional env vars:
-#   TAG_FULL            default: orca-addon:latest         (final image)
-#   TAG_ORCASLICER      default: orcaslicer-app:latest     (OrcaSlicer-only image)
-#   DOCKER_BUILD_FLAGS  extra flags to forward to `docker build` (e.g., --progress=plain)
-#   PLATFORM            target platform for buildx (e.g., linux/amd64). If set, uses buildx.
-#
-# Notes:
-# - The root Dockerfile already limits native parallelism to reduce memory.
-# - "continue" relies on Docker layer cache: if OrcaSlicer sources não mudarem, as etapas
-#   dos deps e do OrcaSlicer serão reaproveitadas; mudanças no OrcaSlicerCli forçam rebuild
-#   apenas do engine/addon.
+# Orchestrator for building the addon prebuilds (addon-slim) using prebuilt deps/core
+# Already-built images live in the registry; this script computes their tags locally
+# and passes them as Docker build-args. No parameters are accepted.
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-MODE="${1:-}"  # required
-TAG_FULL="${TAG_FULL:-orca-addon:latest}"
-TAG_ORCASLICER="${TAG_ORCASLICER:-orcaslicer-build-deps:3.0.1a}"
-TAG_ADDON_SLIM="${TAG_ADDON_SLIM:-orca-addon:addon-slim}"
-
+# Optional env overrides
 DOCKER_BUILD_FLAGS="${DOCKER_BUILD_FLAGS:-}"
 PLATFORM="${PLATFORM:-}"
+TAG_ADDON_BASE="${TAG_ADDON_BASE:-orca-addon:base}"
+TAG_ADDON_SLIM="${TAG_ADDON_SLIM:-orca-addon:addon-slim}"
+ORCASLICER_SUFFIX="${ORCASLICER_SUFFIX:-a}"
+REGISTRY="${REGISTRY:-ghcr.io}"
 
-usage() {
-  cat <<EOF
-Usage: scripts/build.sh <full|orcaslicer|continue|addon-slim>
+# Derive owner (lowercased) from git remote or env fallback
+OWNER_FROM_GIT="$(git config --get remote.origin.url 2>/dev/null | sed -E 's#.*[:/]([^/]+)/[^/]+(.git)?#\1#' || true)"
+OWNER_LOWER="$(echo "${OWNER_FROM_GIT:-${GITHUB_REPOSITORY_OWNER:-}}" | tr '[:upper:]' '[:lower:]')"
+if [[ -z "$OWNER_LOWER" ]]; then
+  echo "[ERRO] Não foi possível deduzir o owner (GitHub org/usuário). Configure GITHUB_REPOSITORY_OWNER ou git remote." >&2
+  exit 2
+fi
 
-Modes:
-  full        Build tudo com o Dockerfile raiz e gera a imagem final (${TAG_FULL}).
-  orcaslicer  Constrói somente as dependências de build do OrcaSlicer (stage 'orcaslicer') e tagueia como ${TAG_ORCASLICER} (padrão: orcaslicer-build-deps:3.0.1a).
-  continue    Continua o build usando cache do OrcaSlicer; recompila engine/addon conforme necessário.
-  addon-slim  Constrói a imagem mínima com apenas o addon pré-compilado (.node + liborcacli_engine.so) (${TAG_ADDON_SLIM}).
+# Derive version and arch using the same helper as CI/Makefile
+META_OUT="$(ORCASLICER_SUFFIX="$ORCASLICER_SUFFIX" bash scripts/ci/derive_meta.sh)"
+VERSION="$(echo "$META_OUT" | awk -F= '/^version=/{print $2}')"
+ARCH="$(echo "$META_OUT" | awk -F= '/^arch=/{print $2}')"
+if [[ -z "$VERSION" || -z "$ARCH" ]]; then
+  echo "[ERRO] Falha ao derivar VERSION/ARCH a partir de scripts/ci/derive_meta.sh" >&2
+  echo "$META_OUT" >&2
+  exit 3
+fi
 
-  TAG_ADDON_SLIM=${TAG_ADDON_SLIM}
+# Compose tag names exactly like CI
+declare -r DEPS_TAG="${REGISTRY}/${OWNER_LOWER}/orcaslicer-build-deps:${VERSION}-${ARCH}"
+declare -r CORE_TAG="${REGISTRY}/${OWNER_LOWER}/orcaslicer-core:${VERSION}-${ARCH}"
 
-Env:
-  TAG_FULL=${TAG_FULL}
-  TAG_ORCASLICER=${TAG_ORCASLICER}
-  DOCKER_BUILD_FLAGS='${DOCKER_BUILD_FLAGS}'
-  PLATFORM='${PLATFORM}'
-EOF
-}
+echo "[INFO] Using prebuilt images from registry:"
+echo "       DEPS = ${DEPS_TAG}"
+echo "       CORE = ${CORE_TAG}"
 
-require_mode() {
-  if [[ -z "$MODE" ]]; then
-    usage
-    exit 1
-  fi
-  case "$MODE" in
-    full|orcaslicer|continue|addon-slim) ;;
-    -h|--help|help) usage; exit 0 ;;
-    *) echo "[ERRO] Modo desconhecido: $MODE" >&2; usage; exit 1 ;;
-  esac
-}
-
-has_image() {
-  local image="$1"
-  if docker image inspect "$image" >/dev/null 2>&1; then
-    return 0
-  else
-    return 1
-  fi
-}
+echo "[INFO] Building ADDON BASE image (target 'base'): ${TAG_ADDON_BASE}"
 
 build_cmd() {
-  # Choose docker build or buildx depending on PLATFORM
   if [[ -n "$PLATFORM" ]]; then
     echo "docker buildx build --platform ${PLATFORM} --load ${DOCKER_BUILD_FLAGS}"
   else
@@ -86,59 +54,31 @@ build_cmd() {
   fi
 }
 
-build_full() {
-  echo "[INFO] Building FULL image: ${TAG_FULL}"
-  local cmd
-  cmd="$(build_cmd)"
-  # --cache-from ajuda o Docker a reaproveitar camadas de builds anteriores se existirem
-  if has_image "$TAG_FULL"; then
-    cmd+=" --cache-from ${TAG_FULL}"
-  fi
-  cmd+=" --target base -t ${TAG_FULL} ."
-  echo "+ $cmd"
-  eval "$cmd"
-}
+# Build base (contains resources + prebuilds) so dev can consume it directly
+cmd_base="$(build_cmd)"
+cmd_base+=" --target base"
+cmd_base+=" --build-arg ENFORCE_PREBUILT_BASE=true"
+cmd_base+=" --build-arg USE_PREBUILT_DEPS=true"
+cmd_base+=" --build-arg BASE_DEPS_IMAGE=${DEPS_TAG}"
+cmd_base+=" --build-arg BASE_CORE_IMAGE=${CORE_TAG}"
+cmd_base+=" -t ${TAG_ADDON_BASE} ."
 
-build_orcaslicer_only() {
-  echo "[INFO] Building ONLY OrcaSlicer app image (multi-stage target 'orcaslicer'): ${TAG_ORCASLICER}"
-  local cmd
-  cmd="$(build_cmd)"
-  cmd+=" --target orcaslicer -t ${TAG_ORCASLICER} ."
-  echo "+ $cmd"
-  eval "$cmd"
-}
+echo "+ $cmd_base"
+eval "$cmd_base"
 
-build_continue_addon() {
-  echo "[INFO] Continuing build (reuse cache for deps/OrcaSlicer), target: ${TAG_FULL}"
-  local cmd
-  cmd="$(build_cmd)"
-  # Reaproveita cache da imagem final anterior se existir.
-  if has_image "$TAG_FULL"; then
-    cmd+=" --cache-from ${TAG_FULL}"
-  fi
-  cmd+=" --target base -t ${TAG_FULL} ."
-  echo "+ $cmd"
-  eval "$cmd"
-}
+# Build addon-slim (just prebuilds) as well
 
-build_addon_slim() {
-  echo "[INFO] Building ADDON-SLIM image (minimal addon-only stage 'addon-slim'): ${TAG_ADDON_SLIM}"
-  local cmd
-  cmd="$(build_cmd)"
-  cmd+=" --target addon-slim -t ${TAG_ADDON_SLIM} ."
-  echo "+ $cmd"
-  eval "$cmd"
-}
+echo "[INFO] Building ADDON-SLIM image (minimal addon-only stage 'addon-slim'): ${TAG_ADDON_SLIM}"
 
-main() {
-  require_mode
-  case "$MODE" in
-    full)        build_full ;;
-    orcaslicer)  build_orcaslicer_only ;;
-    continue)    build_continue_addon ;;
-    addon-slim)  build_addon_slim ;;
-  esac
-}
+cmd="$(build_cmd)"
+cmd+=" --target addon-slim"
+cmd+=" --build-arg ENFORCE_PREBUILT_BASE=true"
+cmd+=" --build-arg USE_PREBUILT_DEPS=true"
+cmd+=" --build-arg BASE_DEPS_IMAGE=${DEPS_TAG}"
+cmd+=" --build-arg BASE_CORE_IMAGE=${CORE_TAG}"
+cmd+=" -t ${TAG_ADDON_SLIM} ."
 
-main "$@"
+echo "+ $cmd"
+eval "$cmd"
+
 

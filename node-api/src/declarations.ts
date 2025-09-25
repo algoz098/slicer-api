@@ -6,8 +6,10 @@ import { ApplicationConfiguration } from './configuration'
 export type { NextFunction }
 
 // The types for app.get(name) and app.set(name)
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
-export interface Configuration extends ApplicationConfiguration {}
+// Extend with custom runtime values you set via app.set(...)
+export interface Configuration extends ApplicationConfiguration {
+  orca: any
+}
 
 // A mapping of service names to types. Will be extended in service files.
 // eslint-disable-next-line @typescript-eslint/no-empty-interface

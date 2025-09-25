@@ -27,10 +27,15 @@ npm run -s slice:resources:quiet
 
 Tipos completos em `types/index.d.ts`.
 
-- initialize(opts?): `opts = { resourcesPath?: string, verbose?: boolean }`
+- initialize(opts?): `opts = { resourcesPath?: string, verbose?: boolean, vendors?: string[] }`
+  - Por padrão, nenhum vendor é carregado. Você pode iniciar "limpo" (genérico) e usar overrides a cada slice, ou carregar vendors/perfis sob demanda pelos métodos abaixo.
 - version(): `string`
 - getModelInfo(file: string): `Promise<ModelInfo>`
 - slice(params: SliceParams): `Promise<{ output: string }>`
+- loadVendor(vendorId: string): `void` — carrega presets de um vendor (ex: `"BBL"`, `"Flashforge"`).
+- loadPrinterProfile(name: string): `void`
+- loadFilamentProfile(name: string): `void`
+- loadProcessProfile(name: string): `void`
 
 Estrutura de `SliceParams` (resumo):
 
@@ -41,23 +46,52 @@ Estrutura de `SliceParams` (resumo):
 - `custom?: Record<string,string>` — overrides de chaves de preset
 - `verbose?: boolean`, `dryRun?: boolean`
 
-### Exemplo mínimo
+### Exemplo mínimo (init genérico, overrides por slice)
 
 ```js
 const orca = require('@orcaslicer/cli');
 // Se os resources do OrcaSlicer estiverem fora do padrão, informe:
 // orca.initialize({ resourcesPath: '/caminho/para/OrcaSlicer/resources' });
-orca.initialize();
+orca.initialize(); // nenhum vendor/perfil é carregado automaticamente
 
 (async () => {
   const info = await orca.getModelInfo('example_files/3DBenchy.stl');
   console.log(info);
   const { output } = await orca.slice({
     input: 'example_files/3DBenchy.stl',
-    output: 'output_files/Benchy.gcode'
+    output: 'output_files/Benchy.gcode',
+    // Usar overrides em vez de perfis fixos
+    options: { layer_height: 0.2, nozzle_diameter: 0.4 }
   });
   console.log('G-code em:', output);
 })();
+```
+
+### Carregar perfis sob demanda
+
+```js
+const orca = require('@orcaslicer/cli');
+orca.initialize({ resourcesPath: '/abs/path/OrcaSlicer/resources' });
+
+// Carrega somente o que você precisa
+orca.loadVendor('Flashforge');
+orca.loadPrinterProfile('Flashforge Adventurer 5M');
+orca.loadFilamentProfile('Flashforge PETG Transparent @FF AD5X');
+orca.loadProcessProfile('0.20mm Standard @FF AD5X');
+
+const { output } = await orca.slice({
+  input: 'benchy.stl',
+  output: 'benchy.gcode',
+  printerProfile: 'Flashforge Adventurer 5M',
+  filamentProfile: 'Flashforge PETG Transparent @FF AD5X',
+  processProfile: '0.20mm Standard @FF AD5X'
+});
+```
+
+### Inicializar já pedindo alguns vendors (opcional)
+
+```js
+orca.initialize({ resourcesPath: '/abs/path/OrcaSlicer/resources', vendors: ['BBL'] });
 ```
 
 ## Resources do OrcaSlicer

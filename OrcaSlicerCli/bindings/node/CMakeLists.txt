@@ -12,8 +12,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # This subdirectory is added only when ORCACLI_BUILD_NODE_ADDON=ON
 # Assumes the parent CMake project has already defined target `orcacli_core`.
 
+# Allow skipping the core build when only the Node addon is desired (dlopen engine at runtime)
+option(ORCACLI_SKIP_CORE_BUILD "Skip building orcacli core; addon dlopens engine at runtime" OFF)
+
 # Try to reuse existing core target; if missing, include it directly from parent
-if(NOT TARGET orcacli_core)
+if(NOT TARGET orcacli_core AND NOT ORCACLI_SKIP_CORE_BUILD)
     # Assume this CMake is invoked from bindings/node; include ../../src to define orcacli_core
     get_filename_component(ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
     get_filename_component(REPO_ROOT "${ROOT_DIR}/.." ABSOLUTE)

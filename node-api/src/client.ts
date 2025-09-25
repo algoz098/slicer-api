@@ -4,6 +4,14 @@ import type { TransportConnection, Application } from '@feathersjs/feathers'
 import authenticationClient from '@feathersjs/authentication-client'
 import type { AuthenticationClientOptions } from '@feathersjs/authentication-client'
 
+import { profileConverterClient } from './services/profile-converter/profile-converter.shared'
+export type {
+  ProfileConverter,
+  ProfileConverterData,
+  ProfileConverterQuery,
+  ProfileConverterPatch
+} from './services/profile-converter/profile-converter.shared'
+
 import { slicer3MfClient } from './services/slicer/3mf/3mf.shared'
 export type {
   Slicer3Mf,
@@ -48,5 +56,6 @@ export const createClient = <Configuration = any,>(
 
   client.configure(slicerStlClient)
   client.configure(slicer3MfClient)
+  client.configure(profileConverterClient)
   return client
 }

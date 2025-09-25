@@ -1,6 +1,12 @@
 export interface InitializeOptions {
   resourcesPath?: string;
   verbose?: boolean;
+  // Optional: list of vendors to preload lazily during initialize (default: none)
+  vendors?: string[];
+  // Optional: explicit profiles to load during initialize (only these will be loaded by the addon)
+  printerProfiles?: string[];
+  filamentProfiles?: string[];
+  processProfiles?: string[];
 }
 
 export interface ModelInfo {
@@ -31,3 +37,9 @@ export function initialize(opts?: InitializeOptions): void;
 export function version(): string;
 export function getModelInfo(file: string): Promise<ModelInfo>;
 export function slice(params: SliceParams): Promise<{ output: string }>;
+
+// Lazy loading controls (synchronous)
+export function loadVendor(vendorId: string): void;
+export function loadPrinterProfile(name: string): void;
+export function loadFilamentProfile(name: string): void;
+export function loadProcessProfile(name: string): void;

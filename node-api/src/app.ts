@@ -4,11 +4,11 @@ import configuration from '@feathersjs/configuration'
 import { koa, rest, errorHandler, parseAuthentication, cors, serveStatic } from '@feathersjs/koa'
 import koaBody from 'koa-body'
 
-
 import { configurationValidator } from './configuration'
 import type { Application } from './declarations'
 import { logError } from './hooks/log-error'
 import { services } from './services/index'
+import loadOrca from './orca'
 
 const app: Application = koa(feathers())
 
@@ -27,10 +27,15 @@ app.use(async (ctx, next) => {
   await next()
 })
 
-app.use(serveStatic(app.get('public')))
+// app.use(serveStatic(app.get('public')))
+
+
 app.use(errorHandler())
 app.use(parseAuthentication())
+// Eagerly load the Orca addon at API startup and log the configuration
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 
+loadOrca(app)
 
 // Configure services and transports
 app.configure(rest())

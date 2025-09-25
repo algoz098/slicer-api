@@ -21,7 +21,9 @@ ARG BASE_DEPS_IMAGE
 ARG USE_PREBUILT_DEPS=false
 ARG ENFORCE_PREBUILT_BASE=true
 
-FROM ${BASE_DEPS_IMAGE:-node:${NODE_VERSION}-bookworm} AS deps
+ARG BASE_CORE_IMAGE
+
+FROM ${BASE_DEPS_IMAGE} AS deps
 ARG ENFORCE_PREBUILT_BASE
 ARG BASE_DEPS_IMAGE
 RUN bash -lc 'if [ "${ENFORCE_PREBUILT_BASE}" = "true" ] && [ -z "${BASE_DEPS_IMAGE}" ]; then echo "ERROR: BASE_DEPS_IMAGE is required. This build is configured to not compile OrcaSlicer deps inside Docker. Provide --build-arg BASE_DEPS_IMAGE=<image-with-deps> (built elsewhere) or set ENFORCE_PREBUILT_BASE=false to allow building deps here."; exit 10; fi'
@@ -106,7 +108,7 @@ RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache bash -lc 'JOBS=
 
 
 ARG BASE_CORE_IMAGE
-FROM ${BASE_CORE_IMAGE:-core} AS builder
+FROM ${BASE_CORE_IMAGE} AS builder
 ARG CI_MAX_JOBS
 
 WORKDIR /opt/orca

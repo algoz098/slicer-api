@@ -1,0 +1,40 @@
+services:
+  node-api:
+    # Build local addon+engine from source (custom dev Dockerfile) to pick up our changes
+    build:
+      context: .
+      dockerfile: Dockerfile.node-api.dev
+      args:
+        BASE_CORE_IMAGE: ${CORE_TAG:-ghcr.io/algoz098/orcaslicer-core:2.3.1b-amd64}
+        ADDON_BASE: ${ADDON_BASE_TAG:-ghcr.io/algoz098/orca-addon-base:2.3.1b-amd64}
+        CI_MAX_JOBS: ${CI_MAX_JOBS:-4}
+
+    container_name: node-api-dev
+    working_dir: /workspace/node-api
+    environment:
+      - NODE_ENV=development
+      - ORCACLI_RESOURCES=/opt/orca/OrcaSlicer/resources
+      - ORCACLI_ADDON_DIR=/opt/orca/OrcaSlicerCli/bindings/node
+      - ORCACLI_ENGINE_PATH=/opt/orca/OrcaSlicerCli/bindings/node/liborcacli_engine.so
+      - CHOKIDAR_USEPOLLING=1
+      - TS_NODE_TRANSPILE_ONLY=1
+      - ORCACLI_STRICT_DEV=0
+      # Encourage engine to seed and mark vendor visible to avoid init crash in dev
+      - ORCACLI_SEED_ALL=1
+      - ORCACLI_VENDORS=BBL
+      - ORCACLI_EAGER_LOAD_PRESETS=1
+
+    ports:
+      - "3030:3030"
+    volumes:
+      - ./:/workspace
+      - node-api-node_modules:/workspace/node-api/node_modules
+
+    # Start dev server with hot reload
+    command:
+      - /bin/bash
+      - -lc
+      - /workspace/scripts/dev/run-node-api-dev.sh
+
+volumes:
+  node-api-node_modules:
