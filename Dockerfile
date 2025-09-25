@@ -16,12 +16,12 @@
 
 ARG NODE_VERSION=24
 # When provided, use the prebuilt build-deps image as base to speed up builds
-ARG BASE_DEPS_IMAGE
+ARG BASE_DEPS_IMAGE=debian:bookworm-slim
 # Hint to skip rebuilding deps/toolchain if using the prebuilt base
 ARG USE_PREBUILT_DEPS=false
 ARG ENFORCE_PREBUILT_BASE=true
 
-ARG BASE_CORE_IMAGE
+ARG BASE_CORE_IMAGE=debian:bookworm-slim
 
 FROM ${BASE_DEPS_IMAGE} AS deps
 ARG ENFORCE_PREBUILT_BASE
