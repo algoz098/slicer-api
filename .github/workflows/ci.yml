@@ -94,6 +94,7 @@ jobs:
           build-args: |
             ENFORCE_PREBUILT_BASE=false
             BASE_DEPS_IMAGE=debian:bookworm-slim
+            CI_MAX_JOBS=2
           push: true
           tags: |
             ${{ env.DEPS_TAG }}
@@ -110,6 +111,7 @@ jobs:
             ENFORCE_PREBUILT_BASE=true
             BASE_DEPS_IMAGE=${{ env.DEPS_TAG }}
             USE_PREBUILT_DEPS=true
+            CI_MAX_JOBS=2
           push: true
           tags: |
             ${{ env.CORE_TAG }}
@@ -127,6 +129,7 @@ jobs:
             USE_PREBUILT_DEPS=true
             BASE_DEPS_IMAGE=${{ env.DEPS_TAG }}
             BASE_CORE_IMAGE=${{ env.CORE_TAG }}
+            CI_MAX_JOBS=2
           push: true
           tags: |
             ${{ env.ADDON_BASE_TAG }}
