@@ -93,6 +93,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           build-args: |
             ENFORCE_PREBUILT_BASE=false
+            BASE_DEPS_IMAGE=debian:bookworm-slim
           push: true
           tags: |
             ${{ env.DEPS_TAG }}
