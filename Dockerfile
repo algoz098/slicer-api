@@ -40,6 +40,8 @@ RUN if [ "${USE_PREBUILT_DEPS}" = "true" ]; then \
     else \
       apt-get update && apt-get install -y --no-install-recommends \
         autoconf \
+        automake \
+        m4 \
         build-essential \
         ccache \
         cmake \
