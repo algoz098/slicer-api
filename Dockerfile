@@ -29,6 +29,8 @@ ARG BASE_DEPS_IMAGE
 RUN bash -lc 'if [ "${ENFORCE_PREBUILT_BASE}" = "true" ] && [ -z "${BASE_DEPS_IMAGE}" ]; then echo "ERROR: BASE_DEPS_IMAGE is required. This build is configured to not compile OrcaSlicer deps inside Docker. Provide --build-arg BASE_DEPS_IMAGE=<image-with-deps> (built elsewhere) or set ENFORCE_PREBUILT_BASE=false to allow building deps here."; exit 10; fi'
 
 ARG CI_MAX_JOBS
+ARG CMAKE_OLEVEL=2
+ARG LD_NO_KEEP_MEMORY=false
 
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -93,7 +95,7 @@ RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache ccache -M 10G
 
 # Build third-party dependencies used by OrcaSlicer (downloads and compiles into OrcaSlicer/deps/build)
 # If using prebuilt deps base image, skip rebuilding here to save time
-RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache --mount=type=cache,id=orcadeps-dlcache-amd64,target=/opt/orca/OrcaSlicer/deps/DL_CACHE bash -lc "set -e; if [ \"\$USE_PREBUILT_DEPS\" = \"true\" ]; then exit 0; fi; JOBS=\"\${CI_MAX_JOBS:-\$(nproc)}\"; cd OrcaSlicer/deps; cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE=ON -DDEP_WX_GTK3=ON -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache; cmake --build build --target deps --config Release --parallel \"\$JOBS\" -- -v"
+RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache --mount=type=cache,id=orcadeps-dlcache-amd64,target=/opt/orca/OrcaSlicer/deps/DL_CACHE --mount=type=cache,id=tmp-orca-amd64,target=/opt/tmp bash -lc "set -e; export TMPDIR=/opt/tmp; if [ \"\$USE_PREBUILT_DEPS\" = \"true\" ]; then exit 0; fi; JOBS=\"\${CI_MAX_JOBS:-\$(nproc)}\"; OLV=\"\${CMAKE_OLEVEL:-2}\"; LDFLAGS=\"\"; if [ \"\${LD_NO_KEEP_MEMORY:-false}\" = \"true\" ]; then LDFLAGS=\"-Wl,--no-keep-memory\"; fi; cd OrcaSlicer/deps; cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE=ON -DDEP_WX_GTK3=ON -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_FLAGS_RELEASE=\"-O\${OLV} -g0 -fno-lto\" -DCMAKE_CXX_FLAGS_RELEASE=\"-O\${OLV} -g0 -fno-lto\" -DCMAKE_EXE_LINKER_FLAGS_RELEASE=\"\${LDFLAGS}\" -DCMAKE_SHARED_LINKER_FLAGS_RELEASE=\"\${LDFLAGS}\" -DCMAKE_C_ARCHIVE_CREATE=\"<CMAKE_AR> qcT <TARGET> <OBJECTS>\" -DCMAKE_C_ARCHIVE_APPEND=\"<CMAKE_AR> qT <TARGET> <OBJECTS>\" -DCMAKE_C_ARCHIVE_FINISH=\"<CMAKE_RANLIB> <TARGET>\" -DCMAKE_CXX_ARCHIVE_CREATE=\"<CMAKE_AR> qcT <TARGET> <OBJECTS>\" -DCMAKE_CXX_ARCHIVE_APPEND=\"<CMAKE_AR> qT <TARGET> <OBJECTS>\" -DCMAKE_CXX_ARCHIVE_FINISH=\"<CMAKE_RANLIB> <TARGET>\"; cmake --build build --target deps --config Release --parallel \"\$JOBS\" -- -v"
 # Core layer: build OrcaSlicer (libs) on top of deps
 FROM deps AS core
 WORKDIR /opt/orca
@@ -103,7 +105,7 @@ ARG ENFORCE_PREBUILT_BASE
 ARG BASE_CORE_IMAGE
 RUN bash -lc 'if [ "${ENFORCE_PREBUILT_BASE}" = "true" ] && [ -z "${BASE_CORE_IMAGE}" ]; then echo "ERROR: BASE_CORE_IMAGE is required. This build is configured to not compile OrcaSlicer core inside Docker. Provide --build-arg BASE_CORE_IMAGE=<image-with-core> (built elsewhere) or set ENFORCE_PREBUILT_BASE=false to allow building core here."; exit 11; fi'
 
-RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache bash -lc 'JOBS=${CI_MAX_JOBS:-$(nproc)}; cmake -S OrcaSlicer -B OrcaSlicer/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSLIC3R_STATIC=ON -DSLIC3R_GTK=3 -DCMAKE_PREFIX_PATH=/opt/orca/OrcaSlicer/deps/build/destdir/usr/local -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && cmake --build OrcaSlicer/build --config Release --parallel "$JOBS"'
+RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache --mount=type=cache,id=tmp-orca-amd64,target=/opt/tmp bash -lc 'export TMPDIR=/opt/tmp; JOBS=${CI_MAX_JOBS:-$(nproc)}; cmake -S OrcaSlicer -B OrcaSlicer/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSLIC3R_STATIC=ON -DSLIC3R_GTK=3 -DCMAKE_PREFIX_PATH=/opt/orca/OrcaSlicer/deps/build/destdir/usr/local -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && cmake --build OrcaSlicer/build --config Release --parallel "$JOBS"'
 
 
 
@@ -112,12 +114,20 @@ RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache bash -lc 'JOBS=
 ARG BASE_CORE_IMAGE
 FROM ${BASE_CORE_IMAGE} AS builder
 ARG CI_MAX_JOBS
+# Ensure Node.js and npm are available to build the addon
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    nodejs \
+    npm \
+  && rm -rf /var/lib/apt/lists/*
+
 
 WORKDIR /opt/orca
 COPY OrcaSlicerCli ./OrcaSlicerCli
 
 # Build the shared engine library (orcacli_engine) which the Node addon dlopens
-RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache bash -lc 'JOBS=${CI_MAX_JOBS:-$(nproc)}; cmake -S OrcaSlicerCli -B OrcaSlicerCli/build -G Ninja -DORCACLI_REQUIRE_LIBS=ON && cmake --build OrcaSlicerCli/build --config Release --target orcacli_engine --parallel "$JOBS"'
+RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache --mount=type=cache,id=tmp-orca-amd64,target=/opt/tmp bash -lc 'export TMPDIR=/opt/tmp; JOBS=${CI_MAX_JOBS:-$(nproc)}; cmake -S OrcaSlicerCli -B OrcaSlicerCli/build -G Ninja -DORCACLI_REQUIRE_LIBS=ON && cmake --build OrcaSlicerCli/build --config Release --target orcacli_engine --parallel "$JOBS"'
 
 # Build the Node addon using cmake-js and stage prebuild artifacts
 WORKDIR /opt/orca/OrcaSlicerCli/bindings/node

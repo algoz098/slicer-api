@@ -1855,7 +1855,9 @@ CliCore::OperationResult CliCore::slice(const SlicingParams& params) {
         auto it_bed = params.custom_settings.find("curr_bed_type");
         if (it_bed != params.custom_settings.end()) {
             auto r = setConfigOption(it_bed->first, it_bed->second);
-            if (!r.success) return OperationResult(false, "Failed to set config option: " + it_bed->first, r.error_details);
+            if (!r.success) {
+                std::cout << "DEBUG: Ignoring invalid override key/value: " << it_bed->first << " (" << r.error_details << ")" << std::endl;
+            }
         }
         // 2) Apply the rest, resolving known aliases.
         for (const auto &kv : params.custom_settings) {
@@ -1873,10 +1875,13 @@ CliCore::OperationResult CliCore::slice(const SlicingParams& params) {
                 Slic3r::BedType bed_type = static_cast<Slic3r::BedType>(bed_type_int);
                 std::string actual_key = bed_temp_key_for(bed_type, key == "first_layer_bed_temperature");
                 if (actual_key.empty()) {
-                    return OperationResult(false, std::string("Unable to map alias '") + key + "' for current bed type");
+                    std::cout << "DEBUG: Ignoring alias override '" << key << "' for current bed type (no mapping available)" << std::endl;
+                    continue;
                 }
                 auto rr = setConfigOption(actual_key, val);
-                if (!rr.success) return OperationResult(false, "Failed to set config option: " + actual_key, rr.error_details);
+                if (!rr.success) {
+                    std::cout << "DEBUG: Ignoring invalid alias override: " << actual_key << " (" << rr.error_details << ")" << std::endl;
+                }
                 continue;
             }
         #endif
@@ -1918,7 +1923,7 @@ CliCore::OperationResult CliCore::slice(const SlicingParams& params) {
         #endif
             auto result = setConfigOption(mapped_key, mapped_val);
             if (!result.success) {
-                return OperationResult(false, "Failed to set config option: " + mapped_key, result.error_details);
+                std::cout << "DEBUG: Ignoring invalid override key/value: " << mapped_key << " (" << result.error_details << ")" << std::endl;
             }
         }
     }

@@ -5,8 +5,8 @@ services:
       context: .
       dockerfile: Dockerfile.node-api.dev
       args:
-        BASE_CORE_IMAGE: ${CORE_TAG:-ghcr.io/algoz098/orcaslicer-core:2.3.1b-amd64}
-        ADDON_BASE: ${ADDON_BASE_TAG:-ghcr.io/algoz098/orca-addon-base:2.3.1b-amd64}
+        BASE_CORE_IMAGE: ${CORE_TAG:-ghcr.io/algoz098/orcaslicer-core:2.3.1b-arm64}
+        ADDON_BASE: ${ADDON_BASE_TAG:-ghcr.io/algoz098/orcaslicer-addon-base:2.3.1b-arm64}
         CI_MAX_JOBS: ${CI_MAX_JOBS:-4}
 
     container_name: node-api-dev

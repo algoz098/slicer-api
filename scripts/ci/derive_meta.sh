@@ -9,15 +9,23 @@ if [[ -z "$base_version" ]]; then
 fi
 version="${base_version}${suffix}"
 
+# Detect local architecture and normalize
+uname_arch=$(uname -m || echo "unknown")
+case "$uname_arch" in
+  arm64|aarch64) arch="arm64" ;;
+  x86_64|amd64)  arch="amd64" ;;
+  *)             arch="amd64" ;;
+esac
+
 # Print for local runs
 echo "version=$version"
-echo "arch=amd64"
+echo "arch=$arch"
 
 # Export for GitHub Actions outputs
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
   {
     echo "version=$version"
-    echo "arch=amd64"
+    echo "arch=$arch"
   } >> "$GITHUB_OUTPUT"
 fi
 
