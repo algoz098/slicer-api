@@ -474,6 +474,7 @@ struct SliceWork {
   std::vector<std::pair<std::string,std::string>> opts;
   std::vector<orcacli_kv> kvs;
   std::string err;
+  std::string msg; // JSON from engine with used/ignored keys (on success)
 };
 
 static void SliceExecute(napi_env env, void* data) {
@@ -506,7 +507,12 @@ static void SliceExecute(napi_env env, void* data) {
   if (w->p.verbose) { fprintf(stderr, "DEBUG: [addon] calling g_ffi.slice input='%s' plate=%d overrides=%d\n", p.input_file ? p.input_file : "(null)", p.plate_index, p.overrides_count); fflush(stderr); }
   auto r = g_ffi.slice(g_ffi.inst, &p);
   if (w->p.verbose) { fprintf(stderr, "DEBUG: [addon] returned from g_ffi.slice (success=%d)\n", (int)r.success); fflush(stderr); }
-  if (!r.success) w->err = r.message ? r.message : "slice failed";
+  if (!r.success) {
+    w->err = r.message ? r.message : "slice failed";
+  } else if (r.message) {
+    // capture JSON payload from engine (used/ignored overrides)
+    try { w->msg = r.message; } catch (...) {}
+  }
   if (g_ffi.free_result) g_ffi.free_result(&r);
 }
 
@@ -514,7 +520,51 @@ static void SliceComplete(napi_env env, napi_status status, void* data) {
   SliceWork* w = static_cast<SliceWork*>(data);
   if (status != napi_ok) { napi_value e; napi_create_string_utf8(env, "Async failure", NAPI_AUTO_LENGTH, &e); napi_reject_deferred(env, w->deferred, e); }
   else if (!w->err.empty()) { napi_value e; napi_create_string_utf8(env, w->err.c_str(), NAPI_AUTO_LENGTH, &e); napi_reject_deferred(env, w->deferred, e); }
-  else { napi_value obj, v; napi_create_object(env, &obj); napi_create_string_utf8(env, w->p.output_file.c_str(), NAPI_AUTO_LENGTH, &v); napi_set_named_property(env, obj, "output", v); napi_resolve_deferred(env, w->deferred, obj);}
+  else {
+    napi_value obj, v;
+    napi_create_object(env, &obj);
+    // Always include output path (echoed from params)
+    napi_create_string_utf8(env, w->p.output_file.c_str(), NAPI_AUTO_LENGTH, &v);
+    napi_set_named_property(env, obj, "output", v);
+
+    // If the engine returned a JSON payload in message, parse and surface arrays
+    if (!w->msg.empty()) {
+      napi_value global;
+      if (napi_get_global(env, &global) == napi_ok) {
+        napi_value JSON_obj; bool ok1 = (napi_get_named_property(env, global, "JSON", &JSON_obj) == napi_ok);
+        napi_value parse_fn; bool ok2 = ok1 && (napi_get_named_property(env, JSON_obj, "parse", &parse_fn) == napi_ok);
+        napi_valuetype tparse; bool ok3 = ok2 && (napi_typeof(env, parse_fn, &tparse) == napi_ok) && (tparse == napi_function);
+        if (ok3) {
+          napi_value arg;
+          if (napi_create_string_utf8(env, w->msg.c_str(), NAPI_AUTO_LENGTH, &arg) == napi_ok) {
+            napi_value parsed;
+            if (napi_call_function(env, JSON_obj, parse_fn, 1, &arg, &parsed) == napi_ok) {
+              // used -> usedOptions
+              bool has=false; napi_value arr;
+              if (napi_has_named_property(env, parsed, "used", &has) == napi_ok && has) {
+                if (napi_get_named_property(env, parsed, "used", &arr) == napi_ok) {
+                  bool isArr=false; if (napi_is_array(env, arr, &isArr) == napi_ok && isArr) {
+                    napi_set_named_property(env, obj, "usedOptions", arr);
+                  }
+                }
+              }
+              // ignored -> ignoredOptions
+              has=false;
+              if (napi_has_named_property(env, parsed, "ignored", &has) == napi_ok && has) {
+                if (napi_get_named_property(env, parsed, "ignored", &arr) == napi_ok) {
+                  bool isArr=false; if (napi_is_array(env, arr, &isArr) == napi_ok && isArr) {
+                    napi_set_named_property(env, obj, "ignoredOptions", arr);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    napi_resolve_deferred(env, w->deferred, obj);
+  }
   napi_delete_async_work(env, w->work); delete w;
 }
 

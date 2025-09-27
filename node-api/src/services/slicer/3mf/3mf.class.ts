@@ -44,7 +44,6 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
     }
 
     const orca = await this.options.app.get('orca')
-    console.log(orca)
 
 
     const reqField = data.field ?? 'file'
@@ -61,7 +60,6 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
         fileObj = Array.isArray(first) ? first[0] : first
       }
     }
-    console.log(3)
 
     let inputPath: string | undefined = data.filePath
     let originalFilename: string | undefined
@@ -70,7 +68,6 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
       inputPath = fileObj.filepath || fileObj.path || fileObj.tempFilePath || inputPath
       originalFilename = fileObj.originalFilename || fileObj.name || fileObj.filename || originalFilename
     }
-    console.log(4)
 
     if (!inputPath) {
       throw new Error('Nenhum arquivo recebido. Envie um multipart field "file" ou informe "filePath".')
@@ -81,8 +78,9 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
     const outPath = data.output ?? defaultOut
 
     let output: string
+    let usedOptions: string[] | undefined
+    let ignoredOptions: string[] | undefined
     try {
-    console.log(5)
       const res = await orca.slice({
         input: inputPath,
         output: outPath,
@@ -93,7 +91,8 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
         options: (data as any).options
       })
       output = res.output
-    console.log(6)
+      usedOptions = (res as any)?.usedOptions
+      ignoredOptions = (res as any)?.ignoredOptions
     } catch (err: any) {
     console.log(err)
       const msg = String(err?.message || err)
@@ -118,7 +117,9 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
       outputPath: output,
       contentType: 'model/3mf',
       size: content.length,
-      dataBase64
+      dataBase64,
+      usedOptions,
+      ignoredOptions
     }
   }
 

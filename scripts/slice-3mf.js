@@ -14,8 +14,11 @@ const path = require('node:path');
 // ===== Configuração através de variáveis globais (sem parâmetros de linha de comando) =====
 const FILE = './example_files/3DBenchy.3mf';   // Caminho do arquivo 3MF de entrada
 const URL = 'http://localhost:3030/slicer/3mf'; // Endpoint da API
-const OUT_BASE = 'output';                      // Base do nome de saída (sem extensão)
+const OUT_BASE = './output_files/slice3mf_output';                      // Base do nome de saída (sem extensão)
 const ONLY_BASE64 = false;                      // true para salvar apenas o .b64, false para salvar também o .3mf
+
+// k1json
+const k1json = require('../example_files/k1_max.overrides.json');
 
 // Hardcoded options overrides to be sent as the 'options' form field
 const OPTIONS = {
@@ -57,7 +60,7 @@ const OPTIONS = {
   "inherits": "Generic PLA @System",
   "is_custom_defined": 0,
   "layer_change_gcode": "",
-  // "long_retractions_when_cut": 0,
+  "long_retractions_when_cut": 0,
   "machine_end_gcode": "END_PRINT",
   "machine_load_filament_time": 0,
   "machine_max_acceleration_e": 5000,
@@ -168,7 +171,7 @@ async function main() {
   form.append('file', blob, path.basename(abs));
 
   // Append hardcoded options
-  form.append('options', JSON.stringify(OPTIONS));
+  form.append('options', JSON.stringify({...OPTIONS, ...k1json}));
 
   const res = await fetch(URL, { method: 'POST', body: form });
   let bodyText = await res.text();
@@ -200,6 +203,17 @@ async function main() {
     const outPath = `${OUT_BASE}.3mf`;
     await fsp.writeFile(outPath, Buffer.from(String(json.dataBase64), 'base64'));
     console.log(`Saved decoded file to ${outPath}`);
+
+    // delete b64 file
+    await fsp.unlink(b64Path)
+
+    const outPathJson = `${OUT_BASE}.json`;
+    const json2 = json
+    delete json2.dataBase64
+    console.log(`---------`)
+    console.log(JSON.stringify(json2, null, 2))
+    console.log(`---------`)
+    await fsp.writeFile(outPathJson, JSON.stringify(json2, null, 2));
   }
 
   if (json.outputPath) {

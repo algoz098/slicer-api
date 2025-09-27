@@ -36,7 +36,7 @@ export interface SliceParams {
 export function initialize(opts?: InitializeOptions): void;
 export function version(): string;
 export function getModelInfo(file: string): Promise<ModelInfo>;
-export function slice(params: SliceParams): Promise<{ output: string }>;
+export function slice(params: SliceParams): Promise<{ output: string; usedOptions?: string[]; ignoredOptions?: string[] }>;
 
 // Lazy loading controls (synchronous)
 export function loadVendor(vendorId: string): void;

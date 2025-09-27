@@ -2,9 +2,9 @@
 set -euo pipefail
 
 image="${1:-}"
-core_image="${2:-}"
-if [[ -z "$image" || -z "$core_image" ]]; then
-  echo "Usage: $0 <image> <base_core_image>" >&2
+addon_core_image="${2:-}"
+if [[ -z "$image" || -z "$addon_core_image" ]]; then
+  echo "Usage: $0 <image> <base_addon_core_image>" >&2
   exit 2
 fi
 # Auto-detect platform if not provided via env PLATFORM
@@ -36,7 +36,7 @@ fi
 docker buildx build \
   --platform "$PLATFORM" \
   --target cli \
-  --build-arg BASE_CORE_IMAGE="$core_image" \
+  --build-arg BASE_ADDON_CORE_IMAGE="$addon_core_image" \
   -t "$image" \
   ${DOCKER_BUILD_ARGS:-} \
   ${CI_MAX_JOBS:+--build-arg CI_MAX_JOBS=${CI_MAX_JOBS}} \

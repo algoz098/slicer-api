@@ -1849,14 +1849,20 @@ CliCore::OperationResult CliCore::slice(const SlicingParams& params) {
     }
 
     // Apply custom settings (these override profile settings)
+    // Track which overrides were used vs ignored to report back to callers.
+    std::vector<std::string> __used_override_keys;
+    std::vector<std::string> __ignored_override_keys;
     // Handle bed temperature aliases correctly for current bed type.
     if (!params.custom_settings.empty()) {
         // 1) Apply curr_bed_type first if provided, so alias resolution uses the right type.
         auto it_bed = params.custom_settings.find("curr_bed_type");
         if (it_bed != params.custom_settings.end()) {
             auto r = setConfigOption(it_bed->first, it_bed->second);
-            if (!r.success) {
+            if (r.success) {
+                __used_override_keys.push_back("curr_bed_type");
+            } else {
                 std::cout << "DEBUG: Ignoring invalid override key/value: " << it_bed->first << " (" << r.error_details << ")" << std::endl;
+                __ignored_override_keys.push_back("curr_bed_type");
             }
         }
         // 2) Apply the rest, resolving known aliases.
@@ -1876,11 +1882,15 @@ CliCore::OperationResult CliCore::slice(const SlicingParams& params) {
                 std::string actual_key = bed_temp_key_for(bed_type, key == "first_layer_bed_temperature");
                 if (actual_key.empty()) {
                     std::cout << "DEBUG: Ignoring alias override '" << key << "' for current bed type (no mapping available)" << std::endl;
+                    __ignored_override_keys.push_back(key);
                     continue;
                 }
                 auto rr = setConfigOption(actual_key, val);
-                if (!rr.success) {
+                if (rr.success) {
+                    __used_override_keys.push_back(key);
+                } else {
                     std::cout << "DEBUG: Ignoring invalid alias override: " << actual_key << " (" << rr.error_details << ")" << std::endl;
+                    __ignored_override_keys.push_back(key);
                 }
                 continue;
             }
@@ -1918,12 +1928,16 @@ CliCore::OperationResult CliCore::slice(const SlicingParams& params) {
         #if HAVE_LIBSLIC3R
             if (m_impl->config && !m_impl->config->has(mapped_key)) {
                 std::cout << "DEBUG: Ignoring unknown override key: " << mapped_key << std::endl;
+                __ignored_override_keys.push_back(key);
                 continue;
             }
         #endif
             auto result = setConfigOption(mapped_key, mapped_val);
-            if (!result.success) {
+            if (result.success) {
+                __used_override_keys.push_back(key);
+            } else {
                 std::cout << "DEBUG: Ignoring invalid override key/value: " << mapped_key << " (" << result.error_details << ")" << std::endl;
+                __ignored_override_keys.push_back(key);
             }
         }
     }
@@ -1949,7 +1963,19 @@ CliCore::OperationResult CliCore::slice(const SlicingParams& params) {
 #endif
 
     if (m_impl->performSlicing(params.output_file)) {
-        return OperationResult(true, "Slicing completed successfully: " + params.output_file);
+        // Build compact JSON with which overrides were used vs ignored. Consumers (Node addon) may parse this.
+        std::string __json = "{\"used\":[";
+        for (size_t i = 0; i < __used_override_keys.size(); ++i) {
+            if (i) __json += ",";
+            __json += "\"" + __used_override_keys[i] + "\"";
+        }
+        __json += "],\"ignored\":[";
+        for (size_t i = 0; i < __ignored_override_keys.size(); ++i) {
+            if (i) __json += ",";
+            __json += "\"" + __ignored_override_keys[i] + "\"";
+        }
+        __json += "]}";
+        return OperationResult(true, __json);
     } else {
         return OperationResult(false, "Slicing failed", m_impl->last_error);
     }
