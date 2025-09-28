@@ -1,9 +1,8 @@
-.PHONY: help show-meta check-deps-exists check-core-exists check-cli-exists \
-	deps-build core-build cli-build addon-base-build addon-slim-build addon-build build-all \
-	deps-push core-push cli-push addon-base-push addon-slim-push addon-push push-all \
-	login-ghcr linux-build-inside-docker
-	deps-push-local core-push-local cli-push-local addon-base-push-local addon-slim-push-local addon-push-local push-all-local \
-
+.PHONY: help show-meta check-deps-exists check-core-exists \
+	deps-build core-build addon-base-build addon-slim-build addon-build build-all \
+	deps-push core-push addon-base-push addon-slim-push addon-push push-all \
+	login-ghcr linux-build-inside-docker \
+	deps-push-local core-push-local addon-base-push-local addon-slim-push-local addon-push-local push-all-local
 
 # ---- Configuracao ----
 # Pode sobrescrever via ambiente: make OWNER=me ORCASLICER_SUFFIX=b
@@ -34,7 +33,6 @@ endif
 
 DEPS_IMAGE := $(REGISTRY)/$(OWNER)/orcaslicer-build-deps:$(VERSION)-$(ARCH)
 CORE_IMAGE := $(REGISTRY)/$(OWNER)/orcaslicer-core:$(VERSION)-$(ARCH)
-CLI_IMAGE  := $(REGISTRY)/$(OWNER)/orcaslicer-cli:$(VERSION)-$(ARCH)
 ADDON_CORE_IMAGE := $(REGISTRY)/$(OWNER)/orcaslicer-addon-core:$(VERSION)-$(ARCH)
 
 ADDON_BASE_IMAGE := $(REGISTRY)/$(OWNER)/orcaslicer-addon-base:$(VERSION)-$(ARCH)
@@ -44,13 +42,13 @@ ADDON_SLIM_IMAGE := $(REGISTRY)/$(OWNER)/orcaslicer-addon-slim:$(VERSION)-$(ARCH
 help:
 	@echo "Targets principais:"
 	@echo "  show-meta                 - Mostra OWNER/VERSION/ARCH e nomes das imagens"
-	@echo "  deps-build|core-build|addon-core-build|cli-build - Build local (sem push)"
+	@echo "  deps-build|core-build|addon-core-build - Build local (sem push)"
 	@echo "  build-all                 - Build de todas as imagens (sem push)"
-	@echo "  deps-push-local|core-push-local|addon-core-push-local|cli-push-local - Push direto da imagem local (sem rebuild)"
+	@echo "  deps-push-local|core-push-local|addon-core-push-local - Push direto da imagem local (sem rebuild)"
 	@echo "  addon-base-push-local|addon-slim-push-local|addon-push-local - Push local do addon"
 	@echo "  push-all-local            - Push local de todas"
 
-	@echo "  deps-push|core-push|addon-core-push|cli-push   - Build+push (usa scripts do CI)"
+	@echo "  deps-push|core-push|addon-core-push   - Build+push (usa scripts do CI)"
 	@echo "  push-all                  - Build+push de todas"
 	@echo "  addon-base-build|addon-slim-build|addon-build - Build do addon (base e/ou slim)"
 	@echo "  addon-base-push|addon-slim-push|addon-push - Build+push do addon"
@@ -70,7 +68,6 @@ show-meta:
 	@echo "ADDON_SLIM_IMAGE=$(ADDON_SLIM_IMAGE)"
 
 	@echo "CORE_IMAGE=$(CORE_IMAGE)"
-	@echo "CLI_IMAGE=$(CLI_IMAGE)"
 
 # ---- Checks ----
 check-deps-exists:
@@ -79,8 +76,6 @@ check-deps-exists:
 check-core-exists:
 	bash scripts/ci/check_image_exists.sh "$(CORE_IMAGE)"
 
-check-cli-exists:
-	bash scripts/ci/check_image_exists.sh "$(CLI_IMAGE)"
 
 # ---- Build local (sem push) ----
 # Usa --load para carregar a imagem no Docker local
@@ -134,16 +129,8 @@ addon-slim-build:
 addon-build: addon-base-build addon-slim-build
 
 
-cli-build:
-	docker buildx build \
-		--platform $(PLATFORM) \
-		--target cli \
-		--build-arg BASE_ADDON_CORE_IMAGE="$(ADDON_CORE_IMAGE)" \
-		-t "$(CLI_IMAGE)" \
-		--load $(DOCKER_BUILD_ARGS) \
-		.
 
-build-all: deps-build core-build addon-core-build cli-build
+build-all: deps-build core-build addon-core-build
 
 # ---- Build + Push (mesmo comportamento do CI) ----
 # Reutiliza os scripts do CI, que ja incluem --push
@@ -153,9 +140,6 @@ deps-push:
 
 core-push:
 	bash scripts/ci/build_core_image.sh "$(CORE_IMAGE)" "$(DEPS_IMAGE)"
-
-cli-push:
-	bash scripts/ci/build_cli_image.sh "$(CLI_IMAGE)" "$(ADDON_CORE_IMAGE)"
 
 
 addon-base-push:
@@ -193,8 +177,6 @@ addon-core-push:
 core-push-local:
 	docker push "$(CORE_IMAGE)"
 
-cli-push-local:
-	docker push "$(CLI_IMAGE)"
 
 addon-core-push-local:
 	docker push "$(ADDON_CORE_IMAGE)"
@@ -207,12 +189,12 @@ addon-slim-push-local:
 
 addon-push-local: addon-base-push-local addon-slim-push-local
 
-push-all-local: deps-push-local core-push-local addon-core-push-local cli-push-local addon-push-local
+push-all-local: deps-push-local core-push-local addon-core-push-local addon-push-local
 
 
 addon-push: addon-base-push addon-slim-push
 
-push-all: deps-push core-push addon-core-push cli-push
+push-all: deps-push core-push addon-core-push
 
 # ---- Utilitarios ----
 login-ghcr:

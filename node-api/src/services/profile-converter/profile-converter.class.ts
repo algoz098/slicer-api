@@ -135,6 +135,37 @@ async function loadJsonFromZipBuffer(buf: Uint8Array, kind: 'printer' | 'filamen
   throw new BadRequest('ZIP parsing requires the jszip package in the runtime. Please ensure jszip is installed in the container (npm install jszip).')
 }
 
+// Try to resolve a filename against example_files folders so user can pass just a basename
+function resolveExamplePresetPath(kind: 'printer' | 'filament' | 'process', name: string): string | undefined {
+  try {
+    if (!name || typeof name !== 'string') return undefined
+    const baseDir = path.resolve(fssync.realpathSync('.'), 'example_files')
+
+    const candidates: string[] = []
+    const hasExt = !!path.extname(name)
+
+    if (kind === 'filament') {
+      const dir = path.join(baseDir, 'Filament presets')
+      candidates.push(path.join(dir, name))
+      if (!hasExt) candidates.push(path.join(dir, `${name}.json`))
+    } else if (kind === 'printer') {
+      const dir = path.join(baseDir, 'priter_profiles')
+      candidates.push(path.join(dir, name))
+      if (!hasExt) candidates.push(path.join(dir, `${name}.orca_printer`))
+    } else {
+      // process: no curated example folder for now
+      return undefined
+    }
+
+    for (const p of candidates) {
+      try {
+        if (fssync.existsSync(p)) return p
+      } catch {}
+    }
+  } catch {}
+  return undefined
+}
+
 async function loadPresetFromInputs(
   kind: 'printer' | 'filament' | 'process',
   raw: any,
@@ -173,17 +204,25 @@ async function loadPresetFromInputs(
 
   // 3) Raw string: path, JSON, or base64 ZIP
   if (typeof raw === 'string') {
-    if (isFilePath(raw) && fssync.existsSync(raw)) {
-      const ext = path.extname(raw).toLowerCase()
+    // Accept direct filesystem path, or try to resolve inside example_files folders by basename
+    let candidatePath = raw
+    if (isFilePath(raw) && !fssync.existsSync(raw)) {
+      const maybe = resolveExamplePresetPath(kind, path.basename(raw))
+      if (maybe) candidatePath = maybe
+    }
+
+    if (isFilePath(candidatePath) && fssync.existsSync(candidatePath)) {
+      const ext = path.extname(candidatePath).toLowerCase()
       if (ext === '.json') {
-        const content = await fs.readFile(raw, 'utf8')
+        const content = await fs.readFile(candidatePath, 'utf8')
         return JSON.parse(content)
       }
       if (ext === '.zip' || ext === '.orca' || ext === '.orca_profile' || ext === '.orca_printer' || ext === '.orca_filament') {
-        const buf = await fs.readFile(raw)
+        const buf = await fs.readFile(candidatePath)
         return loadJsonFromZipBuffer(buf, kind)
       }
     }
+
     // Try JSON text
     try {
       return JSON.parse(raw)
