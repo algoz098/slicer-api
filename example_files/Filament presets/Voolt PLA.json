@@ -1,0 +1,37 @@
+{
+    "filament_flow_ratio": [
+        "1.0084"
+    ],
+    "filament_settings_id": [
+        "Voolt PLA"
+    ],
+    "filament_vendor": [
+        "Voolt"
+    ],
+    "from": "User",
+    "hot_plate_temp": [
+        "75"
+    ],
+    "hot_plate_temp_initial_layer": [
+        "75"
+    ],
+    "inherits": "Generic PLA @System",
+    "is_custom_defined": "0",
+    "name": "Voolt PLA",
+    "nozzle_temperature": [
+        "210"
+    ],
+    "nozzle_temperature_initial_layer": [
+        "210"
+    ],
+    "pressure_advance": [
+        "0.06"
+    ],
+    "textured_plate_temp": [
+        "75"
+    ],
+    "textured_plate_temp_initial_layer": [
+        "75"
+    ],
+    "version": "2.3.0.0"
+}

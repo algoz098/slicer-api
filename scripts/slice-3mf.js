@@ -164,20 +164,41 @@ async function main() {
 
   console.log(`Posting file to ${URL} ...`);
 
-  // Use global FormData/Blob/fetch (Node 18+)
-  const buf = await fsp.readFile(abs);
-  const blob = new Blob([buf]);
-  const form = new FormData();
-  form.append('file', blob, path.basename(abs));
+  // Try JSON mode (filePath) so we can pass numeric plate
+  const outAbs = path.resolve(`${OUT_BASE}.3mf`);
+  const body = {
+    filePath: abs,
+    output: outAbs,
+    plate: 1,
+    options: { ...OPTIONS, ...k1json }
+  };
 
-  // Append hardcoded options
-  form.append('options', JSON.stringify({...OPTIONS, ...k1json}));
-
-  const res = await fetch(URL, { method: 'POST', body: form });
+  let res = await fetch(URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body)
+  });
   let bodyText = await res.text();
+
+  // Fallback to multipart if JSON mode fails (e.g., server can't read filePath)
   if (!res.ok) {
-    console.error(`Request failed. HTTP ${res.status}\nResponse: ${bodyText}`);
-    process.exit(1);
+    console.warn(`JSON mode failed (HTTP ${res.status}). Falling back to multipart upload ...`);
+
+    const buf = await fsp.readFile(abs);
+    const blob = new Blob([buf]);
+    const form = new FormData();
+    form.append('file', blob, path.basename(abs));
+    // Now that API coerces plate, send it as string in multipart
+    form.append('plate', '1');
+    form.append('options', JSON.stringify({ ...OPTIONS, ...k1json }));
+
+    res = await fetch(URL, { method: 'POST', body: form });
+    bodyText = await res.text();
+
+    if (!res.ok) {
+      console.error(`Request failed. HTTP ${res.status}\nResponse: ${bodyText}`);
+      process.exit(1);
+    }
   }
 
   let json;

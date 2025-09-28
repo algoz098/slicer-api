@@ -32,6 +32,8 @@
     "3d-printing",
     "n-api",
     "native-addon"
-  ]
+  ],
+  "dependencies": {
+    "yauzl": "^3.2.0"
+  }
 }
-

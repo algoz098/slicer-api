@@ -1,0 +1,16 @@
+{
+    "activate_air_filtration": [
+        "1"
+    ],
+    "compatible_printers": [
+        "K2 Plus"
+    ],
+    "filament_settings_id": [
+        "Generic PLA High Speed @System - Cópia"
+    ],
+    "from": "User",
+    "inherits": "Generic PLA High Speed @System",
+    "is_custom_defined": "0",
+    "name": "Generic PLA High Speed @System - Cópia",
+    "version": "2.3.0.3"
+}

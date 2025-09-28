@@ -49,6 +49,7 @@ export const slicer3Mf = (app: Application) => {
         (ctx: any) => {
           const { data } = ctx
 
+          // Coerce multipart 'options' (string) to object
           if (data.options) {
             if (typeof data.options === 'string') {
               try {
@@ -58,6 +59,12 @@ export const slicer3Mf = (app: Application) => {
               }
             }
             console.log(2, Object.keys(data.options))
+          }
+
+          // Coerce multipart 'plate' (string) to number
+          if (data.plate != null && typeof data.plate === 'string') {
+            const n = Number(data.plate)
+            if (Number.isFinite(n)) data.plate = n
           }
         },
         schemaHooks.validateData(slicer3MfDataValidator),

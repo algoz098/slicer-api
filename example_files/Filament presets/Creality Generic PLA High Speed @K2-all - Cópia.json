@@ -1,0 +1,13 @@
+{
+    "activate_air_filtration": [
+        "1"
+    ],
+    "filament_settings_id": [
+        "Creality Generic PLA High Speed @K2-all - Cópia"
+    ],
+    "from": "User",
+    "inherits": "Creality Generic PLA High Speed @K2-all",
+    "is_custom_defined": "0",
+    "name": "Creality Generic PLA High Speed @K2-all - Cópia",
+    "version": "2.3.0.3"
+}
