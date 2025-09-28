@@ -66,6 +66,8 @@ jobs:
       # --- DEPS ---
       - name: Check if DEPS image exists
         id: check_deps
+        env:
+          PLATFORM: ${{ matrix.platform }}
         run: bash scripts/ci/check_image_exists.sh "${{ env.DEPS_TAG }}"
         shell: bash
 
@@ -88,6 +90,8 @@ jobs:
       # --- CORE ---
       - name: Check if CORE image exists
         id: check_core
+        env:
+          PLATFORM: ${{ matrix.platform }}
         run: bash scripts/ci/check_image_exists.sh "${{ env.CORE_TAG }}"
         shell: bash
 
@@ -111,6 +115,8 @@ jobs:
       # --- CORE ADDON ---
       - name: Check if ADDON CORE image exists
         id: check_addon_core
+        env:
+          PLATFORM: ${{ matrix.platform }}
         run: bash scripts/ci/check_image_exists.sh "${{ env.ADDON_CORE_TAG }}"
         shell: bash
 
@@ -132,6 +138,8 @@ jobs:
       # --- ADDON BASE ---
       - name: Check if ADDON BASE image exists
         id: check_addon_base
+        env:
+          PLATFORM: ${{ matrix.platform }}
         run: bash scripts/ci/check_image_exists.sh "${{ env.ADDON_BASE_TAG }}"
         shell: bash
 
@@ -157,6 +165,8 @@ jobs:
       # --- SLICER API (consome ADDON BASE) ---
       - name: Check if SLICER API image exists
         id: check_slicer
+        env:
+          PLATFORM: ${{ matrix.platform }}
         run: bash scripts/ci/check_image_exists.sh "${{ env.SLICER_TAG }}"
         shell: bash
 
