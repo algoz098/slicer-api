@@ -9,6 +9,10 @@ import type { Application } from './declarations'
 import { logError } from './hooks/log-error'
 import { services } from './services/index'
 import loadOrca from './orca'
+import  {mediasPath} from './services/medias/medias.shared'
+
+import fs from 'node:fs'
+import * as path from 'node:path'
 
 const app: Application = koa(feathers())
 
@@ -24,10 +28,27 @@ app.use(async (ctx, next) => {
   if (ctx.request && (ctx.request as any).files) {
     (ctx.feathers as any).files = (ctx.request as any).files
   }
-  await next()
+  return next()
 })
 
-// app.use(serveStatic(app.get('public')))
+
+// add koa middleware for medias service
+app.use(async (ctx, next) => {
+  if (!ctx.path.includes(mediasPath) || ctx.method !== 'GET') {
+    return next()
+  }
+  await next()
+  const res = ctx.body.path
+
+  // res is a path for a file
+  ctx.set('Content-Type', 'application/octet-stream')
+  ctx.set('Content-Disposition', `attachment; filename=${path.basename(res)}`)
+
+  // stream the file back
+  ctx.body = fs.createReadStream(res)
+  ctx.status = 200
+  ctx.respond = true
+})
 
 
 app.use(errorHandler())

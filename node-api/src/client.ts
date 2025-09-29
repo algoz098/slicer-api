@@ -4,6 +4,9 @@ import type { TransportConnection, Application } from '@feathersjs/feathers'
 import authenticationClient from '@feathersjs/authentication-client'
 import type { AuthenticationClientOptions } from '@feathersjs/authentication-client'
 
+import { mediasClient } from './services/medias/medias.shared'
+export type { Medias, MediasData, MediasQuery, MediasPatch } from './services/medias/medias.shared'
+
 import { profileConverterClient } from './services/profile-converter/profile-converter.shared'
 export type {
   ProfileConverter,
@@ -57,5 +60,6 @@ export const createClient = <Configuration = any,>(
   client.configure(slicerStlClient)
   client.configure(slicer3MfClient)
   client.configure(profileConverterClient)
+  client.configure(mediasClient)
   return client
 }

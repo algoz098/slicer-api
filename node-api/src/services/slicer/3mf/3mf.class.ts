@@ -39,13 +39,14 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
     data: Slicer3MfData | Slicer3MfData[],
     params?: ServiceParams
   ): Promise<Slicer3Mf | Slicer3Mf[]> {
+    console.log(0)
     if (Array.isArray(data)) {
       return Promise.all(data.map(current => this.create(current, params)))
     }
 
     const orca = await this.options.app.get('orca')
 
-
+    const { options } = data ?? {options: {}}
     const reqField = data.field ?? 'file'
     const anyParams: any = params ?? {}
 
@@ -77,6 +78,60 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
     const defaultOut = path.join(os.tmpdir(), `orca-${randomUUID()}.gcode.3mf`)
     const outPath = data.output ?? defaultOut
 
+    // Carrega sob demanda somente os presets requisitados por nome
+    try {
+      const resourcesPath: string | undefined = (this.options.app as any).get('orca_resourcesPath')
+      const resolveVendorForPreset = (subdir: 'machine' | 'filament' | 'process', presetName: string): string | undefined => {
+        if (!resourcesPath) return undefined
+        const profilesDir = path.join(resourcesPath, 'profiles')
+        try {
+          const vendors = fs.readdirSync(profilesDir, { withFileTypes: true })
+          for (const v of vendors) {
+            if (!v.isDirectory()) continue
+            const vendorId = v.name
+            const candidate = path.join(profilesDir, vendorId, subdir, `${presetName}.json`)
+            if (fs.existsSync(candidate)) return vendorId
+          }
+        } catch {
+          // silencioso: se não for possível resolver por FS, seguimos sem vendor explícito
+        }
+        return undefined
+      }
+
+      if (data.printerProfile && typeof data.printerProfile === 'string') {
+        try {
+          const vendor = resolveVendorForPreset('machine', data.printerProfile)
+          if (vendor) orca.loadVendor(vendor)
+          orca.loadPrinterProfile(data.printerProfile)
+        } catch (e) {
+          throw new BadRequest(`Printer preset not found: ${data.printerProfile}`)
+        }
+      }
+
+      if (data.filamentProfile && typeof data.filamentProfile === 'string') {
+        try {
+          const vendor = resolveVendorForPreset('filament', data.filamentProfile)
+          if (vendor) orca.loadVendor(vendor)
+          orca.loadFilamentProfile(data.filamentProfile)
+        } catch (e) {
+          throw new BadRequest(`Filament preset not found: ${data.filamentProfile}`)
+        }
+      }
+
+      if (data.processProfile && typeof data.processProfile === 'string') {
+        try {
+          const vendor = resolveVendorForPreset('process', data.processProfile)
+          if (vendor) orca.loadVendor(vendor)
+          orca.loadProcessProfile(data.processProfile)
+        } catch (e) {
+          throw new BadRequest(`Process preset not found: ${data.processProfile}`)
+        }
+      }
+    } catch (e) {
+      // Repassa BadRequest ou outros erros para o handler abaixo
+      throw e
+    }
+
     let output: string
     let usedOptions: string[] | undefined
     let ignoredOptions: string[] | undefined
@@ -88,13 +143,12 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
         printerProfile: data.printerProfile,
         filamentProfile: data.filamentProfile,
         processProfile: data.processProfile,
-        options: (data as any).options
+        options
       })
       output = res.output
       usedOptions = (res as any)?.usedOptions
       ignoredOptions = (res as any)?.ignoredOptions
     } catch (err: any) {
-    console.log(err)
       const msg = String(err?.message || err)
       const lower = msg.toLowerCase()
       if (lower.includes('unknown') || lower.includes('invalid') || lower.includes('unrecognized') || lower.includes('failed to set')) {
@@ -109,7 +163,7 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
     }
 
     const content = await fs.promises.readFile(output)
-    const dataBase64 = content.toString('base64')
+    // const dataBase64 = content.toString('base64')
 
     return {
       id: randomUUID(),
@@ -117,7 +171,7 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
       outputPath: output,
       contentType: 'model/3mf',
       size: content.length,
-      dataBase64,
+      // dataBase64,
       usedOptions,
       ignoredOptions
     }

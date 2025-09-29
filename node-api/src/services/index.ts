@@ -1,3 +1,4 @@
+import { medias } from './medias/medias'
 import { profileConverter } from './profile-converter/profile-converter'
 import { slicer3Mf } from './slicer/3mf/3mf'
 import { slicerStl } from './slicer/stl/stl'
@@ -5,6 +6,7 @@ import { slicerStl } from './slicer/stl/stl'
 import type { Application } from '../declarations'
 
 export const services = (app: Application) => {
+  app.configure(medias)
   app.configure(profileConverter)
   app.configure(slicer3Mf)
   app.configure(slicerStl)

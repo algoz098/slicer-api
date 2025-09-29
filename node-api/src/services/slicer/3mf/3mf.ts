@@ -50,7 +50,7 @@ export const slicer3Mf = (app: Application) => {
           const { data } = ctx
 
           // Coerce multipart 'options' (string) to object
-          if (data.options) {
+          if (data?.options) {
             if (typeof data.options === 'string') {
               try {
                 data.options = JSON.parse(data.options)
@@ -58,14 +58,16 @@ export const slicer3Mf = (app: Application) => {
                 throw new Error('Failed to parse "options" as JSON')
               }
             }
-            console.log(2, Object.keys(data.options))
           }
 
           // Coerce multipart 'plate' (string) to number
-          if (data.plate != null && typeof data.plate === 'string') {
+          if (data?.plate != null && typeof data?.plate === 'string') {
             const n = Number(data.plate)
             if (Number.isFinite(n)) data.plate = n
           }
+
+          if (!data) ctx.data = {}
+          
         },
         schemaHooks.validateData(slicer3MfDataValidator),
         schemaHooks.resolveData(slicer3MfDataResolver)
