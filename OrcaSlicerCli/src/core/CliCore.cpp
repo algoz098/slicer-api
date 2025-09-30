@@ -89,6 +89,12 @@ public:
     std::string resources_path;
     int plate_id = 0; // 0-based plate index for .3mf projects
 
+    // Slice-time flags controlling how 3MF customizations are transferred
+    bool transfer_printer_customizations = true;
+    bool transfer_filament_customizations = true;
+    bool transfer_process_customizations = true;
+    bool transfer_project_overrides = true;
+
     std::string last_error;
 
 #if HAVE_LIBSLIC3R
@@ -949,7 +955,9 @@ public:
                 dump_one("top_shell_layers");
             } catch (...) {}
             // Enforce project-level overrides from 3MF with highest priority just before apply
-            try { config->apply(project_cfg_after_3mf, /*ignore_nonexistent=*/true); std::cout << "DEBUG: enforced project_cfg_after_3mf onto working config before apply()" << std::endl; } catch (...) {}
+            if (transfer_project_overrides) {
+                try { config->apply(project_cfg_after_3mf, /*ignore_nonexistent=*/true); std::cout << "DEBUG: enforced project_cfg_after_3mf onto working config before apply()" << std::endl; } catch (...) {}
+            }
 
 
                             // Ensure selected plate index is propagated to Print & Model for GUI parity
@@ -1389,6 +1397,12 @@ CliCore::OperationResult CliCore::slice(const SlicingParams& params) {
         return OperationResult(false, "CLI Core not initialized");
     }
 
+    // Propagate transfer flags into Impl for use in performSlicing()
+    m_impl->transfer_printer_customizations  = params.transfer_printer_customizations;
+    m_impl->transfer_filament_customizations = params.transfer_filament_customizations;
+    m_impl->transfer_process_customizations  = params.transfer_process_customizations;
+    m_impl->transfer_project_overrides       = params.transfer_project_overrides;
+
     std::cout << "DEBUG: Entering slice(): input='" << params.input_file
               << "' plate_index=" << params.plate_index
               << ", profiles(prn/fil/proc)=('" << params.printer_profile << "','"
@@ -1819,16 +1833,18 @@ CliCore::OperationResult CliCore::slice(const SlicingParams& params) {
 
 #if HAVE_LIBSLIC3R
     // Re-apply 3MF print-level overrides (e.g., sparse_infill_density, top_shell_layers) on top of selected profiles
-    try {
-        if (!m_impl->print_overrides_keys.empty()) {
-            m_impl->config->apply_only(m_impl->print_cfg_overrides, m_impl->print_overrides_keys, /*ignore_nonexistent=*/true);
-            std::cout << "DEBUG: Re-applied " << m_impl->print_overrides_keys.size() << " 3MF print override(s) on top of selected profiles" << std::endl;
-            // Dump key values after re-apply
-            if (const auto* o = m_impl->config->optptr("sparse_infill_density")) std::cout << "DEBUG: synced_after_overrides[sparse_infill_density]=" << o->serialize() << std::endl;
-            if (const auto* o2 = m_impl->config->optptr("top_shell_layers")) std::cout << "DEBUG: synced_after_overrides[top_shell_layers]=" << o2->serialize() << std::endl;
+    if (params.transfer_process_customizations) {
+        try {
+            if (!m_impl->print_overrides_keys.empty()) {
+                m_impl->config->apply_only(m_impl->print_cfg_overrides, m_impl->print_overrides_keys, /*ignore_nonexistent=*/true);
+                std::cout << "DEBUG: Re-applied " << m_impl->print_overrides_keys.size() << " 3MF print override(s) on top of selected profiles" << std::endl;
+                // Dump key values after re-apply
+                if (const auto* o = m_impl->config->optptr("sparse_infill_density")) std::cout << "DEBUG: synced_after_overrides[sparse_infill_density]=" << o->serialize() << std::endl;
+                if (const auto* o2 = m_impl->config->optptr("top_shell_layers")) std::cout << "DEBUG: synced_after_overrides[top_shell_layers]=" << o2->serialize() << std::endl;
+            }
+        } catch (const std::exception &e) {
+            std::cout << "WARN: Failed to re-apply 3MF print overrides: " << e.what() << std::endl;
         }
-    } catch (const std::exception &e) {
-        std::cout << "WARN: Failed to re-apply 3MF print overrides: " << e.what() << std::endl;
     }
 #endif
 
@@ -1948,7 +1964,7 @@ CliCore::OperationResult CliCore::slice(const SlicingParams& params) {
 
 #if HAVE_LIBSLIC3R
     // Re-apply 3MF project parameter overrides with highest priority
-    if (!m_impl->project_overrides_keys.empty()) {
+    if (params.transfer_project_overrides && !m_impl->project_overrides_keys.empty()) {
         try {
             m_impl->config->apply_only(m_impl->project_cfg_after_3mf, m_impl->project_overrides_keys, /*ignore_nonexistent=*/true);
             std::cout << "DEBUG: Re-applied " << m_impl->project_overrides_keys.size() << " 3MF project override(s) on top of selected profiles" << std::endl;
@@ -2043,14 +2059,90 @@ CliCore::OperationResult CliCore::loadPrinterProfile(const std::string& printer_
             }
         }
 
-        // Find the preset regardless of its current visibility
-        auto *preset = m_impl->preset_bundle.printers.find_preset(printer_name, /*first_visible_if_not_found=*/false, /*real=*/true, /*only_from_library=*/false);
+        // If the argument looks like a JSON file path, import it directly as a preset.
+        // Accept absolute or relative paths; for relative, also try under resources/profiles/BBL/machine.
+        Slic3r::Preset* preset = nullptr;
+        try {
+            namespace fs = std::filesystem;
+            auto ends_with = [](const std::string &s, const std::string &suf){ return s.size()>=suf.size() && s.rfind(suf)==s.size()-suf.size(); };
+            bool looks_path = printer_name.find('/') != std::string::npos || printer_name.find('\\') != std::string::npos || ends_with(printer_name, ".json");
+            if (looks_path) {
+                std::vector<fs::path> candidates;
+                fs::path inp = fs::path(printer_name);
+                candidates.push_back(inp);
+                if (!inp.is_absolute()) {
+                    candidates.push_back(fs::path(m_impl->resources_path) / inp);
+                    if (inp.parent_path().empty())
+                        candidates.push_back(fs::path(m_impl->resources_path) / "profiles" / "BBL" / "machine" / inp);
+                }
+                for (const auto &cand : candidates) {
+                    try {
+                        bool ex = fs::exists(cand);
+                        std::cout << "DEBUG: loadPrinterProfile path-mode: candidate='" << cand.string() << "' exists=" << (ex?1:0) << std::endl;
+                        if (!ex) continue;
+                        // Derive expected preset name from filename stem
+                        std::string stem = cand.stem().string();
+                        // Try to find by name before importing (might already be present)
+                        preset = m_impl->preset_bundle.printers.find_preset(stem, /*first_visible_if_not_found=*/false, /*real=*/true, /*only_from_library=*/false);
+                        if (!preset) {
+                            Slic3r::PresetsConfigSubstitutions subs; std::string file = cand.string(); int overwrite=1; std::vector<std::string> out;
+                            auto override_confirm = [](std::string const &){ return 1; };
+                            bool ok = m_impl->preset_bundle.import_json_presets(subs, file, override_confirm, Slic3r::ForwardCompatibilitySubstitutionRule::EnableSystemSilent, overwrite, out);
+                            std::cout << "DEBUG: loadPrinterProfile path-mode: import_json_presets ok=" << (ok?1:0) << std::endl;
+                            if (ok) {
+                                m_impl->preset_bundle.update_compatible(Slic3r::PresetSelectCompatibleType::Always);
+                                preset = m_impl->preset_bundle.printers.find_preset(stem, /*first_visible_if_not_found=*/false, /*real=*/true, /*only_from_library=*/false);
+                            }
+                        }
+                        if (preset) break;
+                    } catch (...) { /* ignore candidate error */ }
+                }
+                if (preset == nullptr) {
+                    std::cout << "DEBUG: loadPrinterProfile path-mode: import failed, will try system models fallback" << std::endl;
+                }
+            }
+        } catch (...) { /* ignore path-mode errors; fall back to name lookup */ }
+
+        // Find the preset by name regardless of its current visibility (if not already resolved by path)
+        if (!preset)
+            preset = m_impl->preset_bundle.printers.find_preset(printer_name, /*first_visible_if_not_found=*/false, /*real=*/true, /*only_from_library=*/false);
+
+        // If still not found, attempt to load only vendor MODELS (no filaments) from resources and retry
+        if (!preset) {
+            try {
+                std::cout << "DEBUG: loadPrinterProfile: attempting load_system_models_from_json()" << std::endl;
+                m_impl->preset_bundle.load_system_models_from_json(Slic3r::ForwardCompatibilitySubstitutionRule::EnableSystemSilent);
+                m_impl->preset_bundle.load_installed_printers(m_impl->app_config);
+                // Retry by the original string
+                preset = m_impl->preset_bundle.printers.find_preset(printer_name, /*first_visible_if_not_found=*/false, /*real=*/true, /*only_from_library=*/false);
+                // If the original string was a path or a .json, also try by filename stem
+                if (!preset) {
+                    namespace fs = std::filesystem;
+                    auto ends_with = [](const std::string &s, const std::string &suf){ return s.size()>=suf.size() && s.rfind(suf)==s.size()-suf.size(); };
+                    if (printer_name.find('/') != std::string::npos || printer_name.find('\\') != std::string::npos || ends_with(printer_name, ".json")) {
+                        std::string stem = fs::path(printer_name).stem().string();
+                        preset = m_impl->preset_bundle.printers.find_preset(stem, /*first_visible_if_not_found=*/false, /*real=*/true, /*only_from_library=*/false);
+                        if (preset) std::cout << "DEBUG: loadPrinterProfile: resolved by stem after load_system_models_from_json ('" << stem << "')" << std::endl;
+                    }
+                }
+                if (preset)
+                    std::cout << "DEBUG: loadPrinterProfile: resolved after load_system_models_from_json" << std::endl;
+            } catch (...) {
+                std::cout << "DEBUG: loadPrinterProfile: load_system_models_from_json threw" << std::endl;
+            }
+        }
+
         if (preset == nullptr) {
             // Attempt a compatibility fallback: many G-code headers encode printer as "<model> <nozzle> nozzle",
             // while installed presets may be named just by model (e.g., "Bambu Lab X1 Carbon").
             std::string base_try;
             {
-                const std::string &s = printer_name;
+                std::string name_for_parse = printer_name;
+                auto ends_with = [](const std::string &s, const std::string &suf){ return s.size()>=suf.size() && s.rfind(suf)==s.size()-suf.size(); };
+                if (printer_name.find('/') != std::string::npos || printer_name.find('\\') != std::string::npos || ends_with(printer_name, ".json")) {
+                    try { name_for_parse = std::filesystem::path(printer_name).stem().string(); } catch (...) {}
+                }
+                const std::string &s = name_for_parse;
                 const std::string suffix = " nozzle";
                 auto pos = s.rfind(suffix);
                 if (pos != std::string::npos) {
@@ -2084,7 +2176,12 @@ CliCore::OperationResult CliCore::loadPrinterProfile(const std::string& printer_
                     // Extract nozzle variant (e.g., "0.4") from the original name if present
                     std::string variant;
                     {
-                        const std::string &s = printer_name;
+                        std::string name_for_parse = printer_name;
+                        auto ends_with = [](const std::string &s, const std::string &suf){ return s.size()>=suf.size() && s.rfind(suf)==s.size()-suf.size(); };
+                        if (printer_name.find('/') != std::string::npos || printer_name.find('\\') != std::string::npos || ends_with(printer_name, ".json")) {
+                            try { name_for_parse = std::filesystem::path(printer_name).stem().string(); } catch (...) {}
+                        }
+                        const std::string &s = name_for_parse;
                         const std::string suffix = " nozzle";
                         auto pos = s.rfind(suffix);
                         if (pos != std::string::npos) {
@@ -2158,6 +2255,193 @@ CliCore::OperationResult CliCore::loadPrinterProfile(const std::string& printer_
                 } catch (...) {
                     // ignore
                 }
+            }
+
+            // Targeted fallback: fully load only BBL vendor system presets, then retry resolution
+            if (!preset) {
+                try {
+                    namespace fs = std::filesystem;
+                    fs::path res_profiles = fs::path(m_impl->resources_path) / "profiles";
+                    std::cout << "DEBUG: loadPrinterProfile: loading vendor 'BBL' system presets from '" << res_profiles.string() << "'" << std::endl;
+                    m_impl->preset_bundle.load_vendor_configs_from_json(
+                        res_profiles.string(),
+                        std::string("BBL"),
+                        Slic3r::PresetBundle::LoadSystem,
+                        Slic3r::ForwardCompatibilitySubstitutionRule::EnableSystemSilent
+                    );
+                    m_impl->preset_bundle.load_installed_printers(m_impl->app_config);
+                    // Retry by original string
+                    preset = m_impl->preset_bundle.printers.find_preset(printer_name, false, true, false);
+                    // Retry by stem if input was a path/json
+                    if (!preset) {
+                        auto ends_with = [](const std::string &s, const std::string &suf){ return s.size()>=suf.size() && s.rfind(suf)==s.size()-suf.size(); };
+                        if (printer_name.find('/') != std::string::npos || printer_name.find('\\') != std::string::npos || ends_with(printer_name, ".json")) {
+                            std::string stem = fs::path(printer_name).stem().string();
+                            preset = m_impl->preset_bundle.printers.find_preset(stem, false, true, false);
+                        }
+                    }
+                    // Retry by base model
+                    // base_try is computed above from the name (e.g., "Bambu Lab A1" from "Bambu Lab A1 0.4 nozzle")
+                    if (!preset && !base_try.empty()) {
+                        preset = m_impl->preset_bundle.printers.find_preset(base_try, false, true, false);
+                    }
+                } catch (...) {
+                    std::cout << "DEBUG: loadPrinterProfile: BBL vendor system load threw" << std::endl;
+                }
+            }
+
+            // If BBL LoadSystem failed or preset still not found, try a machines-only sandbox for BBL
+            if (!preset) {
+                try {
+                    namespace fs = std::filesystem;
+                    fs::path res_profiles = fs::path(m_impl->resources_path) / "profiles";
+                    fs::path res_bbl_json = res_profiles / "BBL.json";
+                    fs::path res_machines = res_profiles / "BBL" / "machine";
+                    fs::path sandbox_root = fs::path(Slic3r::data_dir()) / "sandbox_vendor_bbl";
+                    std::error_code ec_rm;
+                    fs::remove_all(sandbox_root, ec_rm);
+                    (void)ec_rm;
+                    fs::create_directories(sandbox_root / "BBL" / "machine");
+                    // Read original vendor root to get version and model list
+                    nlohmann::json jroot;
+                    try {
+                        std::ifstream ifs(res_bbl_json);
+                        if (ifs.good()) ifs >> jroot;
+                    } catch (...) {}
+                    nlohmann::json jout = nlohmann::json::object();
+                    if (jroot.contains("version")) jout["version"] = jroot["version"];
+                    if (jroot.contains("name")) jout["name"] = jroot["name"];
+                    // Filter machine_model_list to only include the target base model (e.g. "Bambu Lab A1")
+                    {
+                        nlohmann::json machine_models = nlohmann::json::array();
+                        std::string model_name = base_try.empty() ? std::string("Bambu Lab A1") : base_try;
+                        nlohmann::json model_entry = nlohmann::json::object();
+                        model_entry["name"] = model_name;
+                        model_entry["sub_path"] = std::string("machine/") + model_name + ".json";
+                        machine_models.push_back(model_entry);
+                        jout["machine_model_list"] = machine_models;
+                    }
+                    // No processes / filaments
+                    jout["process_list"] = nlohmann::json::array();
+                    jout["filament_list"] = nlohmann::json::array();
+                    // Build machine_list (only 'machine' presets, not model files) and copy required files
+                    auto ends_with = [](const std::string &s, const std::string &suf){ return s.size()>=suf.size() && s.rfind(suf)==s.size()-suf.size(); };
+                    // Derive nozzle preset name from input (stem), e.g. "Bambu Lab A1 0.4 nozzle"
+                    std::string nozzle_name = printer_name;
+                    if (printer_name.find('/') != std::string::npos || printer_name.find('\\') != std::string::npos || ends_with(printer_name, ".json")) {
+                        try { nozzle_name = fs::path(printer_name).stem().string(); } catch (...) {}
+                    }
+                    std::string model_name = base_try.empty() ? std::string("Bambu Lab A1") : base_try;
+
+                    // machine_list: commons + target nozzle preset
+                    nlohmann::json machine_list = nlohmann::json::array();
+                    auto push_machine = [&](const std::string &nm){
+                        nlohmann::json item = nlohmann::json::object();
+                        item["name"] = nm;
+                        item["sub_path"] = std::string("machine/") + nm + ".json";
+                        machine_list.push_back(item);
+                    };
+                    push_machine("fdm_machine_common");
+                    push_machine("fdm_bbl_3dp_001_common");
+                    if (!nozzle_name.empty()) push_machine(nozzle_name);
+                    jout["machine_list"] = machine_list;
+
+                    // Copy files needed into sandbox: model file + commons + nozzle preset
+                    std::set<std::string> files_to_copy;
+                    files_to_copy.insert(model_name); // machine_model json
+                    files_to_copy.insert("fdm_machine_common");
+                    files_to_copy.insert("fdm_bbl_3dp_001_common");
+                    if (!nozzle_name.empty()) files_to_copy.insert(nozzle_name);
+                    size_t copied = 0;
+                    for (const auto &nm : files_to_copy) {
+                        fs::path src = res_machines / (nm + ".json");
+                        if (!fs::exists(src)) continue;
+                        fs::path dst = sandbox_root / "BBL" / "machine" / (nm + ".json");
+                        std::error_code ec_cp;
+                        fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec_cp);
+                        if (ec_cp) continue;
+                        ++copied;
+                    }
+                    // write BBL.json
+                    {
+                        std::ofstream ofs(sandbox_root / "BBL.json");
+                        ofs << jout.dump(2);
+                    }
+                    std::cout << "DEBUG: loadPrinterProfile: attempting BBL machines-only sandbox load at '" << sandbox_root.string() << "', files=" << copied << std::endl;
+                    m_impl->preset_bundle.load_vendor_configs_from_json(
+                        sandbox_root.string(),
+                        std::string("BBL"),
+                        Slic3r::PresetBundle::LoadSystem,
+                        Slic3r::ForwardCompatibilitySubstitutionRule::EnableSystemSilent
+                    );
+                    m_impl->preset_bundle.load_installed_printers(m_impl->app_config);
+                    // Retry find
+                    preset = m_impl->preset_bundle.printers.find_preset(printer_name, false, true, false);
+                    if (!preset) {
+                        std::string stem = nozzle_name;
+                        if (!stem.empty()) preset = m_impl->preset_bundle.printers.find_preset(stem, false, true, false);
+                    }
+                    if (!preset && !base_try.empty()) {
+                        preset = m_impl->preset_bundle.printers.find_preset(base_try, false, true, false);
+                    }
+                } catch (...) {
+                    std::cout << "DEBUG: loadPrinterProfile: BBL machines-only sandbox load threw" << std::endl;
+                }
+            }
+
+
+            if (!preset) {
+                // As a last attempt, import the exact machine preset JSON directly (without loading the full vendor bundle)
+                try {
+                    namespace fs = std::filesystem;
+                    fs::path machines_dir = fs::path(m_impl->resources_path) / "profiles" / "BBL" / "machine";
+                    auto try_import = [&](const std::string &name) -> bool {
+                        auto ends_with = [](const std::string &s, const std::string &suf){ return s.size()>=suf.size() && s.rfind(suf)==s.size()-suf.size(); };
+                        std::string base = name;
+                        if (base.find('/') != std::string::npos || base.find('\\') != std::string::npos) {
+                            base = fs::path(base).stem().string();
+                        }
+                        if (ends_with(base, ".json")) {
+                            base = fs::path(base).stem().string();
+                        }
+                        fs::path candidate = machines_dir / (base + ".json");
+                        bool exists = fs::exists(candidate);
+                        std::cout << "DEBUG: direct-import: candidate='" << candidate.string() << "' exists=" << (exists?1:0) << " base='" << base << "'" << std::endl;
+                        if (!exists) return false;
+                        // Import the single preset JSON as an external preset
+                        Slic3r::PresetsConfigSubstitutions subs;
+                        std::string file = candidate.string();
+                        int overwrite = 1; // overwrite if already exists
+                        std::vector<std::string> result_names;
+                        auto override_confirm = [](std::string const &) -> int { return 1; };
+                        bool ok = m_impl->preset_bundle.import_json_presets(
+                            subs,
+                            file,
+                            override_confirm,
+                            Slic3r::ForwardCompatibilitySubstitutionRule::EnableSystemSilent,
+                            overwrite,
+                            result_names
+                        );
+                        std::cout << "DEBUG: direct-import: import_json_presets ok=" << (ok?1:0) << " results=" << result_names.size() << std::endl;
+                        if (ok) {
+                            m_impl->preset_bundle.update_compatible(Slic3r::PresetSelectCompatibleType::Always);
+                            // Try to resolve the preset by the imported name
+                            if (!result_names.empty()) {
+                                for (const auto &nm : result_names) {
+                                    std::cout << "DEBUG: direct-import: checking imported name '" << nm << "'" << std::endl;
+                                    auto *pp = m_impl->preset_bundle.printers.find_preset(nm, /*first_visible_if_not_found=*/false, /*real=*/true, /*only_from_library=*/false);
+                                    if (pp != nullptr) { preset = const_cast<Slic3r::Preset*>(pp); std::cout << "DEBUG: direct-import: resolved by imported name" << std::endl; return true; }
+                                }
+                            }
+                            // Fallback to the requested name
+                            auto *pp = m_impl->preset_bundle.printers.find_preset(name, /*first_visible_if_not_found=*/false, /*real=*/true, /*only_from_library=*/false);
+                            if (pp != nullptr) { preset = const_cast<Slic3r::Preset*>(pp); std::cout << "DEBUG: direct-import: resolved by requested name" << std::endl; return true; }
+                        }
+                        return false;
+                    };
+                    bool imported = try_import(printer_name);
+                    if (!imported && !base_try.empty()) imported = try_import(base_try);
+                } catch (...) { /* ignore */ }
             }
 
             if (!preset) {

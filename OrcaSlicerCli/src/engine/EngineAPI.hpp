@@ -45,6 +45,11 @@ typedef struct {
     int32_t     plate_index;      // 1-based
     bool        verbose;
     bool        dry_run;
+    // 3MF transfer flags (all default to true if not provided by caller)
+    bool        transfer_printer_customizations;
+    bool        transfer_filament_customizations;
+    bool        transfer_process_customizations;
+    bool        transfer_project_overrides;
     // Optional config overrides (applied after profiles). The memory is owned by caller and must live through the call.
     const orcacli_kv* overrides;  // optional
     int32_t     overrides_count;  // number of entries in overrides

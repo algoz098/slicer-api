@@ -1,0 +1,15 @@
+{
+  "type": "filament",
+  "filament_id": "08000",
+  "setting_id": "GTPU00",
+  "name": "Creality Generic TPU",
+  "from": "system",
+  "instantiation": "true",
+  "inherits": "fdm_filament_tpu",
+  "filament_vendor": ["Creality"],
+  "filament_type": ["TPU"],
+  "compatible_printers": [
+    "Creality K2 Plus 0.4 nozzle"
+  ]
+}
+

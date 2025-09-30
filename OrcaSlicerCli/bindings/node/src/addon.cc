@@ -13,8 +13,12 @@
   #include <windows.h>
 #else
   #include <dlfcn.h>
+  #include <unistd.h>
 #endif
 #include <cstdio>
+#include <chrono>
+
+#include <fstream>
 
 // Thin addon will dlopen the engine library at runtime; no direct core linkage.
 static std::mutex g_mutex; // serialize heavy operations
@@ -51,7 +55,7 @@ typedef struct { bool success; const char* message; const char* error_details; }
 typedef struct { const char* filename; uint32_t object_count; uint32_t triangle_count; double volume; const char* bounding_box; bool is_valid; } orcacli_model_info;
 // key/value override
 typedef struct { const char* key; const char* value; } orcacli_kv;
-typedef struct { const char* input_file; const char* output_file; const char* config_file; const char* preset_name; const char* printer_profile; const char* filament_profile; const char* process_profile; int32_t plate_index; bool verbose; bool dry_run; const orcacli_kv* overrides; int32_t overrides_count; } orcacli_slice_params;
+typedef struct { const char* input_file; const char* output_file; const char* config_file; const char* preset_name; const char* printer_profile; const char* filament_profile; const char* process_profile; int32_t plate_index; bool verbose; bool dry_run; bool transfer_printer_customizations; bool transfer_filament_customizations; bool transfer_process_customizations; bool transfer_project_overrides; const orcacli_kv* overrides; int32_t overrides_count; } orcacli_slice_params;
 
 typedef orcacli_handle       (*PF_orcacli_create)();
 typedef void                 (*PF_orcacli_destroy)(orcacli_handle);
@@ -469,6 +473,10 @@ struct SliceWork {
     std::string input_file; std::string output_file;
     std::string printer_profile; std::string filament_profile; std::string process_profile;
     int plate_index=1; bool verbose=false; bool dry_run=false;
+    bool transfer_printer_customizations=true;
+    bool transfer_filament_customizations=true;
+    bool transfer_process_customizations=true;
+    bool transfer_project_overrides=true;
   } p;
   // store options as strings and build C array for FFI
   std::vector<std::pair<std::string,std::string>> opts;
@@ -491,6 +499,10 @@ static void SliceExecute(napi_env env, void* data) {
   p.plate_index = w->p.plate_index;
   p.verbose = w->p.verbose;
   p.dry_run = w->p.dry_run;
+  p.transfer_printer_customizations   = w->p.transfer_printer_customizations;
+  p.transfer_filament_customizations  = w->p.transfer_filament_customizations;
+  p.transfer_process_customizations   = w->p.transfer_process_customizations;
+  p.transfer_project_overrides        = w->p.transfer_project_overrides;
   // Build overrides array (pointers valid due to storage in w->opts)
   if (!w->opts.empty()) {
     w->kvs.clear(); w->kvs.reserve(w->opts.size());
@@ -603,6 +615,11 @@ static napi_value Slice(napi_env env, napi_callback_info info) {
   set_int("plate", work->p.plate_index);
   set_bool("verbose", work->p.verbose);
   set_bool("dryRun", work->p.dry_run);
+  // 3MF transfer flags (default true if not provided)
+  set_bool("transferPrinterCustomizations", work->p.transfer_printer_customizations);
+  set_bool("transferFilamentCustomizations", work->p.transfer_filament_customizations);
+  set_bool("transferProcessCustomizations", work->p.transfer_process_customizations);
+  set_bool("transferProjectOverrides", work->p.transfer_project_overrides);
 
   // Collect options from params.options and params.custom
   auto collect_kv = [&](napi_value mapObj){
@@ -748,6 +765,102 @@ static napi_value Shutdown(napi_env env, napi_callback_info info) {
   napi_value undef; napi_get_undefined(env, &undef); return undef;
 }
 
+// loadVendorBundle({ vendor: string, vendorJson: string, files: Record<string,string> })
+static napi_value LoadVendorBundle(napi_env env, napi_callback_info info) {
+  size_t argc = 1; napi_value args[1]; napi_value thisArg; void* data;
+  NAPI_CALL(env, napi_get_cb_info(env, info, &argc, args, &thisArg, &data));
+  if (argc < 1) { napi_throw_type_error(env, nullptr, "bundle object is required"); return nullptr; }
+  napi_value obj = args[0]; napi_valuetype t; NAPI_CALL(env, napi_typeof(env, obj, &t)); if (t != napi_object) { napi_throw_type_error(env, nullptr, "bundle must be object"); return nullptr; }
+
+  // Extract vendor
+  napi_value v; bool has=false;
+  std::string vendor, vendorJson;
+  NAPI_CALL(env, napi_has_named_property(env, obj, "vendor", &has));
+  if (!has) { napi_throw_type_error(env, nullptr, "bundle.vendor is required"); return nullptr; }
+  NAPI_CALL(env, napi_get_named_property(env, obj, "vendor", &v)); vendor = get_string(env, v);
+  if (vendor.empty()) { napi_throw_type_error(env, nullptr, "bundle.vendor must be non-empty string"); return nullptr; }
+
+  NAPI_CALL(env, napi_has_named_property(env, obj, "vendorJson", &has));
+  if (!has) { napi_throw_type_error(env, nullptr, "bundle.vendorJson is required"); return nullptr; }
+  NAPI_CALL(env, napi_get_named_property(env, obj, "vendorJson", &v)); vendorJson = get_string(env, v);
+  if (vendorJson.empty()) { napi_throw_type_error(env, nullptr, "bundle.vendorJson must be non-empty string"); return nullptr; }
+
+  // files map
+  NAPI_CALL(env, napi_has_named_property(env, obj, "files", &has));
+  if (!has) { napi_throw_type_error(env, nullptr, "bundle.files is required"); return nullptr; }
+  napi_value filesObj; NAPI_CALL(env, napi_get_named_property(env, obj, "files", &filesObj));
+  napi_valuetype ft; NAPI_CALL(env, napi_typeof(env, filesObj, &ft)); if (ft != napi_object) { napi_throw_type_error(env, nullptr, "bundle.files must be an object map"); return nullptr; }
+
+  std::lock_guard<std::mutex> lk(g_mutex);
+  std::string err;
+  if (!ensure_engine_loaded(&err)) { napi_throw_error(env, nullptr, err.c_str()); return nullptr; }
+
+  // Build sandbox directory under OS temp
+  namespace fs = std::filesystem;
+  fs::path base = fs::temp_directory_path() / ".orcaslicercli";
+  auto now = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+#if defined(_WIN32)
+  DWORD pid = GetCurrentProcessId();
+#else
+  pid_t pid = getpid();
+#endif
+  fs::path sandbox = base / (std::string("bundle-") + std::to_string((long long)pid) + "-" + std::to_string((long long)now));
+  fs::create_directories(sandbox / "profiles" / vendor);
+
+  // Write vendor JSON to profiles/<vendor>.json
+  {
+    fs::create_directories(sandbox / "profiles");
+    fs::path vfile = sandbox / "profiles" / (vendor + std::string(".json"));
+    std::ofstream ofs(vfile);
+    ofs << vendorJson;
+  }
+
+  // Iterate files map and write them under profiles/
+  napi_value names; NAPI_CALL(env, napi_get_property_names(env, filesObj, &names));
+  uint32_t len=0; NAPI_CALL(env, napi_get_array_length(env, names, &len));
+  for (uint32_t i=0;i<len;++i) {
+    napi_value k; NAPI_CALL(env, napi_get_element(env, names, i, &k));
+    std::string rel = get_string(env, k);
+    napi_value val; NAPI_CALL(env, napi_get_named_property(env, filesObj, rel.c_str(), &val));
+    napi_valuetype vt; NAPI_CALL(env, napi_typeof(env, val, &vt)); if (vt != napi_string) { continue; }
+    std::string content = get_string(env, val);
+    // normalize path
+    while (!rel.empty() && (rel[0] == '/' || rel[0] == '\\')) rel.erase(rel.begin());
+    if (rel.rfind("profiles/", 0) == 0) rel = rel.substr(std::string("profiles/").size());
+    // If starts with vendor/ keep as-is, else if starts with "machine/" prefix with vendor/
+    if (rel.rfind(vendor + "/", 0) != 0) {
+      if (rel.rfind("machine/", 0) == 0) rel = vendor + "/" + rel; // vendor/machine/...
+    }
+    fs::path dst = sandbox / "profiles" / rel;
+    fs::create_directories(dst.parent_path());
+    std::ofstream ofs(dst);
+    ofs << content;
+  }
+
+  // Reinitialize engine with resourcesPath pointing to sandbox
+  if (g_ffi.inst && g_ffi.destroy) {
+    try { g_ffi.destroy(g_ffi.inst); } catch (...) {}
+    g_ffi.inst = nullptr;
+  }
+  if (g_ffi.create) {
+    g_ffi.inst = g_ffi.create();
+  }
+  if (!g_ffi.inst) { napi_throw_error(env, nullptr, "failed to create engine instance"); return nullptr; }
+  if (g_ffi.initialize) {
+    auto r = g_ffi.initialize(g_ffi.inst, sandbox.string().c_str());
+    if (!r.success) { std::string msg = r.message ? r.message : "initialize failed"; if (g_ffi.free_result) g_ffi.free_result(&r); napi_throw_error(env, nullptr, msg.c_str()); return nullptr; }
+    if (g_ffi.free_result) g_ffi.free_result(&r);
+  }
+  // Now load the vendor by ID (it will only see our sandbox)
+  if (g_ffi.load_vendor) {
+    auto r = g_ffi.load_vendor(g_ffi.inst, vendor.c_str());
+    if (!r.success) { std::string msg = r.message ? r.message : "loadVendor failed"; if (g_ffi.free_result) g_ffi.free_result(&r); napi_throw_error(env, nullptr, msg.c_str()); return nullptr; }
+    if (g_ffi.free_result) g_ffi.free_result(&r);
+  }
+
+  napi_value undef; NAPI_CALL(env, napi_get_undefined(env, &undef)); return undef;
+}
+
 static napi_value Init(napi_env env, napi_value exports) {
   // Marker log to verify we're running the freshly built addon and where it lives
   std::string mdir = module_dir_path();
@@ -760,6 +873,7 @@ static napi_value Init(napi_env env, napi_value exports) {
     {"getModelInfo", 0, GetModelInfo, 0, 0, 0, napi_default, 0},
     {"slice",      0, Slice,      0, 0, 0, napi_default, 0},
     {"loadVendor", 0, LoadVendor, 0, 0, 0, napi_default, 0},
+    {"loadVendorBundle", 0, LoadVendorBundle, 0, 0, 0, napi_default, 0},
     {"loadPrinterProfile", 0, LoadPrinterProfile, 0, 0, 0, napi_default, 0},
     {"loadFilamentProfile", 0, LoadFilamentProfile, 0, 0, 0, napi_default, 0},
     {"loadProcessProfile", 0, LoadProcessProfile, 0, 0, 0, napi_default, 0},

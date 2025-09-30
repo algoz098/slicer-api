@@ -27,10 +27,21 @@ export interface SliceParams {
   processProfile?: string;
   verbose?: boolean;
   dryRun?: boolean;
+  // Transfer customizations from 3MF (all default to true)
+  transferPrinterCustomizations?: boolean;
+  transferFilamentCustomizations?: boolean;
+  transferProcessCustomizations?: boolean;
+  transferProjectOverrides?: boolean;
   // Preferred: options (values coerced to string internally)
   options?: Record<string, string | number | boolean>;
   // Back-compat: custom (string-only)
   custom?: Record<string, string>;
+}
+
+export interface VendorBundle {
+  vendor: string; // e.g., 'BBL'
+  vendorJson: string; // content of <vendor>.json
+  files: Record<string, string>; // map of relative paths to file contents (e.g., 'BBL/machine/..' or 'machine/...')
 }
 
 export function initialize(opts?: InitializeOptions): void;
@@ -40,6 +51,7 @@ export function slice(params: SliceParams): Promise<{ output: string; usedOption
 
 // Lazy loading controls (synchronous)
 export function loadVendor(vendorId: string): void;
+export function loadVendorBundle(bundle: VendorBundle): void;
 export function loadPrinterProfile(name: string): void;
 export function loadFilamentProfile(name: string): void;
 export function loadProcessProfile(name: string): void;

@@ -1,0 +1,15 @@
+{
+  "type": "filament",
+  "filament_id": "02000",
+  "setting_id": "GABS00",
+  "name": "Creality Generic ABS",
+  "from": "system",
+  "instantiation": "true",
+  "inherits": "fdm_filament_abs",
+  "filament_vendor": ["Creality"],
+  "filament_type": ["ABS"],
+  "compatible_printers": [
+    "Creality K2 Plus 0.4 nozzle"
+  ]
+}
+

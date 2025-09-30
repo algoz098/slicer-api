@@ -38,7 +38,7 @@ public:
         std::vector<std::string> choices;
         
         ArgumentDef(const std::string& name, ArgumentType type, const std::string& description = "")
-            : name(name), type(type), description(description) {}
+            : name(name), description(description), type(type) {}
     };
 
     /**

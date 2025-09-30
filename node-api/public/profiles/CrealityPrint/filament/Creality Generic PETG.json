@@ -1,0 +1,15 @@
+{
+  "type": "filament",
+  "filament_id": "06000",
+  "setting_id": "GPETG00",
+  "name": "Creality Generic PETG",
+  "from": "system",
+  "instantiation": "true",
+  "inherits": "fdm_filament_pet",
+  "filament_vendor": ["Creality"],
+  "filament_type": ["PETG"],
+  "compatible_printers": [
+    "Creality K2 Plus 0.4 nozzle"
+  ]
+}
+

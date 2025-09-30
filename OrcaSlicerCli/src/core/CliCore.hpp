@@ -53,6 +53,11 @@ public:
         std::map<std::string, std::string> custom_settings;
         bool verbose = false;
         bool dry_run = false;
+        // Control how 3MF-embedded customizations are transferred (defaults: true)
+        bool transfer_printer_customizations = true;
+        bool transfer_filament_customizations = true;
+        bool transfer_process_customizations = true;
+        bool transfer_project_overrides = true;
     };
 
     /**

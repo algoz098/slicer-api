@@ -1,0 +1,32 @@
+{
+  "name": "CrealityPrint",
+  "version": "25.08.02.16",
+  "description": "Creality Print K2 Plus minimal bundle",
+  "machine_list": [
+    { "name": "fdm_machine_common", "sub_path": "machine/fdm_machine_common.json" },
+    { "name": "fdm_creality_common", "sub_path": "machine/fdm_creality_common.json" },
+    { "name": "Creality K2 Plus 0.4 nozzle", "sub_path": "machine/Creality K2 Plus 0.4 nozzle.json" }
+  ],
+  "machine_model_list": [
+    { "name": "Creality K2 Plus", "sub_path": "machine/Creality K2 Plus.json" }
+  ],
+  "filament_list": [
+    { "name": "fdm_filament_common", "sub_path": "filament/fdm_filament_common.json" },
+    { "name": "fdm_filament_pla", "sub_path": "filament/fdm_filament_pla.json" },
+    { "name": "fdm_filament_pet", "sub_path": "filament/fdm_filament_pet.json" },
+    { "name": "fdm_filament_abs", "sub_path": "filament/fdm_filament_abs.json" },
+    { "name": "fdm_filament_tpu", "sub_path": "filament/fdm_filament_tpu.json" },
+    { "name": "Hyper PLA @Creality K2 Plus 0.4 nozzle", "sub_path": "filament/Hyper PLA @Creality K2 Plus 0.4 nozzle.json" },
+    { "name": "Creality Generic PLA", "sub_path": "filament/Creality Generic PLA.json" },
+    { "name": "Creality Generic PETG", "sub_path": "filament/Creality Generic PETG.json" },
+    { "name": "Creality Generic ABS", "sub_path": "filament/Creality Generic ABS.json" },
+    { "name": "Creality Generic TPU", "sub_path": "filament/Creality Generic TPU.json" }
+  ],
+  "process_list": [
+    { "name": "fdm_process_common", "sub_path": "process/fdm_process_common.json" },
+    { "name": "fdm_process_creality_common", "sub_path": "process/fdm_process_creality_common.json" },
+    { "name": "fdm_process_common_klipper", "sub_path": "process/fdm_process_common_klipper.json" },
+    { "name": "0.20mm Standard @Creality K2 Plus 0.4 nozzle", "sub_path": "process/0.20mm Standard @Creality K2 Plus 0.4 nozzle.json" }
+  ]
+}
+

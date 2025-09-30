@@ -39,16 +39,17 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
     data: Slicer3MfData | Slicer3MfData[],
     params?: ServiceParams
   ): Promise<Slicer3Mf | Slicer3Mf[]> {
-    console.log(0)
+
     if (Array.isArray(data)) {
       return Promise.all(data.map(current => this.create(current, params)))
     }
 
     const orca = await this.options.app.get('orca')
 
-    const { options } = data ?? {options: {}}
+    const { options, printerProfile, filamentProfile, processProfile } = data ?? {options: {}}
     const reqField = data.field ?? 'file'
     const anyParams: any = params ?? {}
+
 
     const filesContainer = anyParams?.koa?.request?.files ?? anyParams?.files ?? anyParams?.koa?.ctx?.request?.files
 
@@ -78,72 +79,25 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
     const defaultOut = path.join(os.tmpdir(), `orca-${randomUUID()}.gcode.3mf`)
     const outPath = data.output ?? defaultOut
 
-    // Carrega sob demanda somente os presets requisitados por nome
-    try {
-      const resourcesPath: string | undefined = (this.options.app as any).get('orca_resourcesPath')
-      const resolveVendorForPreset = (subdir: 'machine' | 'filament' | 'process', presetName: string): string | undefined => {
-        if (!resourcesPath) return undefined
-        const profilesDir = path.join(resourcesPath, 'profiles')
-        try {
-          const vendors = fs.readdirSync(profilesDir, { withFileTypes: true })
-          for (const v of vendors) {
-            if (!v.isDirectory()) continue
-            const vendorId = v.name
-            const candidate = path.join(profilesDir, vendorId, subdir, `${presetName}.json`)
-            if (fs.existsSync(candidate)) return vendorId
-          }
-        } catch {
-          // silencioso: se não for possível resolver por FS, seguimos sem vendor explícito
-        }
-        return undefined
-      }
-
-      if (data.printerProfile && typeof data.printerProfile === 'string') {
-        try {
-          const vendor = resolveVendorForPreset('machine', data.printerProfile)
-          if (vendor) orca.loadVendor(vendor)
-          orca.loadPrinterProfile(data.printerProfile)
-        } catch (e) {
-          throw new BadRequest(`Printer preset not found: ${data.printerProfile}`)
-        }
-      }
-
-      if (data.filamentProfile && typeof data.filamentProfile === 'string') {
-        try {
-          const vendor = resolveVendorForPreset('filament', data.filamentProfile)
-          if (vendor) orca.loadVendor(vendor)
-          orca.loadFilamentProfile(data.filamentProfile)
-        } catch (e) {
-          throw new BadRequest(`Filament preset not found: ${data.filamentProfile}`)
-        }
-      }
-
-      if (data.processProfile && typeof data.processProfile === 'string') {
-        try {
-          const vendor = resolveVendorForPreset('process', data.processProfile)
-          if (vendor) orca.loadVendor(vendor)
-          orca.loadProcessProfile(data.processProfile)
-        } catch (e) {
-          throw new BadRequest(`Process preset not found: ${data.processProfile}`)
-        }
-      }
-    } catch (e) {
-      // Repassa BadRequest ou outros erros para o handler abaixo
-      throw e
-    }
 
     let output: string
     let usedOptions: string[] | undefined
     let ignoredOptions: string[] | undefined
+
+
     try {
       const res = await orca.slice({
         input: inputPath,
         output: outPath,
         plate: data.plate,
-        printerProfile: data.printerProfile,
-        filamentProfile: data.filamentProfile,
-        processProfile: data.processProfile,
-        options
+        options,
+        printerProfile,
+        processProfile,
+        filamentProfile,
+        transferPrinterCustomizations: data.transferPrinterCustomizations ?? true,
+        transferFilamentCustomizations: data.transferFilamentCustomizations ?? true,
+        transferProcessCustomizations: data.transferProcessCustomizations ?? true,
+        transferProjectOverrides: data.transferProjectOverrides ?? true
       })
       output = res.output
       usedOptions = (res as any)?.usedOptions

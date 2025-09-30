@@ -49,6 +49,19 @@ add_library(orcacli_core STATIC
 set_property(TARGET orcacli_core PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 
+# Reduce optimization level for heavy translation unit to lower RAM usage during build
+# GCC/Clang can OOM compiling CliCore.cpp at -O3 in constrained Docker builders.
+# Compile this single file with -O1 to keep memory low without affecting the rest.
+# Also silence Eigen deprecated-copy warnings on this TU to avoid spurious build failures under -Werror on some toolchains.
+set_source_files_properties(core/CliCore.cpp PROPERTIES
+    COMPILE_OPTIONS "-O1;$<$<CXX_COMPILER_ID:GNU>:-Wno-deprecated-copy>;$<$<CXX_COMPILER_ID:Clang>:-Wno-deprecated-copy;-Wno-deprecated-copy-with-user-provided-copy>"
+)
+
+# Silence Eigen deprecated-copy warnings also for the engine TU that includes libslic3r headers
+set_source_files_properties(engine/EngineAPI.cpp PROPERTIES
+    COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:GNU>:-Wno-deprecated-copy>;$<$<CXX_COMPILER_ID:Clang>:-Wno-deprecated-copy;-Wno-deprecated-copy-with-user-provided-copy>"
+)
+
 # Always include nanosvg headers for nanosvg_impl.cpp regardless of libslic3r availability
 # This prevents build failures when HAVE_LIBSLIC3R=0 or before libs are detected.
 target_include_directories(orcacli_core PRIVATE

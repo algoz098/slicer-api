@@ -143,6 +143,11 @@ orcacli_operation_result orcacli_slice(orcacli_handle h, const orcacli_slice_par
     p.plate_index = params->plate_index;
     p.verbose = params->verbose;
     p.dry_run = params->dry_run;
+    // Forward 3MF transfer flags
+    p.transfer_printer_customizations  = params->transfer_printer_customizations;
+    p.transfer_filament_customizations = params->transfer_filament_customizations;
+    p.transfer_process_customizations  = params->transfer_process_customizations;
+    p.transfer_project_overrides       = params->transfer_project_overrides;
     // Forward overrides into SlicingParams.custom_settings; validation will happen inside CliCore::slice()
     if (params->overrides && params->overrides_count > 0) {
         if (params->verbose) {

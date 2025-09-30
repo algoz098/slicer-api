@@ -13,14 +13,12 @@ jobs:
   build-docker:
     strategy:
       matrix:
-        arch: [amd64, arm64]
+        arch: [amd64]
         include:
           - arch: amd64
             platform: linux/amd64
             runner: ubuntu-latest
-          - arch: arm64
-            platform: linux/arm64
-            runner: ubuntu-22.04-arm64
+
 
 
     name: Build addon base and slicer-api images
