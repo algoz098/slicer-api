@@ -33,6 +33,12 @@ jobs:
           git lfs pull || true
         shell: bash
 
+
+      - name: Ensure unzip is available (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: sudo apt-get update && sudo apt-get install -y unzip
+
       - name: Read addon package version
         id: pkg
         shell: bash
@@ -77,7 +83,7 @@ jobs:
           echo "[debug] After ROOT search: PREBUILDS_DIR=$PREBUILDS_DIR"
 
           if [ -z "$PREBUILDS_DIR" ]; then
-            PREBUILDS_DIR=$(find . -maxdepth 8 -type d -name prebuilds ! -path "./OrcaSlicerAddon/bindings/node/prebuilds" -print -quit 2>/dev/null || true)
+            PREBUILDS_DIR=$(find . -maxdepth 12 -type d -name prebuilds ! -path "./OrcaSlicerAddon/bindings/node/prebuilds" -print -quit 2>/dev/null || true)
           fi
 
           echo "[debug] After dot search: PREBUILDS_DIR=$PREBUILDS_DIR"
@@ -87,13 +93,11 @@ jobs:
             echo "No prebuilds dir found. Trying to extract any archives under $ROOT..."
             find "$ROOT" -maxdepth 3 -type f \( -iname "*.zip" -o -iname "*.tar.gz" -o -iname "*.tgz" \) -print -exec sh -c '
               f="$1"; dest="$(dirname "$1")"; echo "Extracting $f into $dest...";
-
-
               case "$f" in
                 *.zip) unzip -o "$f" -d "$dest" >/dev/null || true ;;
                 *.tar.gz|*.tgz) tar -xzf "$f" -C "$dest" || true ;;
               esac
-            ' sh {} \;
+            ' sh {} \; 2>/dev/null || true
             PREBUILDS_DIR=$(find "$ROOT" -type d -name prebuilds -print -quit 2>/dev/null || true)
           fi
           # If ROOT directory is not present, also try extracting archives from current directory
