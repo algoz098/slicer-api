@@ -163,10 +163,22 @@ jobs:
         id: check_cache
         shell: bash
         run: |
-          if [ -f "OrcaSlicer/build/x64/src/libslic3r/Release/libslic3r.lib" ] || \
-             [ -f "OrcaSlicer/build/x64/src/libslic3r/RelWithDebInfo/libslic3r.lib" ]; then
+          MATCH=""
+          for p in \
+            "OrcaSlicer/build/x64/src/libslic3r/Release/libslic3r.lib" \
+            "OrcaSlicer/build/x64/src/libslic3r/RelWithDebInfo/libslic3r.lib" \
+            "OrcaSlicer/build/src/libslic3r/Release/libslic3r.lib" \
+            "OrcaSlicer/build/src/libslic3r/RelWithDebInfo/libslic3r.lib" \
+          ; do
+            if [ -f "$p" ]; then MATCH="$p"; break; fi
+          done
+
+          if [ -n "$MATCH" ]; then
+            echo "Cached Orca build detected at: $MATCH"
             echo "found=true" >> $GITHUB_OUTPUT
           else
+            echo "No cached Orca build detected in known paths. Contents of OrcaSlicer/build (if any):"
+            ls -laR OrcaSlicer/build || true
             echo "found=false" >> $GITHUB_OUTPUT
           fi
 
