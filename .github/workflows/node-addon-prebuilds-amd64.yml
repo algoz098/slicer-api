@@ -54,14 +54,13 @@ jobs:
       - name: Materialize downloaded linux prebuild into expected location
         shell: bash
         run: |
-          SRC1="prebuild-linux-${{ steps.pkg.outputs.version }}/OrcaSlicerAddon/bindings/node/prebuilds"
-          SRC2="prebuild-linux-${{ steps.pkg.outputs.version }}/prebuilds"
-          if [ -d "$SRC1" ]; then
-            mkdir -p OrcaSlicerAddon/bindings/node/prebuilds
-            cp -R "$SRC1"/* OrcaSlicerAddon/bindings/node/prebuilds/
-          elif [ -d "$SRC2" ]; then
-            mkdir -p OrcaSlicerAddon/bindings/node/prebuilds
-            cp -R "$SRC2"/* OrcaSlicerAddon/bindings/node/prebuilds/
+          ROOT="prebuild-linux-${{ steps.pkg.outputs.version }}"
+          if [ -d "$ROOT" ]; then
+            PREBUILDS_DIR=$(find "$ROOT" -type d -name prebuilds -print -quit 2>/dev/null || true)
+            if [ -n "$PREBUILDS_DIR" ]; then
+              mkdir -p OrcaSlicerAddon/bindings/node/prebuilds
+              cp -R "$PREBUILDS_DIR"/* OrcaSlicerAddon/bindings/node/prebuilds/
+            fi
           fi
 
       - name: Check if prebuild exists (linux)
@@ -171,21 +170,12 @@ jobs:
         id: check_cache
         shell: bash
         run: |
-          MATCH=""
-          for p in \
-            "OrcaSlicer/build/x64/src/libslic3r/Release/libslic3r.lib" \
-            "OrcaSlicer/build/x64/src/libslic3r/RelWithDebInfo/libslic3r.lib" \
-            "OrcaSlicer/build/src/libslic3r/Release/libslic3r.lib" \
-            "OrcaSlicer/build/src/libslic3r/RelWithDebInfo/libslic3r.lib" \
-          ; do
-            if [ -f "$p" ]; then MATCH="$p"; break; fi
-          done
-
-          if [ -n "$MATCH" ]; then
-            echo "Cached Orca build detected at: $MATCH"
+          FOUND=$(find OrcaSlicer/build -type f -name libslic3r.lib -print -quit 2>/dev/null || true)
+          if [ -n "$FOUND" ]; then
+            echo "Cached Orca build detected at: $FOUND"
             echo "found=true" >> $GITHUB_OUTPUT
           else
-            echo "No cached Orca build detected in known paths. Contents of OrcaSlicer/build (if any):"
+            echo "No cached Orca build detected. Contents of OrcaSlicer/build (if any):"
             ls -laR OrcaSlicer/build || true
             echo "found=false" >> $GITHUB_OUTPUT
           fi
