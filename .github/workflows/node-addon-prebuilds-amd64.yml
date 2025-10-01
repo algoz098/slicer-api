@@ -77,6 +77,19 @@ jobs:
             ' sh {} \;
             PREBUILDS_DIR=$(find "$ROOT" -type d -name prebuilds -print -quit 2>/dev/null || true)
           fi
+          # If ROOT directory is not present, also try extracting archives from current directory
+          if [ -z "$PREBUILDS_DIR" ] && [ ! -d "$ROOT" ]; then
+            echo "No prebuilds dir found and $ROOT not present. Trying to extract any archives under current dir..."
+            find . -maxdepth 3 -type f \( -iname "*.zip" -o -iname "*.tar.gz" -o -iname "*.tgz" \) -print -exec sh -c '
+              f="$1"; dest="$(dirname "$1")"; echo "Extracting $f into $dest...";
+              case "$f" in
+                *.zip) unzip -o "$f" -d "$dest" >/dev/null || true ;;
+                *.tar.gz|*.tgz) tar -xzf "$f" -C "$dest" || true ;;
+              esac
+            ' sh {} \; 2>/dev/null || true
+            PREBUILDS_DIR=$(find . -type d -name prebuilds -print -quit 2>/dev/null || true)
+          fi
+
           if [ -n "$PREBUILDS_DIR" ] && [ -n "$(ls -A "$PREBUILDS_DIR" 2>/dev/null)" ]; then
             echo "Materializing from: $PREBUILDS_DIR"
             mkdir -p OrcaSlicerAddon/bindings/node/prebuilds
