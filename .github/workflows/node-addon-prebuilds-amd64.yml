@@ -193,6 +193,10 @@ jobs:
                 done
                 echo "[gate] Copied $(ls -1 "$DEST" | wc -l | tr -d " ") files into $DEST"
               fi
+            else
+              echo "[gate] Found prebuilds dir candidate: $SRC; materializing into $DEST"
+              mkdir -p "$DEST"
+              cp -R "$SRC"/* "$DEST"/ || true
             fi
 
             if [ -d "$DEST" ] && [ -n "$(ls -A "$DEST" 2>/dev/null || true)" ]; then
@@ -263,6 +267,17 @@ jobs:
           search_artifacts: true
           if_no_artifact_found: ignore
 
+
+      - name: Try fallback download legacy prebuild (windows)
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: node-addon-prebuilds-amd64.yml
+          workflow_conclusion: completed
+          name: prebuild-windows
+          path: .
+          search_artifacts: true
+          if_no_artifact_found: ignore
+
       - name: Materialize downloaded windows prebuild into expected location
         shell: bash
         run: |
@@ -278,7 +293,7 @@ jobs:
           echo "[debug] After ROOT search (win): PREBUILDS_DIR=$PREBUILDS_DIR"
 
           if [ -z "$PREBUILDS_DIR" ]; then
-            PREBUILDS_DIR=$(find . -maxdepth 8 -type d -name prebuilds ! -path "./OrcaSlicerAddon/bindings/node/prebuilds" -print -quit 2>/dev/null || true)
+            PREBUILDS_DIR=$(find . -maxdepth 12 -type d -name prebuilds ! -path "./OrcaSlicerAddon/bindings/node/prebuilds" -print -quit 2>/dev/null || true)
           fi
 
           echo "[debug] After dot search (win): PREBUILDS_DIR=$PREBUILDS_DIR"
@@ -352,7 +367,7 @@ jobs:
               if [ -n "$(ls -A "$d" 2>/dev/null || true)" ]; then SRC="$d"; break; fi
             done <<< "$CANDS"
 
-            # 3) Fallback: any .node files
+            # 3) Fallback: any .node files; otherwise, if a prebuilds dir candidate exists, materialize it
             if [ -z "$SRC" ]; then
               NODE_FILES=$(find . -maxdepth 12 -type f -name "*.node" -print 2>/dev/null || true)
               if [ -n "$NODE_FILES" ]; then
@@ -367,6 +382,10 @@ jobs:
                   esac
                 done <<< "$NODE_FILES"
               fi
+            else
+              echo "[win-gate] Found prebuilds dir candidate: $SRC; materializing into $DEST"
+              mkdir -p "$DEST"
+              cp -R "$SRC"/* "$DEST"/ || true
             fi
 
             # 4) Final decision
