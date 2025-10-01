@@ -141,10 +141,26 @@ jobs:
         id: check_prebuilt
         shell: bash
         run: |
-          if [ -d "OrcaSlicerAddon/bindings/node/prebuilds" ] && [ -n "$(ls -A OrcaSlicerAddon/bindings/node/prebuilds 2>/dev/null)" ]; then
+          DEST="OrcaSlicerAddon/bindings/node/prebuilds"
+          if [ -d "$DEST" ] && [ -n "$(ls -A "$DEST" 2>/dev/null || true)" ]; then
             echo "found=true" >> $GITHUB_OUTPUT
           else
-            echo "found=false" >> $GITHUB_OUTPUT
+            # Search for any 'prebuilds' directory excluding DEST, prefer one that has content
+            CANDS=$(find . -maxdepth 12 -type d -name prebuilds ! -path "./$DEST" -print 2>/dev/null || true)
+            SRC=""
+            while IFS= read -r d; do
+              [ -n "$d" ] || continue
+              if [ -n "$(ls -A "$d" 2>/dev/null || true)" ]; then SRC="$d"; break; fi
+            done <<EOF
+$CANDS
+EOF
+            if [ -n "$SRC" ]; then
+              mkdir -p "$DEST"
+              cp -R "$SRC"/* "$DEST"/
+              echo "found=true" >> $GITHUB_OUTPUT
+            else
+              echo "found=false" >> $GITHUB_OUTPUT
+            fi
           fi
 
       - name: Build OrcaSlicer + addon inside Docker (Ubuntu 22.04)
