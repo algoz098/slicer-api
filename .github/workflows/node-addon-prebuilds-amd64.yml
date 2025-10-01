@@ -67,24 +67,24 @@ jobs:
           fi
           # If still not found, try to extract common archive formats and search again
           if [ -z "$PREBUILDS_DIR" ]; then
-            echo "No prebuilds dir found. Trying to extract any archives in $ROOT..."
-            find "$ROOT" -maxdepth 2 -type f \( -iname "*.zip" -o -iname "*.tar.gz" -o -iname "*.tgz" \) -print -exec sh -c '
-              f="$1"; d="${1%.*}"; echo "Extracting $f...";
+            echo "No prebuilds dir found. Trying to extract any archives under $ROOT..."
+            find "$ROOT" -maxdepth 3 -type f \( -iname "*.zip" -o -iname "*.tar.gz" -o -iname "*.tgz" \) -print -exec sh -c '
+              f="$1"; dest="$(dirname "$1")"; echo "Extracting $f into $dest...";
               case "$f" in
-                *.zip) unzip -o "$f" -d "$ROOT" >/dev/null || true ;;
-                *.tar.gz|*.tgz) tar -xzf "$f" -C "$ROOT" || true ;;
+                *.zip) unzip -o "$f" -d "$dest" >/dev/null || true ;;
+                *.tar.gz|*.tgz) tar -xzf "$f" -C "$dest" || true ;;
               esac
             ' sh {} \;
             PREBUILDS_DIR=$(find "$ROOT" -type d -name prebuilds -print -quit 2>/dev/null || true)
           fi
-          if [ -n "$PREBUILDS_DIR" ]; then
+          if [ -n "$PREBUILDS_DIR" ] && [ -n "$(ls -A "$PREBUILDS_DIR" 2>/dev/null)" ]; then
             echo "Materializing from: $PREBUILDS_DIR"
             mkdir -p OrcaSlicerAddon/bindings/node/prebuilds
             cp -R "$PREBUILDS_DIR"/* OrcaSlicerAddon/bindings/node/prebuilds/
             echo "Listing destination prebuilds after copy:"
             ls -la OrcaSlicerAddon/bindings/node/prebuilds || true
           else
-            echo "No prebuilds dir found in downloaded artifacts"
+            echo "No prebuilds dir found in downloaded artifacts or directory is empty"
           fi
 
       - name: Check if prebuild exists (linux)
@@ -155,6 +155,31 @@ jobs:
           path: .
           search_artifacts: true
           if_no_artifact_found: ignore
+
+      - name: Materialize downloaded windows prebuild into expected location
+        shell: bash
+        run: |
+          ROOT="prebuild-windows-${{ steps.pkg.outputs.version }}"
+          echo "Listing windows prebuild artifact roots..."
+          ls -la "$ROOT" || true
+          ls -la . || true
+          PREBUILDS_DIR=""
+          if [ -d "$ROOT" ]; then
+            PREBUILDS_DIR=$(find "$ROOT" -type d -name prebuilds -print -quit 2>/dev/null || true)
+          fi
+          if [ -z "$PREBUILDS_DIR" ]; then
+            PREBUILDS_DIR=$(find . -maxdepth 8 -type d -name prebuilds ! -path "./OrcaSlicerAddon/bindings/node/prebuilds" -print -quit 2>/dev/null || true)
+          fi
+          if [ -n "$PREBUILDS_DIR" ] && [ -n "$(ls -A "$PREBUILDS_DIR" 2>/dev/null)" ]; then
+            echo "Materializing from: $PREBUILDS_DIR"
+            mkdir -p OrcaSlicerAddon/bindings/node/prebuilds
+            cp -R "$PREBUILDS_DIR"/* OrcaSlicerAddon/bindings/node/prebuilds/
+            echo "Listing destination prebuilds after copy:"
+            ls -la OrcaSlicerAddon/bindings/node/prebuilds || true
+          else
+            echo "No prebuilds dir found in downloaded windows artifacts or directory is empty"
+          fi
+
 
       - name: Check if prebuild exists (windows)
         id: check_prebuilt
