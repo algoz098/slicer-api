@@ -69,6 +69,8 @@ jobs:
             echo "Materializing from: $PREBUILDS_DIR"
             mkdir -p OrcaSlicerAddon/bindings/node/prebuilds
             cp -R "$PREBUILDS_DIR"/* OrcaSlicerAddon/bindings/node/prebuilds/
+            echo "Listing destination prebuilds after copy:"
+            ls -la OrcaSlicerAddon/bindings/node/prebuilds || true
           else
             echo "No prebuilds dir found in downloaded artifacts"
           fi
@@ -182,6 +184,8 @@ jobs:
               cp -R "$CAND"/* OrcaSlicer/
             fi
           fi
+          echo "Listing OrcaSlicer/build after materialization:"
+          ls -laR OrcaSlicer/build || true
 
       - name: Check if cached Orca build exists
         if: steps.check_prebuilt.outputs.found != 'true'
