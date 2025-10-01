@@ -140,6 +140,14 @@ jobs:
           path: .
           if_no_artifact_found: ignore
 
+      - name: Materialize cached Orca build into expected location
+        if: steps.check_prebuilt.outputs.found != 'true'
+        shell: bash
+        run: |
+          if [ ! -d "OrcaSlicer/build" ] && [ -d "orca-build-windows/OrcaSlicer/build" ]; then
+            cp -R orca-build-windows/OrcaSlicer/* OrcaSlicer/
+          fi
+
       - name: Check if cached Orca build exists
         if: steps.check_prebuilt.outputs.found != 'true'
         id: check_cache
