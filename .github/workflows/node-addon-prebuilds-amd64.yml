@@ -63,7 +63,19 @@ jobs:
             PREBUILDS_DIR=$(find "$ROOT" -type d -name prebuilds -print -quit 2>/dev/null || true)
           fi
           if [ -z "$PREBUILDS_DIR" ]; then
-            PREBUILDS_DIR=$(find . -maxdepth 4 -type d -name prebuilds ! -path "./OrcaSlicerAddon/bindings/node/prebuilds" -print -quit 2>/dev/null || true)
+            PREBUILDS_DIR=$(find . -maxdepth 8 -type d -name prebuilds ! -path "./OrcaSlicerAddon/bindings/node/prebuilds" -print -quit 2>/dev/null || true)
+          fi
+          # If still not found, try to extract common archive formats and search again
+          if [ -z "$PREBUILDS_DIR" ]; then
+            echo "No prebuilds dir found. Trying to extract any archives in $ROOT..."
+            find "$ROOT" -maxdepth 2 -type f \( -iname "*.zip" -o -iname "*.tar.gz" -o -iname "*.tgz" \) -print -exec sh -c '
+              f="$1"; d="${1%.*}"; echo "Extracting $f...";
+              case "$f" in
+                *.zip) unzip -o "$f" -d "$ROOT" >/dev/null || true ;;
+                *.tar.gz|*.tgz) tar -xzf "$f" -C "$ROOT" || true ;;
+              esac
+            ' sh {} \;
+            PREBUILDS_DIR=$(find "$ROOT" -type d -name prebuilds -print -quit 2>/dev/null || true)
           fi
           if [ -n "$PREBUILDS_DIR" ]; then
             echo "Materializing from: $PREBUILDS_DIR"
@@ -192,7 +204,7 @@ jobs:
         id: check_cache
         shell: bash
         run: |
-          FOUND=$(find OrcaSlicer/build -type f -name libslic3r.lib -print -quit 2>/dev/null || true)
+          FOUND=$(find OrcaSlicer/build -type f \( -iname "*slic3r*.lib" -o -iname "*slic3r*.dll" \) -print -quit 2>/dev/null || true)
           if [ -n "$FOUND" ]; then
             echo "Cached Orca build detected at: $FOUND"
             echo "found=true" >> $GITHUB_OUTPUT
