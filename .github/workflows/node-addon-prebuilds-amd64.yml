@@ -126,7 +126,7 @@ jobs:
         uses: dawidd6/action-download-artifact@v6
         with:
           workflow: node-addon-prebuilds-amd64.yml
-          workflow_conclusion: success
+          workflow_conclusion: completed
           name: prebuild-windows-${{ steps.pkg.outputs.version }}
           branch: ${{ github.ref_name }}
           path: .
@@ -157,12 +157,20 @@ jobs:
         if: steps.check_prebuilt.outputs.found != 'true'
         shell: bash
         run: |
+          echo "Contents of downloaded Windows cache artifact (orca-build-windows):"
+          ls -laR orca-build-windows || true
           if [ -d "orca-build-windows/OrcaSlicer/build" ]; then
             mkdir -p OrcaSlicer
             cp -R orca-build-windows/OrcaSlicer/* OrcaSlicer/
           elif [ -d "orca-build-windows/build" ]; then
             mkdir -p OrcaSlicer
             cp -R orca-build-windows/* OrcaSlicer/
+          else
+            CAND=$(find orca-build-windows -type d -name OrcaSlicer -print -quit 2>/dev/null || true)
+            if [ -n "$CAND" ]; then
+              mkdir -p OrcaSlicer
+              cp -R "$CAND"/* OrcaSlicer/
+            fi
           fi
 
       - name: Check if cached Orca build exists
