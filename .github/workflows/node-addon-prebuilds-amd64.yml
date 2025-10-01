@@ -50,6 +50,16 @@ jobs:
           path: .
           if_no_artifact_found: ignore
 
+
+      - name: Materialize downloaded linux prebuild into expected location
+        shell: bash
+        run: |
+          SRC="prebuild-linux-${{ steps.pkg.outputs.version }}/OrcaSlicerAddon/bindings/node/prebuilds"
+          if [ -d "$SRC" ]; then
+            mkdir -p OrcaSlicerAddon/bindings/node/prebuilds
+            cp -R "$SRC"/* OrcaSlicerAddon/bindings/node/prebuilds/
+          fi
+
       - name: Check if prebuild exists (linux)
         id: check_prebuilt
         shell: bash
@@ -153,7 +163,8 @@ jobs:
         id: check_cache
         shell: bash
         run: |
-          if [ -f "OrcaSlicer/build/x64/src/libslic3r/Release/libslic3r.lib" ]; then
+          if [ -f "OrcaSlicer/build/x64/src/libslic3r/Release/libslic3r.lib" ] || \
+             [ -f "OrcaSlicer/build/x64/src/libslic3r/RelWithDebInfo/libslic3r.lib" ]; then
             echo "found=true" >> $GITHUB_OUTPUT
           else
             echo "found=false" >> $GITHUB_OUTPUT
