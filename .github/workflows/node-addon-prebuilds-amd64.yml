@@ -22,25 +22,60 @@ jobs:
           submodules: recursive
           lfs: true
 
+      - name: Setup Node.js (for version detection)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Ensure Git LFS objects are present
         run: |
           git lfs install || true
           git lfs pull || true
         shell: bash
 
+      - name: Read addon package version
+        id: pkg
+        shell: bash
+        run: |
+          VER=$(node -p "require('./OrcaSlicerAddon/bindings/node/package.json').version")
+          echo "version=$VER" >> $GITHUB_OUTPUT
+
+      - name: Try download existing prebuild for same version (linux)
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: node-addon-prebuilds-amd64.yml
+          workflow_conclusion: success
+          name: prebuild-linux-${{ steps.pkg.outputs.version }}
+          branch: ${{ github.ref_name }}
+          path: .
+          if_no_artifact_found: ignore
+
+      - name: Check if prebuild exists (linux)
+        id: check_prebuilt
+        shell: bash
+        run: |
+          if [ -d "OrcaSlicerAddon/bindings/node/prebuilds" ] && [ -n "$(ls -A OrcaSlicerAddon/bindings/node/prebuilds 2>/dev/null)" ]; then
+            echo "found=true" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Build OrcaSlicer + addon inside Docker (Ubuntu 22.04)
+        if: steps.check_prebuilt.outputs.found != 'true'
         run: bash "$GITHUB_WORKSPACE/scripts/ci/linux_build_inside_docker.sh" "$GITHUB_WORKSPACE"
         shell: bash
 
       - name: List staged prebuilds
+        if: steps.check_prebuilt.outputs.found != 'true'
         working-directory: OrcaSlicerAddon/bindings/node
         run: bash "$GITHUB_WORKSPACE/scripts/ci/list_staged_prebuilds.sh"
         shell: bash
 
-      - name: Upload artifact (prebuild-linux)
+      - name: Upload artifact (prebuild-linux-${{ steps.pkg.outputs.version }})
+        if: steps.check_prebuilt.outputs.found != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: prebuild-linux
+          name: prebuild-linux-${{ steps.pkg.outputs.version }}
           path: |
             OrcaSlicerAddon/bindings/node/prebuilds/**
           if-no-files-found: error
@@ -67,13 +102,75 @@ jobs:
           git lfs pull || true
         shell: bash
 
+      - name: Read addon package version
+        id: pkg
+        shell: bash
+        run: |
+          VER=$(node -p "require('./OrcaSlicerAddon/bindings/node/package.json').version")
+          echo "version=$VER" >> $GITHUB_OUTPUT
+
+      - name: Try download existing prebuild for same version (windows)
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: node-addon-prebuilds-amd64.yml
+          workflow_conclusion: success
+          name: prebuild-windows-${{ steps.pkg.outputs.version }}
+          branch: ${{ github.ref_name }}
+          path: .
+          if_no_artifact_found: ignore
+
+      - name: Check if prebuild exists (windows)
+        id: check_prebuilt
+        shell: bash
+        run: |
+          if [ -d "OrcaSlicerAddon/bindings/node/prebuilds" ] && [ -n "$(ls -A OrcaSlicerAddon/bindings/node/prebuilds 2>/dev/null)" ]; then
+            echo "found=true" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Try download cached Orca build from previous successful run
+        if: steps.check_prebuilt.outputs.found != 'true'
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: node-addon-prebuilds-amd64.yml
+          workflow_conclusion: success
+          name: orca-build-windows
+          branch: ${{ github.ref_name }}
+          path: .
+          if_no_artifact_found: ignore
+
+      - name: Check if cached Orca build exists
+        if: steps.check_prebuilt.outputs.found != 'true'
+        id: check_cache
+        shell: bash
+        run: |
+          if [ -f "OrcaSlicer/build/x64/src/libslic3r/Release/libslic3r.lib" ]; then
+            echo "found=true" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Build OrcaSlicer (deps + slicer) with VS2022
+        if: steps.check_prebuilt.outputs.found != 'true' && steps.check_cache.outputs.found == 'false'
         shell: cmd
         run: |
           cd OrcaSlicer
           call build_release_vs2022.bat
 
+      - name: Upload cached Orca build for reuse
+        if: steps.check_prebuilt.outputs.found != 'true' && steps.check_cache.outputs.found == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: orca-build-windows
+          path: |
+            OrcaSlicer/build/**
+            OrcaSlicer/deps/build/**
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Build Node addon prebuilds (win32-x64)
+        if: steps.check_prebuilt.outputs.found != 'true'
         shell: bash
         env:
           ORCACLI_REQUIRE_LIBS: 'ON'
@@ -84,14 +181,16 @@ jobs:
           npm run prebuild:stage
 
       - name: List staged prebuilds
+        if: steps.check_prebuilt.outputs.found != 'true'
         working-directory: OrcaSlicerAddon/bindings/node
         shell: bash
         run: bash "$GITHUB_WORKSPACE/scripts/ci/list_staged_prebuilds.sh"
 
-      - name: Upload artifact (prebuild-windows)
+      - name: Upload artifact (prebuild-windows-${{ steps.pkg.outputs.version }})
+        if: steps.check_prebuilt.outputs.found != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: prebuild-windows
+          name: prebuild-windows-${{ steps.pkg.outputs.version }}
           path: |
             OrcaSlicerAddon/bindings/node/prebuilds/**
           if-no-files-found: error

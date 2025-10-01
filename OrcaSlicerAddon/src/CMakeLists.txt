@@ -89,6 +89,27 @@ set(_SEMVER_CANDIDATES
     "${ORCASLICER_ROOT_DIR}/deps/build/destdir/usr/local/lib/libsemver.a"
     "${ORCASLICER_ROOT_DIR}/deps/build/${ORCASLICER_ARCH}/OrcaSlicer_dep/usr/local/lib/libsemver.a"
 )
+
+# Windows (MSVC) produces .lib files and multi-config subdirs (Release/RelWithDebInfo)
+if(WIN32)
+    list(APPEND _LIBSLIC3R_CANDIDATES
+        "${ORCASLICER_BUILD_DIR}/src/libslic3r/Release/libslic3r.lib"
+        "${ORCASLICER_BUILD_DIR}/src/libslic3r/RelWithDebInfo/libslic3r.lib"
+        "${ORCASLICER_BUILD_DIR}/src/libslic3r/libslic3r.lib"
+    )
+    list(APPEND _LIBSLIC3R_CGAL_CANDIDATES
+        "${ORCASLICER_BUILD_DIR}/src/libslic3r/Release/libslic3r_cgal.lib"
+        "${ORCASLICER_BUILD_DIR}/src/libslic3r/RelWithDebInfo/libslic3r_cgal.lib"
+        "${ORCASLICER_BUILD_DIR}/src/libslic3r/libslic3r_cgal.lib"
+    )
+    list(APPEND _SEMVER_CANDIDATES
+        "${ORCASLICER_BUILD_DIR}/lib/Release/semver.lib"
+        "${ORCASLICER_BUILD_DIR}/lib/RelWithDebInfo/semver.lib"
+        "${ORCASLICER_BUILD_DIR}/lib/semver.lib"
+        "${ORCASLICER_BUILD_DIR}/deps/usr/local/lib/semver.lib"
+        "${ORCASLICER_ROOT_DIR}/deps/build/destdir/usr/local/lib/semver.lib"
+    )
+endif()
 set(LIBSLIC3R_PATH "")
 foreach(p IN LISTS _LIBSLIC3R_CANDIDATES)
     if(EXISTS "${p}")
