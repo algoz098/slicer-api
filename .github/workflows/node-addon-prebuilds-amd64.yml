@@ -46,7 +46,6 @@ jobs:
           workflow: node-addon-prebuilds-amd64.yml
           workflow_conclusion: completed
           name: prebuild-linux-${{ steps.pkg.outputs.version }}
-          branch: ${{ github.ref_name }}
           path: .
           if_no_artifact_found: ignore
 
@@ -55,12 +54,22 @@ jobs:
         shell: bash
         run: |
           ROOT="prebuild-linux-${{ steps.pkg.outputs.version }}"
+          echo "Listing linux prebuild artifact roots..."
+          ls -la "$ROOT" || true
+          ls -la . || true
+          PREBUILDS_DIR=""
           if [ -d "$ROOT" ]; then
             PREBUILDS_DIR=$(find "$ROOT" -type d -name prebuilds -print -quit 2>/dev/null || true)
-            if [ -n "$PREBUILDS_DIR" ]; then
-              mkdir -p OrcaSlicerAddon/bindings/node/prebuilds
-              cp -R "$PREBUILDS_DIR"/* OrcaSlicerAddon/bindings/node/prebuilds/
-            fi
+          fi
+          if [ -z "$PREBUILDS_DIR" ]; then
+            PREBUILDS_DIR=$(find . -maxdepth 4 -type d -name prebuilds ! -path "./OrcaSlicerAddon/bindings/node/prebuilds" -print -quit 2>/dev/null || true)
+          fi
+          if [ -n "$PREBUILDS_DIR" ]; then
+            echo "Materializing from: $PREBUILDS_DIR"
+            mkdir -p OrcaSlicerAddon/bindings/node/prebuilds
+            cp -R "$PREBUILDS_DIR"/* OrcaSlicerAddon/bindings/node/prebuilds/
+          else
+            echo "No prebuilds dir found in downloaded artifacts"
           fi
 
       - name: Check if prebuild exists (linux)
@@ -128,7 +137,6 @@ jobs:
           workflow: node-addon-prebuilds-amd64.yml
           workflow_conclusion: completed
           name: prebuild-windows-${{ steps.pkg.outputs.version }}
-          branch: ${{ github.ref_name }}
           path: .
           if_no_artifact_found: ignore
 
@@ -149,7 +157,6 @@ jobs:
           workflow: node-addon-prebuilds-amd64.yml
           workflow_conclusion: completed
           name: orca-build-windows
-          branch: ${{ github.ref_name }}
           path: .
           if_no_artifact_found: ignore
 
