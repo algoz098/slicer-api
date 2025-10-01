@@ -333,10 +333,24 @@ jobs:
         shell: bash
         run: |
           DEST="OrcaSlicerAddon/bindings/node/prebuilds"
+          ROOT="prebuild-windows-${{ steps.pkg.outputs.version }}"
+          # 0) Try to expose content by extracting any archives (works even if unzip is missing via tar)
+          if [ -d "$ROOT" ]; then
+            find "$ROOT" -maxdepth 3 -type f \( -iname "*.zip" -o -iname "*.tar" -o -iname "*.tar.gz" -o -iname "*.tgz" \) -print -exec sh -c '
+              f="$1"; dest="$(dirname "$1")"; echo "[win-gate] Extracting $f into $dest...";
+              tar -xf "$f" -C "$dest" 2>/dev/null || tar -xzf "$f" -C "$dest" 2>/dev/null || { command -v unzip >/dev/null 2>&1 && unzip -o "$f" -d "$dest" >/dev/null; } || true
+            ' sh {} \; 2>/dev/null || true
+          fi
+          find . -maxdepth 3 -type f \( -iname "*.zip" -o -iname "*.tar" -o -iname "*.tar.gz" -o -iname "*.tgz" \) -print -exec sh -c '
+            f="$1"; dest="$(dirname "$1")"; echo "[win-gate] Extracting $f into $dest...";
+            tar -xf "$f" -C "$dest" 2>/dev/null || tar -xzf "$f" -C "$dest" 2>/dev/null || { command -v unzip >/dev/null 2>&1 && unzip -o "$f" -d "$dest" >/dev/null; } || true
+          ' sh {} \; 2>/dev/null || true
+
+          # 1) If DEST already has content
           if [ -d "$DEST" ] && [ -n "$(ls -A "$DEST" 2>/dev/null || true)" ]; then
             echo "found=true" >> $GITHUB_OUTPUT
           else
-            # Option A: prefer directories literally named 'prebuilds' (excluding DEST)
+            # 2) Prefer directories named prebuilds (excluding DEST)
             CANDS=$(find . -maxdepth 12 -type d -name prebuilds ! -path "./$DEST" -print 2>/dev/null || true)
             SRC=""
             while IFS= read -r d; do
@@ -344,8 +358,8 @@ jobs:
               if [ -n "$(ls -A "$d" 2>/dev/null || true)" ]; then SRC="$d"; break; fi
             done <<< "$CANDS"
 
+            # 3) Fallback: any .node files
             if [ -z "$SRC" ]; then
-              # Option B: fall back to any .node files and reconstruct under DEST preserving subpath after 'prebuilds/' if present
               NODE_FILES=$(find . -maxdepth 12 -type f -name "*.node" -print 2>/dev/null || true)
               if [ -n "$NODE_FILES" ]; then
                 mkdir -p "$DEST"
@@ -361,6 +375,7 @@ jobs:
               fi
             fi
 
+            # 4) Final decision
             if [ -d "$DEST" ] && [ -n "$(ls -A "$DEST" 2>/dev/null || true)" ]; then
               echo "found=true" >> $GITHUB_OUTPUT
             else
