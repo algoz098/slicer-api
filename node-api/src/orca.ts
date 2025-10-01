@@ -1,7 +1,7 @@
 import * as path from 'node:path'
 import * as fs from 'node:fs'
 
-const addonDir = process.env.ORCACLI_ADDON_DIR || path.resolve(__dirname, '../../../OrcaSlicerCli/bindings/node')
+const addonDir = process.env.ORCACLI_ADDON_DIR || path.resolve(__dirname, '../../../OrcaSlicerAddon/bindings/node')
 
 const orca = require(addonDir)
 const resourcesPath = process.env.ORCACLI_RESOURCES || path.resolve(__dirname, '../../../OrcaSlicer/resources')
@@ -23,7 +23,7 @@ export default function(app: any) {
             orca.initialize({
                 resourcesPath,
                 verbose: false,
-                strict: false, // enforce API-only control: no env-driven autoloads
+                strict: true, // enforce API-only control: no env-driven autoloads
                 vendors: [], // nao varrer disco automaticamente; vamos injetar via bundle
                 printerProfiles: [],
                 filamentProfiles: [],
@@ -53,13 +53,13 @@ export default function(app: any) {
                 const modelName = 'Bambu Lab A1'
                 const nozzleName = 'Bambu Lab A1 0.4 nozzle'
                 const defaultProcess = '0.20mm Standard @BBL A1'
-                const defaultFilament = 'Bambu PLA Basic @BBL A1'
+                const defaultFilament = 'Generic PLA @BBL A1'
 
                 // A1 mini variants
                 const a1mModelName = 'Bambu Lab A1 mini'
                 const a1mNozzleName = 'Bambu Lab A1 mini 0.4 nozzle'
                 const a1mDefaultProcess = '0.20mm Standard @BBL A1M'
-                const a1mDefaultFilament = 'Bambu PLA Basic @BBL A1M'
+                const a1mDefaultFilament = 'Generic PLA @BBL A1M'
 
 
                 const vendorJsonObj = {
@@ -78,9 +78,7 @@ export default function(app: any) {
                         { name: 'fdm_filament_pet', sub_path: 'filament/fdm_filament_pet.json' },
                         { name: 'fdm_filament_abs', sub_path: 'filament/fdm_filament_abs.json' },
                         { name: 'fdm_filament_tpu', sub_path: 'filament/fdm_filament_tpu.json' },
-                        { name: 'Bambu PLA Basic @base', sub_path: 'filament/Bambu PLA Basic @base.json' },
-                        { name: defaultFilament, sub_path: `filament/${defaultFilament}.json` },
-                        // Generic materials for BBL A1
+                        // Order matters: base profiles first, then model-specific variants
                         { name: 'Generic PLA @base', sub_path: 'filament/Generic PLA @base.json' },
                         { name: 'Generic PLA @BBL A1', sub_path: 'filament/Generic PLA @BBL A1.json' },
                         { name: 'Generic PETG @base', sub_path: 'filament/Generic PETG @base.json' },
@@ -112,10 +110,20 @@ export default function(app: any) {
                 const crProcessDir = path.join(profilesRoot, 'Creality', 'process')
                 const crFilamentDir = path.join(profilesRoot, 'Creality', 'filament')
 
+                // Descobrir a versão real do vendor Creality a partir dos resources para evitar rejeição por versão inválida
+                let crealityVendorVersion: string | number = '02.03.01.00'
+                try {
+                    const crRootPath = path.join(profilesRoot, 'Creality.json')
+                    const crRoot = JSON.parse(readUtf8(crRootPath))
+                    if (crRoot && (typeof crRoot.version === 'string' || typeof crRoot.version === 'number')) {
+                        crealityVendorVersion = crRoot.version
+                    }
+                } catch {}
+
                 // Vendor Creality minimal: somente os itens necessários para K1 Max 0.4
                 const crealityVendorJsonMinimal = {
                     name: 'Creality',
-                    version: '0',
+                    version: crealityVendorVersion,
                     force_update: '0',
                     description: 'Creality minimal bundle (K1 Max 0.4)',
                     machine_model_list: [
@@ -171,7 +179,7 @@ export default function(app: any) {
                         // filament (cadeia de heranca do filamento padrao)
                         'BBL/filament/fdm_filament_common.json': readUtf8(path.join(filamentDir, 'fdm_filament_common.json')),
                         'BBL/filament/fdm_filament_pla.json': readUtf8(path.join(filamentDir, 'fdm_filament_pla.json')),
-                        'BBL/filament/Bambu PLA Basic @base.json': readUtf8(path.join(filamentDir, 'Bambu PLA Basic @base.json')),
+                        // 'BBL/filament/Bambu PLA Basic @base.json': readUtf8(path.join(filamentDir, 'Bambu PLA Basic @base.json')),
                         [`BBL/filament/${defaultFilament}.json`]: readUtf8(path.join(filamentDir, `${defaultFilament}.json`)),
                         // A1 mini default filament
                         [`BBL/filament/${a1mDefaultFilament}.json`]: readUtf8(path.join(filamentDir, `${a1mDefaultFilament}.json`)),
@@ -180,7 +188,7 @@ export default function(app: any) {
                         'BBL/filament/fdm_filament_abs.json': readUtf8(path.join(filamentDir, 'fdm_filament_abs.json')),
                         'BBL/filament/fdm_filament_tpu.json': readUtf8(path.join(filamentDir, 'fdm_filament_tpu.json')),
                         'BBL/filament/Generic PLA @base.json': readUtf8(path.join(filamentDir, 'Generic PLA @base.json')),
-                        'BBL/filament/Generic PLA @BBL A1.json': readUtf8(path.join(filamentDir, 'Generic PLA @BBL A1.json')),
+
                         'BBL/filament/Generic PETG @base.json': readUtf8(path.join(filamentDir, 'Generic PETG @base.json')),
                         'BBL/filament/Generic PETG @BBL A1.json': readUtf8(path.join(filamentDir, 'Generic PETG @BBL A1.json')),
                         'BBL/filament/Generic ABS @base.json': readUtf8(path.join(filamentDir, 'Generic ABS @base.json')),
@@ -297,29 +305,9 @@ export default function(app: any) {
 
             app.set('orca', orca)
             app.set('orca_resourcesPath', resourcesPath)
-            // Materializar preset padrão: Creality K2 Plus 0.4 (vendor CrealityPrint)
-            try {
-                const orcaAny = (orca as any)
-                const targetPrinter = 'Creality K2 Plus 0.4 nozzle'
-                const targetProcess = '0.20mm Standard @Creality K2 Plus 0.4 nozzle'
-                const targetFilament = 'Creality Generic PLA'
-                // garantir vendor registrado
-                if (typeof orcaAny.loadVendor === 'function') {
-                    try { orcaAny.loadVendor('CrealityPrint') } catch {}
-                }
-                if (typeof orcaAny.loadPrinterProfile === 'function') {
-                    orcaAny.loadPrinterProfile(targetPrinter)
-                }
-                if (typeof orcaAny.loadProcessProfile === 'function') {
-                    orcaAny.loadProcessProfile(targetProcess)
-                }
-                if (typeof orcaAny.loadFilamentProfile === 'function') {
-                    orcaAny.loadFilamentProfile(targetFilament)
-                }
-                console.log('[Orca] Default preset materialized: Creality K2 Plus 0.4 (printer/process/filament)')
-            } catch (err) {
-                console.warn('[Orca] Failed to materialize default preset K2 Plus 0.4:', err)
-            }
+            // Nenhum preset materializado aqui por padrão. Os perfis serão carregados sob demanda
+            // pelo serviço (3MF/STL) conforme o request ou conteúdo do projeto.
+
 
         } finally {
             try { process.chdir(prevCwd) } catch {}

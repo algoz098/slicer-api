@@ -14,7 +14,7 @@ ARG BASE_ADDON_CORE_IMAGE=scratch
 # - Targets Debian-based Node 24 (bookworm). Adjust NODE_VERSION if needed.
 # - Installs build prerequisites based on OrcaSlicer/scripts/linux.d/debian
 # - Builds OrcaSlicer dependencies, then builds the Node addon via cmake-js
-# - Leaves prebuilt artifacts in OrcaSlicerCli/bindings/node/prebuilds/<platform>-<arch>/
+# - Leaves prebuilt artifacts in OrcaSlicerAddon/bindings/node/prebuilds/<platform>-<arch>/
 # - Exposes ORCACLI_RESOURCES to point at the baked-in OrcaSlicer resources
 
 ARG NODE_VERSION=24
@@ -128,13 +128,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 
 WORKDIR /opt/orca
-COPY OrcaSlicerCli ./OrcaSlicerCli
+COPY OrcaSlicerAddon ./OrcaSlicerAddon
 
 # Build the shared engine library (orcacli_engine) which the Node addon dlopens
-RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache --mount=type=cache,id=tmp-orca-amd64,target=/opt/tmp bash -lc 'export TMPDIR=/opt/tmp; JOBS=${CI_MAX_JOBS:-$(nproc)}; cmake -S OrcaSlicerCli -B OrcaSlicerCli/build -G Ninja -DORCACLI_REQUIRE_LIBS=ON && cmake --build OrcaSlicerCli/build --config Release --target orcacli_engine --parallel "$JOBS"'
+RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache --mount=type=cache,id=tmp-orca-amd64,target=/opt/tmp bash -lc 'export TMPDIR=/opt/tmp; JOBS=${CI_MAX_JOBS:-$(nproc)}; cmake -S OrcaSlicerAddon -B OrcaSlicerAddon/build -G Ninja -DORCACLI_REQUIRE_LIBS=ON && cmake --build OrcaSlicerAddon/build --config Release --target orcacli_engine --parallel "$JOBS"'
 
 # Build the Node addon using cmake-js and stage prebuild artifacts
-WORKDIR /opt/orca/OrcaSlicerCli/bindings/node
+WORKDIR /opt/orca/OrcaSlicerAddon/bindings/node
 # Ensure cmake-js build fails if full OrcaSlicer libs are not found (link real libslic3r)
 ENV ORCACLI_REQUIRE_LIBS=ON
 RUN npm install && npm run prebuild:all && \
@@ -155,16 +155,15 @@ ENV ORCACLI_RESOURCES=/opt/orca/OrcaSlicer/resources
 
 # Copy only resources and a minimal addon directory (index.js + prebuilds)
 COPY --from=addoncore /opt/orca/OrcaSlicer/resources ./OrcaSlicer/resources
-RUN mkdir -p /opt/orca/OrcaSlicerCli/bindings/node/prebuilds
-COPY --from=addoncore /opt/orca/OrcaSlicerCli/bindings/node/index.js /opt/orca/OrcaSlicerCli/bindings/node/index.js
-COPY --from=addoncore /opt/orca/OrcaSlicerCli/bindings/node/prebuilds /opt/orca/OrcaSlicerCli/bindings/node/prebuilds
+RUN mkdir -p /opt/orca/OrcaSlicerAddon/bindings/node/prebuilds
+COPY --from=addoncore /opt/orca/OrcaSlicerAddon/bindings/node/index.js /opt/orca/OrcaSlicerAddon/bindings/node/index.js
+COPY --from=addoncore /opt/orca/OrcaSlicerAddon/bindings/node/prebuilds /opt/orca/OrcaSlicerAddon/bindings/node/prebuilds
 
 # Also ship the standalone CLI executable built during cmake-js
-COPY --from=addoncore /opt/orca/OrcaSlicerCli/bindings/node/build/bin/orcaslicer-cli /usr/local/bin/orcaslicer-cli
 
 # Show what was produced (helps diagnosing during image build)
-RUN ls -la /opt/orca/OrcaSlicerCli/bindings/node && \
-    find /opt/orca/OrcaSlicerCli/bindings/node/prebuilds -maxdepth 2 -type f -print || true
+RUN ls -la /opt/orca/OrcaSlicerAddon/bindings/node && \
+    find /opt/orca/OrcaSlicerAddon/bindings/node/prebuilds -maxdepth 2 -type f -print || true
 
 # No default CMD — this image is intended to be a base layer.
 # Example of consumption in a downstream Dockerfile:
@@ -178,25 +177,10 @@ RUN ls -la /opt/orca/OrcaSlicerCli/bindings/node && \
 
 
 # Minimal runtime image that ships only the standalone CLI (no Node addon)
-FROM debian:bookworm-slim AS cli
-WORKDIR /opt/orca
-
-# Provide resources path for the CLI
-ENV ORCACLI_RESOURCES=/opt/orca/OrcaSlicer/resources
-
-# Copy only what the CLI needs to run
-COPY --from=addoncore /opt/orca/OrcaSlicer/resources ./OrcaSlicer/resources
-COPY --from=addoncore /opt/orca/OrcaSlicerCli/bindings/node/build/bin/orcaslicer-cli /usr/local/bin/orcaslicer-cli
-
-# Keep it lean; install runtime essentials only if necessary (often not needed)
-# RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
-
-# Default entrypoint is the CLI; consumers can override
-ENTRYPOINT ["/usr/local/bin/orcaslicer-cli"]
 
 # Minimal carrier image with only the Node addon prebuilds (no JS app code, no resources)
 FROM scratch AS addon-slim
 ENV ORCACLI_ADDON_DIR=/opt/orca/orcaslicer-addon
 # Copy only the prebuilt native addon (.node) and engine .so
-COPY --from=addoncore /opt/orca/OrcaSlicerCli/bindings/node/prebuilds ${ORCACLI_ADDON_DIR}/prebuilds
+COPY --from=addoncore /opt/orca/OrcaSlicerAddon/bindings/node/prebuilds ${ORCACLI_ADDON_DIR}/prebuilds
 

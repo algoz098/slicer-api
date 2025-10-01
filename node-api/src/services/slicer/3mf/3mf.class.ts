@@ -79,11 +79,47 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
     const defaultOut = path.join(os.tmpdir(), `orca-${randomUUID()}.gcode.3mf`)
     const outPath = data.output ?? defaultOut
 
+    // Pré-carrega vendor/perfil de impressora quando explicitado para evitar fallbacks do engine
+    try {
+      const orcaAny = orca as any
+      if (printerProfile && typeof orcaAny?.loadPrinterProfile === 'function') {
+        const p = String(printerProfile).trim()
+        console.log('[3MF] Preload request for printerProfile =', p)
+        // Heurística mínima de vendor pelo prefixo do nome
+        if (typeof orcaAny?.loadVendor === 'function') {
+          if (p.startsWith('Creality ')) {
+            try { console.log('[3MF] loadVendor("Creality")'); orcaAny.loadVendor('Creality'); console.log('[3MF] loadVendor("Creality") OK') } catch (e) { console.warn('[3MF] loadVendor("Creality") FAILED:', e) }
+          } else if (p.startsWith('Bambu ')) {
+            try { console.log('[3MF] loadVendor("BBL")'); orcaAny.loadVendor('BBL'); console.log('[3MF] loadVendor("BBL") OK') } catch (e) { console.warn('[3MF] loadVendor("BBL") FAILED:', e) }
+          }
+          // K2 Plus pode existir em pacotes CrealityPrint
+          if (p.includes('K2 Plus')) {
+            try { console.log('[3MF] loadVendor("CrealityPrint")'); orcaAny.loadVendor('CrealityPrint'); console.log('[3MF] loadVendor("CrealityPrint") OK') } catch (e) { console.warn('[3MF] loadVendor("CrealityPrint") FAILED:', e) }
+          }
+        }
+        try { console.log('[3MF] loadPrinterProfile("%s")', p); orcaAny.loadPrinterProfile(p); console.log('[3MF] loadPrinterProfile OK') } catch (e) { console.warn('[3MF] loadPrinterProfile FAILED:', e) }
+      }
+    } catch (e) { console.warn('[3MF] Preload vendor/profile block FAILED:', e) }
 
     let output: string
     let usedOptions: string[] | undefined
     let ignoredOptions: string[] | undefined
 
+    // Normalize profiles for BBL A1 vs A1 mini when caller only passes generic filament
+    const pPrinter = printerProfile
+    let pProcess = processProfile
+    let pFilament = filamentProfile
+    if (pPrinter?.includes('A1 mini')) {
+      if (!pProcess || /@BBL A1\b/.test(pProcess || '')) pProcess = '0.20mm Standard @BBL A1M'
+      if (pFilament && /@BBL A1\b/.test(pFilament)) pFilament = pFilament.replace('@BBL A1', '@BBL A1M')
+    } else if (pPrinter?.includes('A1 0.4')) {
+      if (!pProcess) pProcess = '0.20mm Standard @BBL A1'
+      if (pFilament && /@BBL A1M\b/.test(pFilament)) pFilament = pFilament.replace('@BBL A1M', '@BBL A1')
+    }
+
+    console.log('-------')
+    console.log(data.plate)
+    console.log('-------')
 
     try {
       const res = await orca.slice({
@@ -91,9 +127,9 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
         output: outPath,
         plate: data.plate,
         options,
-        printerProfile,
-        processProfile,
-        filamentProfile,
+        printerProfile: pPrinter,
+        processProfile: pProcess,
+        filamentProfile: pFilament,
         transferPrinterCustomizations: data.transferPrinterCustomizations ?? true,
         transferFilamentCustomizations: data.transferFilamentCustomizations ?? true,
         transferProcessCustomizations: data.transferProcessCustomizations ?? true,

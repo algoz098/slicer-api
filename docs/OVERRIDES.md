@@ -1,8 +1,11 @@
 # Parameter Overrides (CLI, Addon and HTTP API)
 
+Note: The CLI has been removed from this repository. Use the Node addon (orcaslicer-addon) or the HTTP API (node-api). CLI examples below are legacy and kept for historical reference only.
+
+
 This document describes how to send slicing parameter overrides and which keys are accepted across all interfaces:
-- CLI: orcaslicer-cli
-- Node Addon (N-API): require('@orcaslicer/cli')
+
+- Node Addon (N-API): require('orcaslicer-addon')
 - HTTP API (node-api)
 
 Important summary:
@@ -10,26 +13,16 @@ Important summary:
 - The keys are the same as those that appear in the INI exported by the OrcaSlicer GUI and in PrintConfig.cpp (DynamicPrintConfig).
 - We also offer compatibility aliases for common keys from other slicers (table below).
 - Precedence: overrides (CLI --set / addon options / API options) > explicit profiles (printer/filament/process) > settings embedded in the 3MF > defaults.
-- Errors: unknown key or invalid value results in CLI failure (exit code != 0), rejection in the Addon (throw), and HTTP 400 in the API.
+- Errors: unknown key or invalid value is rejected by the Addon (throw) and returns HTTP 400 in the API.
 
 
 ## Usage formats
 
-- CLI
-  ```bash
-  ./orcaslicer-cli slice \
-    --input path/to/model.stl \
-    --output out.gcode \
-    --printer "Bambu Lab X1 Carbon 0.4 nozzle" \
-    --set "sparse_infill_density=30,layer_height=0.24,skirt_loops=1,infill_direction=45"
-  ```
-  Notes:
-  - Pass multiple `k=v` pairs separated by commas within a single `--set` option.
-  - Quote values when they contain spaces. Example: `--set "curr_bed_type=High Temp Plate"`.
+(Legacy CLI example removed; use addon/API examples below.)
 
 - Node Addon (N-API)
   ```js
-  const { slice } = require('OrcaSlicerCli/bindings/node')
+  const { slice } = require('orcaslicer-addon')
   await slice({
     input: 'path/to/model.stl',
     output: 'out.gcode',
@@ -120,7 +113,7 @@ If an alias is not in the table, use the native OrcaSlicer key (as per INI/Print
 ## Validation rules and error messages
 
 - Unknown keys or keys incompatible with the current preset/configuration will result in an error:
-  - CLI: returns exit code != 0 with a detailed message
+
   - Addon: Promise rejected with a message containing the problematic key/value
   - HTTP API: 400 Bad Request with message “Invalid override option(s): …”
 - Out-of-range values or invalid enums also fail.

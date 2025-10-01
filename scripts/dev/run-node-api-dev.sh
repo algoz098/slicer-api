@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Ensure symlink so code can require ../../../../../OrcaSlicerCli/bindings/node
-mkdir -p /workspace/OrcaSlicerCli/bindings
-if [ ! -e /workspace/OrcaSlicerCli/bindings/node ]; then
-  ln -s /opt/orca/OrcaSlicerCli/bindings/node /workspace/OrcaSlicerCli/bindings/node
+# Ensure symlink so code can require ../../../../../OrcaSlicerAddon/bindings/node
+mkdir -p /workspace/OrcaSlicerAddon/bindings
+if [ ! -e /workspace/OrcaSlicerAddon/bindings/node ]; then
+  ln -s /opt/orca/OrcaSlicerAddon/bindings/node /workspace/OrcaSlicerAddon/bindings/node
 fi
 
 cd /workspace/node-api
@@ -43,11 +43,11 @@ export CHOKIDAR_INTERVAL=${CHOKIDAR_INTERVAL:-250}
 # If engine path not set or missing, try to auto-detect a valid liborcacli_engine.so
 if [ -z "${ORCACLI_ENGINE_PATH:-}" ] || [ ! -f "$ORCACLI_ENGINE_PATH" ]; then
   for cand in \
-    "/opt/orca/OrcaSlicerCli/bindings/node/prebuilds/$(node -p "process.platform+'-'+process.arch")/liborcacli_engine.so" \
-    "/opt/orca/OrcaSlicerCli/bindings/node/liborcacli_engine.so" \
-    "/opt/orca/OrcaSlicerCli/build/bindings/node/liborcacli_engine.so" \
-    "/opt/orca/OrcaSlicerCli/build/src/liborcacli_engine.so" \
-    "/opt/orca/OrcaSlicerCli/build-ninja/src/liborcacli_engine.so"; do
+    "/opt/orca/OrcaSlicerAddon/bindings/node/prebuilds/$(node -p "process.platform+'-'+process.arch")/liborcacli_engine.so" \
+    "/opt/orca/OrcaSlicerAddon/bindings/node/liborcacli_engine.so" \
+    "/opt/orca/OrcaSlicerAddon/build/bindings/node/liborcacli_engine.so" \
+    "/opt/orca/OrcaSlicerAddon/build/src/liborcacli_engine.so" \
+    "/opt/orca/OrcaSlicerAddon/build-ninja/src/liborcacli_engine.so"; do
     if [ -f "$cand" ]; then export ORCACLI_ENGINE_PATH="$cand"; break; fi
   done
 fi

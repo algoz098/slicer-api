@@ -1,0 +1,98 @@
+name: Node addon prebuilds (amd64)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  ORCASLICER_SUFFIX: "a"
+
+jobs:
+  linux-prebuild:
+    name: Prebuild Linux (amd64)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    steps:
+      - name: Checkout (with submodules + LFS)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          lfs: true
+
+      - name: Ensure Git LFS objects are present
+        run: |
+          git lfs install || true
+          git lfs pull || true
+        shell: bash
+
+      - name: Build OrcaSlicer + addon inside Docker (Ubuntu 22.04)
+        run: bash "$GITHUB_WORKSPACE/scripts/ci/linux_build_inside_docker.sh" "$GITHUB_WORKSPACE"
+        shell: bash
+
+      - name: List staged prebuilds
+        working-directory: OrcaSlicerAddon/bindings/node
+        run: bash "$GITHUB_WORKSPACE/scripts/ci/list_staged_prebuilds.sh"
+        shell: bash
+
+      - name: Upload artifact (prebuild-linux)
+        uses: actions/upload-artifact@v4
+        with:
+          name: prebuild-linux
+          path: |
+            OrcaSlicerAddon/bindings/node/prebuilds/**
+          if-no-files-found: error
+
+  windows-prebuild:
+    name: Prebuild Windows (x64)
+    runs-on: windows-2022
+    timeout-minutes: 360
+    steps:
+      - name: Checkout (with submodules + LFS)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          lfs: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Ensure Git LFS objects are present
+        run: |
+          git lfs install || true
+          git lfs pull || true
+        shell: bash
+
+      - name: Build OrcaSlicer (deps + slicer) with VS2022
+        shell: cmd
+        run: |
+          cd OrcaSlicer
+          call build_release_vs2022.bat
+
+      - name: Build Node addon prebuilds (win32-x64)
+        shell: bash
+        env:
+          ORCACLI_REQUIRE_LIBS: 'ON'
+        run: |
+          cd OrcaSlicerAddon/bindings/node
+          npm ci
+          npm run prebuild:all
+          npm run prebuild:stage
+
+      - name: List staged prebuilds
+        working-directory: OrcaSlicerAddon/bindings/node
+        shell: bash
+        run: bash "$GITHUB_WORKSPACE/scripts/ci/list_staged_prebuilds.sh"
+
+      - name: Upload artifact (prebuild-windows)
+        uses: actions/upload-artifact@v4
+        with:
+          name: prebuild-windows
+          path: |
+            OrcaSlicerAddon/bindings/node/prebuilds/**
+          if-no-files-found: error
+

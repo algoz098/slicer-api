@@ -14,8 +14,8 @@ services:
     environment:
       - NODE_ENV=development
       - ORCACLI_RESOURCES=/opt/orca/OrcaSlicer/resources
-      - ORCACLI_ADDON_DIR=/opt/orca/OrcaSlicerCli/bindings/node
-      - ORCACLI_ENGINE_PATH=/opt/orca/OrcaSlicerCli/bindings/node/liborcacli_engine.so
+      - ORCACLI_ADDON_DIR=/opt/orca/OrcaSlicerAddon/bindings/node
+      - ORCACLI_ENGINE_PATH=/opt/orca/OrcaSlicerAddon/bindings/node/liborcacli_engine.so
       - CHOKIDAR_USEPOLLING=1
       - TS_NODE_TRANSPILE_ONLY=1
       - ORCACLI_STRICT_DEV=0

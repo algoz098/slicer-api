@@ -20,7 +20,7 @@ dist/
 
 # Project-specific
 OrcaSlicer/build/
-OrcaSlicerCli/build/
+OrcaSlicerAddon/build/
 output_files/
 # comparable_files/*.gcode
 # example_files/*.3mf

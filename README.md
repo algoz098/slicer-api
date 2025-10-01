@@ -1,3 +1,54 @@
+# OrcaSlicer Addon (Node.js N-API) — repo focus updated
+
+Important: This repository no longer ships a CLI binary. The focus is now:
+- Node.js native addon (N-API) for programmatic slicing
+- HTTP API (node-api) that consumes the addon
+
+Any CLI-related docs below are legacy and will be removed. Paths have been renamed from OrcaSlicerCli → OrcaSlicerAddon.
+
+What’s here
+- OrcaSlicerAddon/bindings/node: Node addon build and tests (package name: "orcaslicer-addon")
+- OrcaSlicerAddon/src: C++ core and engine shared library used by the addon
+- OrcaSlicer: upstream OrcaSlicer source as a submodule (required)
+- node-api: REST API that uses the addon under the hood
+
+Quick start: use the addon directly
+1) Ensure OrcaSlicer is present and built (libslic3r, deps). See OrcaSlicer README for build steps.
+2) Build the addon
+   - npm run configure --prefix OrcaSlicerAddon/bindings/node
+   - npm run build --prefix OrcaSlicerAddon/bindings/node
+3) Load from Node.js
+
+```
+const path = require('node:path')
+const addonRoot = path.resolve(__dirname, 'OrcaSlicerAddon/bindings/node')
+const orca = require(addonRoot)
+
+orca.initialize({ resourcesPath: path.resolve(__dirname, 'OrcaSlicer/resources'), verbose: false })
+await orca.slice({
+  input: 'example_files/3DBenchy.stl',
+  output: 'output_files/3DBenchy.gcode',
+  printerProfile: 'Bambu Lab X1 Carbon 0.4 nozzle',
+  filamentProfile: 'Bambu PLA Basic @BBL X1C',
+  processProfile: '0.20mm Standard @BBL X1C',
+  options: { sparse_infill_density: 30, layer_height: 0.24 }
+})
+```
+
+Quick start: run the HTTP API (node-api)
+- Build the addon base image from the repo root Dockerfile (target=base). Then build node-api image.
+- Or run locally:
+  - cd node-api && npm ci && npm run compile && npm start
+  - Set ORCACLI_ADDON_DIR to OrcaSlicerAddon/bindings/node if needed
+  - Set ORCACLI_RESOURCES to OrcaSlicer/resources
+
+Docker notes
+- The multi-stage Dockerfile now builds only the addon artifacts (no CLI stage).
+- Example for addon base image: docker build --target base -t orcaslicer-addon:base .
+
+Legacy content below (CLI references are obsolete)
+
+
 # OrcaSlicer CLI
 
 ## About this repository (WIP, AI-built)

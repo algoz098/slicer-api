@@ -29,7 +29,7 @@ docker run --rm \
     ./build_linux.sh -u
     ./build_linux.sh -dsi
     # Build addon prebuild
-    cd /work/OrcaSlicerCli/bindings/node
+    cd /work/OrcaSlicerAddon/bindings/node
     export CMAKE_JS_CMAKE_ARGS="--CDORCACLI_BUILD_NODE_ADDON=ON --CDORCASLICER_ROOT_DIR=/work/OrcaSlicer --CDORCACLI_REQUIRE_LIBS=ON"
     npm ci
     npm run prebuild:all

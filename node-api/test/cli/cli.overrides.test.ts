@@ -20,7 +20,8 @@ function findCliBinary() {
   throw new Error(`CLI binario nao encontrado em ${fromCwd}`)
 }
 
-describe('CLI slice --set overrides', () => {
+// Skipped: CLI was removed from this repository; keeping test for historical reference only.
+describe.skip('CLI slice --set overrides (legacy, skipped)', () => {
   it('aplica sparse_infill_density e layer_height', function () {
     this.timeout(180000)
 
