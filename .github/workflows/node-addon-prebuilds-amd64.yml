@@ -47,6 +47,7 @@ jobs:
           workflow_conclusion: completed
           name: prebuild-linux-${{ steps.pkg.outputs.version }}
           path: .
+          search_artifacts: true
           if_no_artifact_found: ignore
 
 
@@ -138,6 +139,7 @@ jobs:
           workflow_conclusion: completed
           name: prebuild-windows-${{ steps.pkg.outputs.version }}
           path: .
+          search_artifacts: true
           if_no_artifact_found: ignore
 
       - name: Check if prebuild exists (windows)
@@ -158,6 +160,7 @@ jobs:
           workflow_conclusion: completed
           name: orca-build-windows
           path: .
+          search_artifacts: true
           if_no_artifact_found: ignore
 
       - name: Materialize cached Orca build into expected location
