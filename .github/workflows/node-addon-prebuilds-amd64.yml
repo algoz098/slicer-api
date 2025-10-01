@@ -142,21 +142,49 @@ jobs:
         shell: bash
         run: |
           DEST="OrcaSlicerAddon/bindings/node/prebuilds"
+          ROOT="prebuild-linux-${{ steps.pkg.outputs.version }}"
+          echo "[gate] DEST=$DEST ROOT=$ROOT"
+          ls -la "$DEST" 2>/dev/null || true
+
           if [ -d "$DEST" ] && [ -n "$(ls -A "$DEST" 2>/dev/null || true)" ]; then
+            echo "[gate] DEST already has content; skipping build"
             echo "found=true" >> $GITHUB_OUTPUT
           else
+            # Try to expose prebuilds by extracting common archives first (under ROOT and .)
+            if [ -d "$ROOT" ]; then
+              find "$ROOT" -maxdepth 3 -type f \( -iname "*.zip" -o -iname "*.tar.gz" -o -iname "*.tgz" \) -print -exec sh -c '
+                f="$1"; dest="$(dirname "$1")"; echo "[gate] Extracting $f into $dest...";
+                case "$f" in
+                  *.zip) unzip -o "$f" -d "$dest" >/dev/null || true ;;
+                  *.tar.gz|*.tgz) tar -xzf "$f" -C "$dest" || true ;;
+                esac
+              ' sh {} \; 2>/dev/null || true
+            fi
+            find . -maxdepth 3 -type f \( -iname "*.zip" -o -iname "*.tar.gz" -o -iname "*.tgz" \) -print -exec sh -c '
+              f="$1"; dest="$(dirname "$1")"; echo "[gate] Extracting $f into $dest...";
+              case "$f" in
+                *.zip) unzip -o "$f" -d "$dest" >/dev/null || true ;;
+                *.tar.gz|*.tgz) tar -xzf "$f" -C "$dest" || true ;;
+              esac
+            ' sh {} \; 2>/dev/null || true
+
             # Search for any 'prebuilds' directory excluding DEST, prefer one that has content
             CANDS=$(find . -maxdepth 12 -type d -name prebuilds ! -path "./$DEST" -print 2>/dev/null || true)
+            echo "[gate] Candidates:"; printf "%s\n" "$CANDS" | sed 's/^/[gate]  - /'
             SRC=""
             while IFS= read -r d; do
               [ -n "$d" ] || continue
               if [ -n "$(ls -A "$d" 2>/dev/null || true)" ]; then SRC="$d"; break; fi
             done <<< "$CANDS"
+
             if [ -n "$SRC" ]; then
+              echo "[gate] Using SRC=$SRC -> DEST=$DEST"
               mkdir -p "$DEST"
               cp -R "$SRC"/* "$DEST"/
+              echo "[gate] DEST after copy:"; ls -la "$DEST" || true
               echo "found=true" >> $GITHUB_OUTPUT
             else
+              echo "[gate] No valid SRC found; will trigger build"
               echo "found=false" >> $GITHUB_OUTPUT
             fi
           fi
