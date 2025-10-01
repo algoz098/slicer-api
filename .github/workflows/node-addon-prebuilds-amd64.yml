@@ -62,14 +62,22 @@ jobs:
           if [ -d "$ROOT" ]; then
             PREBUILDS_DIR=$(find "$ROOT" -type d -name prebuilds -print -quit 2>/dev/null || true)
           fi
+
+	          echo "[debug] After ROOT search: PREBUILDS_DIR=$PREBUILDS_DIR"
+
           if [ -z "$PREBUILDS_DIR" ]; then
             PREBUILDS_DIR=$(find . -maxdepth 8 -type d -name prebuilds ! -path "./OrcaSlicerAddon/bindings/node/prebuilds" -print -quit 2>/dev/null || true)
           fi
+
+	          echo "[debug] After dot search: PREBUILDS_DIR=$PREBUILDS_DIR"
+
           # If still not found, try to extract common archive formats and search again
           if [ -z "$PREBUILDS_DIR" ] && [ -d "$ROOT" ]; then
             echo "No prebuilds dir found. Trying to extract any archives under $ROOT..."
             find "$ROOT" -maxdepth 3 -type f \( -iname "*.zip" -o -iname "*.tar.gz" -o -iname "*.tgz" \) -print -exec sh -c '
               f="$1"; dest="$(dirname "$1")"; echo "Extracting $f into $dest...";
+
+
               case "$f" in
                 *.zip) unzip -o "$f" -d "$dest" >/dev/null || true ;;
                 *.tar.gz|*.tgz) tar -xzf "$f" -C "$dest" || true ;;
@@ -78,6 +86,10 @@ jobs:
             PREBUILDS_DIR=$(find "$ROOT" -type d -name prebuilds -print -quit 2>/dev/null || true)
           fi
           # If ROOT directory is not present, also try extracting archives from current directory
+
+	            echo "[debug] After extraction under ROOT: PREBUILDS_DIR=$PREBUILDS_DIR"
+	            [ -n "$PREBUILDS_DIR" ] && ls -la "$PREBUILDS_DIR" || true
+
           if [ -z "$PREBUILDS_DIR" ] && [ ! -d "$ROOT" ]; then
             echo "No prebuilds dir found and $ROOT not present. Trying to extract any archives under current dir..."
             find . -maxdepth 3 -type f \( -iname "*.zip" -o -iname "*.tar.gz" -o -iname "*.tgz" \) -print -exec sh -c '
@@ -88,12 +100,22 @@ jobs:
               esac
             ' sh {} \; 2>/dev/null || true
             PREBUILDS_DIR=$(find . -type d -name prebuilds -print -quit 2>/dev/null || true)
+
+	          echo "[debug] After extraction under dot: PREBUILDS_DIR=$PREBUILDS_DIR"
+	          [ -n "$PREBUILDS_DIR" ] && ls -la "$PREBUILDS_DIR" || true
+
+
+
           fi
 
           if [ -n "$PREBUILDS_DIR" ] && [ -n "$(ls -A "$PREBUILDS_DIR" 2>/dev/null)" ]; then
             echo "Materializing from: $PREBUILDS_DIR"
             mkdir -p OrcaSlicerAddon/bindings/node/prebuilds
             cp -R "$PREBUILDS_DIR"/* OrcaSlicerAddon/bindings/node/prebuilds/
+
+	            echo "Listing source prebuilds before copy:"
+	            ls -la "$PREBUILDS_DIR" || true
+
             echo "Listing destination prebuilds after copy:"
             ls -la OrcaSlicerAddon/bindings/node/prebuilds || true
           else
@@ -180,12 +202,52 @@ jobs:
           if [ -d "$ROOT" ]; then
             PREBUILDS_DIR=$(find "$ROOT" -type d -name prebuilds -print -quit 2>/dev/null || true)
           fi
+
+	          echo "[debug] After ROOT search (win): PREBUILDS_DIR=$PREBUILDS_DIR"
+
           if [ -z "$PREBUILDS_DIR" ]; then
             PREBUILDS_DIR=$(find . -maxdepth 8 -type d -name prebuilds ! -path "./OrcaSlicerAddon/bindings/node/prebuilds" -print -quit 2>/dev/null || true)
           fi
+
+	          echo "[debug] After dot search (win): PREBUILDS_DIR=$PREBUILDS_DIR"
+
+	          # Try to extract archives under ROOT if not found yet
+	          if [ -z "$PREBUILDS_DIR" ] && [ -d "$ROOT" ]; then
+	            echo "No prebuilds dir found. Trying to extract any archives under $ROOT (win)..."
+	            find "$ROOT" -maxdepth 3 -type f \( -iname "*.zip" -o -iname "*.tar.gz" -o -iname "*.tgz" \) -print -exec sh -c '
+	              f="$1"; dest="$(dirname "$1")"; echo "Extracting $f into $dest...";
+	              case "$f" in
+	                *.zip) unzip -o "$f" -d "$dest" >/dev/null || true ;;
+	                *.tar.gz|*.tgz) tar -xzf "$f" -C "$dest" || true ;;
+	              esac
+	            ' sh {} \; 2>/dev/null || true
+	            PREBUILDS_DIR=$(find "$ROOT" -type d -name prebuilds -print -quit 2>/dev/null || true)
+	            echo "[debug] After extraction under ROOT (win): PREBUILDS_DIR=$PREBUILDS_DIR"
+	            [ -n "$PREBUILDS_DIR" ] && ls -la "$PREBUILDS_DIR" || true
+	          fi
+
+	          # If ROOT not present, try extracting from current directory
+	          if [ -z "$PREBUILDS_DIR" ] && [ ! -d "$ROOT" ]; then
+	            echo "No prebuilds dir found and $ROOT not present. Trying to extract any archives under current dir (win)..."
+	            find . -maxdepth 3 -type f \( -iname "*.zip" -o -iname "*.tar.gz" -o -iname "*.tgz" \) -print -exec sh -c '
+	              f="$1"; dest="$(dirname "$1")"; echo "Extracting $f into $dest...";
+	              case "$f" in
+	                *.zip) unzip -o "$f" -d "$dest" >/dev/null || true ;;
+	                *.tar.gz|*.tgz) tar -xzf "$f" -C "$dest" || true ;;
+	              esac
+	            ' sh {} \; 2>/dev/null || true
+	            PREBUILDS_DIR=$(find . -type d -name prebuilds -print -quit 2>/dev/null || true)
+	            echo "[debug] After extraction under dot (win): PREBUILDS_DIR=$PREBUILDS_DIR"
+	            [ -n "$PREBUILDS_DIR" ] && ls -la "$PREBUILDS_DIR" || true
+	          fi
+
           if [ -n "$PREBUILDS_DIR" ] && [ -n "$(ls -A "$PREBUILDS_DIR" 2>/dev/null)" ]; then
             echo "Materializing from: $PREBUILDS_DIR"
             mkdir -p OrcaSlicerAddon/bindings/node/prebuilds
+
+	            echo "Listing source prebuilds before copy (win):"
+	            ls -la "$PREBUILDS_DIR" || true
+
             cp -R "$PREBUILDS_DIR"/* OrcaSlicerAddon/bindings/node/prebuilds/
             echo "Listing destination prebuilds after copy:"
             ls -la OrcaSlicerAddon/bindings/node/prebuilds || true
@@ -205,7 +267,7 @@ jobs:
           fi
 
       - name: Try download cached Orca build from previous successful run
-        if: steps.check_prebuilt.outputs.found != 'true'
+        if: steps.check_prebuilt.outputs.found == 'false'
         uses: dawidd6/action-download-artifact@v6
         with:
           workflow: node-addon-prebuilds-amd64.yml
@@ -216,7 +278,7 @@ jobs:
           if_no_artifact_found: ignore
 
       - name: Materialize cached Orca build into expected location
-        if: steps.check_prebuilt.outputs.found != 'true'
+        if: steps.check_prebuilt.outputs.found == 'false'
         shell: bash
         run: |
           echo "Contents of downloaded Windows cache artifact (orca-build-windows):"
@@ -238,7 +300,7 @@ jobs:
           ls -laR OrcaSlicer || true
 
       - name: Check if cached Orca build exists
-        if: steps.check_prebuilt.outputs.found != 'true'
+        if: steps.check_prebuilt.outputs.found == 'false'
         id: check_cache
         shell: bash
         run: |
@@ -282,13 +344,13 @@ jobs:
           npm run prebuild:stage
 
       - name: List staged prebuilds
-        if: steps.check_prebuilt.outputs.found != 'true'
+        if: steps.check_prebuilt.outputs.found == 'false'
         working-directory: OrcaSlicerAddon/bindings/node
         shell: bash
         run: bash "$GITHUB_WORKSPACE/scripts/ci/list_staged_prebuilds.sh"
 
       - name: Upload artifact (prebuild-windows-${{ steps.pkg.outputs.version }})
-        if: steps.check_prebuilt.outputs.found != 'true'
+        if: steps.check_prebuilt.outputs.found == 'false'
         uses: actions/upload-artifact@v4
         with:
           name: prebuild-windows-${{ steps.pkg.outputs.version }}
