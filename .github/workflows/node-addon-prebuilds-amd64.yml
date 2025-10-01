@@ -221,21 +221,21 @@ jobs:
               cp -R "$CAND"/* OrcaSlicer/
             fi
           fi
-          echo "Listing OrcaSlicer/build after materialization:"
-          ls -laR OrcaSlicer/build || true
+          echo "Listing OrcaSlicer after materialization:"
+          ls -laR OrcaSlicer || true
 
       - name: Check if cached Orca build exists
         if: steps.check_prebuilt.outputs.found != 'true'
         id: check_cache
         shell: bash
         run: |
-          FOUND=$(find OrcaSlicer/build -type f \( -iname "*slic3r*.lib" -o -iname "*slic3r*.dll" \) -print -quit 2>/dev/null || true)
+          FOUND=$(find OrcaSlicer -type f \( -iname "*slic3r*.lib" -o -iname "*slic3r*.dll" \) -print -quit 2>/dev/null || true)
           if [ -n "$FOUND" ]; then
             echo "Cached Orca build detected at: $FOUND"
             echo "found=true" >> $GITHUB_OUTPUT
           else
-            echo "No cached Orca build detected. Contents of OrcaSlicer/build (if any):"
-            ls -laR OrcaSlicer/build || true
+            echo "No cached Orca build detected. Contents of OrcaSlicer (if any):"
+            ls -laR OrcaSlicer || true
             echo "found=false" >> $GITHUB_OUTPUT
           fi
 
