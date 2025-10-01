@@ -168,23 +168,38 @@ jobs:
               esac
             ' sh {} \; 2>/dev/null || true
 
-            # Search for any 'prebuilds' directory excluding DEST, prefer one that has content
+            # Option A: prefer directories literally named 'prebuilds' (excluding DEST)
             CANDS=$(find . -maxdepth 12 -type d -name prebuilds ! -path "./$DEST" -print 2>/dev/null || true)
-            echo "[gate] Candidates:"; printf "%s\n" "$CANDS" | sed 's/^/[gate]  - /'
+            echo "[gate] Candidates (prebuilds dirs):"; printf "%s\n" "$CANDS" | sed 's/^/[gate]  - /'
             SRC=""
             while IFS= read -r d; do
               [ -n "$d" ] || continue
               if [ -n "$(ls -A "$d" 2>/dev/null || true)" ]; then SRC="$d"; break; fi
             done <<< "$CANDS"
 
-            if [ -n "$SRC" ]; then
-              echo "[gate] Using SRC=$SRC -> DEST=$DEST"
-              mkdir -p "$DEST"
-              cp -R "$SRC"/* "$DEST"/
-              echo "[gate] DEST after copy:"; ls -la "$DEST" || true
+            if [ -z "$SRC" ]; then
+              # Option B: fall back to any .node files and reconstruct under DEST preserving subpath after 'prebuilds/' if present
+              echo "[gate] No prebuilds dir candidates with content; searching for .node files..."
+              mapfile -t NODE_FILES < <(find . -maxdepth 12 -type f -name "*.node" -print 2>/dev/null || true)
+              if [ "${#NODE_FILES[@]}" -gt 0 ]; then
+                mkdir -p "$DEST"
+                for f in "${NODE_FILES[@]}"; do
+                  case "$f" in
+                    *prebuilds/*)
+                      rel="${f#*prebuilds/}"; mkdir -p "$DEST/$(dirname "$rel")"; cp -f "$f" "$DEST/$rel" ;;
+                    *)
+                      cp -f "$f" "$DEST/" ;;
+                  esac
+                done
+                echo "[gate] Copied $(ls -1 "$DEST" | wc -l | tr -d " ") files into $DEST"
+              fi
+            fi
+
+            if [ -d "$DEST" ] && [ -n "$(ls -A "$DEST" 2>/dev/null || true)" ]; then
+              echo "[gate] Prebuilds present at $DEST after recovery"
               echo "found=true" >> $GITHUB_OUTPUT
             else
-              echo "[gate] No valid SRC found; will trigger build"
+              echo "[gate] No valid prebuilds found; will trigger build"
               echo "found=false" >> $GITHUB_OUTPUT
             fi
           fi
