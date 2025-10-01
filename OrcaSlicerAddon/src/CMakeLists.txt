@@ -108,6 +108,8 @@ if(WIN32)
         "${ORCASLICER_BUILD_DIR}/lib/semver.lib"
         "${ORCASLICER_BUILD_DIR}/deps/usr/local/lib/semver.lib"
         "${ORCASLICER_ROOT_DIR}/deps/build/destdir/usr/local/lib/semver.lib"
+        # Common Windows deps install layout from OrcaSlicer build scripts (arch-specific cache)
+        "${ORCASLICER_ROOT_DIR}/deps/build/${ORCASLICER_ARCH}/OrcaSlicer_dep/usr/local/lib/semver.lib"
     )
 endif()
 set(LIBSLIC3R_PATH "")
