@@ -286,12 +286,9 @@ jobs:
           # Try to extract archives under ROOT if not found yet
           if [ -z "$PREBUILDS_DIR" ] && [ -d "$ROOT" ]; then
             echo "No prebuilds dir found. Trying to extract any archives under $ROOT (win)..."
-            find "$ROOT" -maxdepth 3 -type f \( -iname "*.zip" -o -iname "*.tar.gz" -o -iname "*.tgz" \) -print -exec sh -c '
+            find "$ROOT" -maxdepth 3 -type f \( -iname "*.zip" -o -iname "*.tar" -o -iname "*.tar.gz" -o -iname "*.tgz" \) -print -exec sh -c '
               f="$1"; dest="$(dirname "$1")"; echo "Extracting $f into $dest...";
-              case "$f" in
-                *.zip) unzip -o "$f" -d "$dest" >/dev/null || true ;;
-                *.tar.gz|*.tgz) tar -xzf "$f" -C "$dest" || true ;;
-              esac
+              tar -xf "$f" -C "$dest" 2>/dev/null || tar -xzf "$f" -C "$dest" 2>/dev/null || { command -v unzip >/dev/null 2>&1 && unzip -o "$f" -d "$dest" >/dev/null; } || true
             ' sh {} \; 2>/dev/null || true
             PREBUILDS_DIR=$(find "$ROOT" -type d -name prebuilds -print -quit 2>/dev/null || true)
             echo "[debug] After extraction under ROOT (win): PREBUILDS_DIR=$PREBUILDS_DIR"
@@ -301,12 +298,9 @@ jobs:
           # If ROOT not present, try extracting from current directory
           if [ -z "$PREBUILDS_DIR" ] && [ ! -d "$ROOT" ]; then
             echo "No prebuilds dir found and $ROOT not present. Trying to extract any archives under current dir (win)..."
-            find . -maxdepth 3 -type f \( -iname "*.zip" -o -iname "*.tar.gz" -o -iname "*.tgz" \) -print -exec sh -c '
+            find . -maxdepth 3 -type f \( -iname "*.zip" -o -iname "*.tar" -o -iname "*.tar.gz" -o -iname "*.tgz" \) -print -exec sh -c '
               f="$1"; dest="$(dirname "$1")"; echo "Extracting $f into $dest...";
-              case "$f" in
-                *.zip) unzip -o "$f" -d "$dest" >/dev/null || true ;;
-                *.tar.gz|*.tgz) tar -xzf "$f" -C "$dest" || true ;;
-              esac
+              tar -xf "$f" -C "$dest" 2>/dev/null || tar -xzf "$f" -C "$dest" 2>/dev/null || { command -v unzip >/dev/null 2>&1 && unzip -o "$f" -d "$dest" >/dev/null; } || true
             ' sh {} \; 2>/dev/null || true
             PREBUILDS_DIR=$(find . -type d -name prebuilds -print -quit 2>/dev/null || true)
             echo "[debug] After extraction under dot (win): PREBUILDS_DIR=$PREBUILDS_DIR"
@@ -421,9 +415,9 @@ jobs:
         id: check_cache
         shell: bash
         run: |
-          FOUND=$(find OrcaSlicer -type f \( -iname "*slic3r*.lib" -o -iname "*slic3r*.dll" \) -print -quit 2>/dev/null || true)
-          if [ -n "$FOUND" ]; then
-            echo "Cached Orca build detected at: $FOUND"
+          if { [ -d "OrcaSlicer/build" ] && [ -n "$(ls -A "OrcaSlicer/build" 2>/dev/null || true)" ]; } || \
+             { [ -d "OrcaSlicer/deps/build" ] && [ -n "$(ls -A "OrcaSlicer/deps/build" 2>/dev/null || true)" ]; }; then
+            echo "Cached Orca build directory structure present."
             echo "found=true" >> $GITHUB_OUTPUT
           else
             echo "No cached Orca build detected. Contents of OrcaSlicer (if any):"
