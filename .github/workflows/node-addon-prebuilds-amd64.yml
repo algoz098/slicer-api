@@ -332,10 +332,40 @@ jobs:
         id: check_prebuilt
         shell: bash
         run: |
-          if [ -d "OrcaSlicerAddon/bindings/node/prebuilds" ] && [ -n "$(ls -A OrcaSlicerAddon/bindings/node/prebuilds 2>/dev/null)" ]; then
+          DEST="OrcaSlicerAddon/bindings/node/prebuilds"
+          if [ -d "$DEST" ] && [ -n "$(ls -A "$DEST" 2>/dev/null || true)" ]; then
             echo "found=true" >> $GITHUB_OUTPUT
           else
-            echo "found=false" >> $GITHUB_OUTPUT
+            # Option A: prefer directories literally named 'prebuilds' (excluding DEST)
+            CANDS=$(find . -maxdepth 12 -type d -name prebuilds ! -path "./$DEST" -print 2>/dev/null || true)
+            SRC=""
+            while IFS= read -r d; do
+              [ -n "$d" ] || continue
+              if [ -n "$(ls -A "$d" 2>/dev/null || true)" ]; then SRC="$d"; break; fi
+            done <<< "$CANDS"
+
+            if [ -z "$SRC" ]; then
+              # Option B: fall back to any .node files and reconstruct under DEST preserving subpath after 'prebuilds/' if present
+              NODE_FILES=$(find . -maxdepth 12 -type f -name "*.node" -print 2>/dev/null || true)
+              if [ -n "$NODE_FILES" ]; then
+                mkdir -p "$DEST"
+                while IFS= read -r f; do
+                  [ -n "$f" ] || continue
+                  case "$f" in
+                    *prebuilds/*)
+                      rel="${f#*prebuilds/}"; mkdir -p "$DEST/$(dirname "$rel")"; cp -f "$f" "$DEST/$rel" ;;
+                    *)
+                      cp -f "$f" "$DEST/" ;;
+                  esac
+                done <<< "$NODE_FILES"
+              fi
+            fi
+
+            if [ -d "$DEST" ] && [ -n "$(ls -A "$DEST" 2>/dev/null || true)" ]; then
+              echo "found=true" >> $GITHUB_OUTPUT
+            else
+              echo "found=false" >> $GITHUB_OUTPUT
+            fi
           fi
 
       - name: Try download cached Orca build from previous successful run
