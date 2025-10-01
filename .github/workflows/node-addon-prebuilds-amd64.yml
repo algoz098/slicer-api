@@ -51,6 +51,17 @@ jobs:
           if_no_artifact_found: ignore
 
 
+      - name: Try fallback download legacy prebuild (linux)
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: node-addon-prebuilds-amd64.yml
+          workflow_conclusion: completed
+          name: prebuild-linux
+          path: .
+          search_artifacts: true
+          if_no_artifact_found: ignore
+
+
       - name: Materialize downloaded linux prebuild into expected location
         shell: bash
         run: |
