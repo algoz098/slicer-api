@@ -98,18 +98,18 @@ jobs:
           fi
 
       - name: Build OrcaSlicer + addon inside Docker (Ubuntu 22.04)
-        if: steps.check_prebuilt.outputs.found != 'true'
+        if: steps.check_prebuilt.outputs.found == 'false'
         run: bash "$GITHUB_WORKSPACE/scripts/ci/linux_build_inside_docker.sh" "$GITHUB_WORKSPACE"
         shell: bash
 
       - name: List staged prebuilds
-        if: steps.check_prebuilt.outputs.found != 'true'
+        if: steps.check_prebuilt.outputs.found == 'false'
         working-directory: OrcaSlicerAddon/bindings/node
         run: bash "$GITHUB_WORKSPACE/scripts/ci/list_staged_prebuilds.sh"
         shell: bash
 
       - name: Upload artifact (prebuild-linux-${{ steps.pkg.outputs.version }})
-        if: steps.check_prebuilt.outputs.found != 'true'
+        if: steps.check_prebuilt.outputs.found == 'false'
         uses: actions/upload-artifact@v4
         with:
           name: prebuild-linux-${{ steps.pkg.outputs.version }}
@@ -240,14 +240,14 @@ jobs:
           fi
 
       - name: Build OrcaSlicer (deps + slicer) with VS2022
-        if: steps.check_prebuilt.outputs.found != 'true' && steps.check_cache.outputs.found == 'false'
+        if: steps.check_prebuilt.outputs.found == 'false' && steps.check_cache.outputs.found == 'false'
         shell: cmd
         run: |
           cd OrcaSlicer
           call build_release_vs2022.bat
 
       - name: Upload cached Orca build for reuse
-        if: steps.check_prebuilt.outputs.found != 'true' && steps.check_cache.outputs.found == 'false'
+        if: steps.check_prebuilt.outputs.found == 'false' && steps.check_cache.outputs.found == 'false'
         uses: actions/upload-artifact@v4
         with:
           name: orca-build-windows
@@ -258,7 +258,7 @@ jobs:
           retention-days: 7
 
       - name: Build Node addon prebuilds (win32-x64)
-        if: steps.check_prebuilt.outputs.found != 'true'
+        if: steps.check_prebuilt.outputs.found == 'false'
         shell: bash
         env:
           ORCACLI_REQUIRE_LIBS: 'ON'
