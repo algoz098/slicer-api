@@ -35,6 +35,25 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
+      - name: Verify OrcaSlicer submodule
+        run: |
+          echo "Checking if OrcaSlicer directory exists..."
+          ls -la
+          if [ ! -d "OrcaSlicer" ]; then
+            echo "ERROR: OrcaSlicer directory not found after checkout"
+            echo "Attempting manual submodule init..."
+            git submodule update --init --recursive
+          fi
+          echo "Checking for version.inc..."
+          if [ -f "OrcaSlicer/version.inc" ]; then
+            echo "version.inc found:"
+            cat OrcaSlicer/version.inc
+          else
+            echo "ERROR: OrcaSlicer/version.inc not found"
+            ls -la OrcaSlicer/ || echo "OrcaSlicer directory is empty or doesn't exist"
+          fi
+        shell: bash
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 

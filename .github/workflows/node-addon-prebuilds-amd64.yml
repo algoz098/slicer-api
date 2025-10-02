@@ -395,7 +395,15 @@ jobs:
         shell: bash
         run: |
           DEST="OrcaSlicerAddon/bindings/node/prebuilds"
+          WIN_PREBUILD_DIR="$DEST/win32-x64"
           ROOT="prebuild-windows"
+
+          echo "[win-check] Looking for Windows prebuilds in $WIN_PREBUILD_DIR"
+          echo "[win-check] Current contents of $DEST:"
+          ls -la "$DEST" || echo "Directory does not exist"
+          echo "[win-check] Checking for win32-x64 subdirectory:"
+          ls -la "$WIN_PREBUILD_DIR" 2>/dev/null || echo "win32-x64 directory does not exist"
+
           # 0) Try to expose content by extracting any archives (works even if unzip is missing via tar)
           if [ -d "$ROOT" ]; then
             find "$ROOT" -maxdepth 3 -type f \( -iname "*.zip" -o -iname "*.tar" -o -iname "*.tar.gz" -o -iname "*.tgz" \) -print -exec sh -c '
@@ -408,43 +416,40 @@ jobs:
             tar -xf "$f" -C "$dest" 2>/dev/null || tar -xzf "$f" -C "$dest" 2>/dev/null || { command -v unzip >/dev/null 2>&1 && unzip -o "$f" -d "$dest" >/dev/null; } || true
           ' sh {} \; 2>/dev/null || true
 
-          # 1) If DEST already has content
-          if [ -d "$DEST" ] && [ -n "$(ls -A "$DEST" 2>/dev/null || true)" ]; then
+          # 1) Check if Windows-specific prebuild directory exists and has .node files
+          if [ -d "$WIN_PREBUILD_DIR" ] && [ -n "$(find "$WIN_PREBUILD_DIR" -maxdepth 1 -name "*.node" -print -quit 2>/dev/null)" ]; then
+            echo "[win-check] Found Windows prebuilds in $WIN_PREBUILD_DIR"
+            ls -la "$WIN_PREBUILD_DIR"
             echo "found=true" >> $GITHUB_OUTPUT
           else
-            # 2) Prefer directories named prebuilds (excluding DEST)
-            CANDS=$(find . -maxdepth 12 -type d -name prebuilds ! -path "./$DEST" -print 2>/dev/null || true)
+            echo "[win-check] No Windows prebuilds found in $WIN_PREBUILD_DIR"
+            # 2) Search for Windows-specific prebuilds in downloaded artifacts
+            # Look for win32-x64 directory or .node files that might be Windows prebuilds
+            CANDS=$(find . -maxdepth 12 -type d \( -name "win32-x64" -o -name "win32" \) ! -path "./$DEST/*" -print 2>/dev/null || true)
             SRC=""
             while IFS= read -r d; do
               [ -n "$d" ] || continue
-              if [ -n "$(ls -A "$d" 2>/dev/null || true)" ]; then SRC="$d"; break; fi
+              if [ -n "$(find "$d" -maxdepth 1 -name "*.node" -print -quit 2>/dev/null)" ]; then
+                SRC="$d"
+                echo "[win-check] Found Windows prebuild candidate: $SRC"
+                break
+              fi
             done <<< "$CANDS"
 
-            # 3) Fallback: any .node files; otherwise, if a prebuilds dir candidate exists, materialize it
-            if [ -z "$SRC" ]; then
-              NODE_FILES=$(find . -maxdepth 12 -type f -name "*.node" -print 2>/dev/null || true)
-              if [ -n "$NODE_FILES" ]; then
-                mkdir -p "$DEST"
-                while IFS= read -r f; do
-                  [ -n "$f" ] || continue
-                  case "$f" in
-                    *prebuilds/*)
-                      rel="${f#*prebuilds/}"; mkdir -p "$DEST/$(dirname "$rel")"; cp -f "$f" "$DEST/$rel" ;;
-                    *)
-                      cp -f "$f" "$DEST/" ;;
-                  esac
-                done <<< "$NODE_FILES"
-              fi
-            else
-              echo "[win-gate] Found prebuilds dir candidate: $SRC; materializing into $DEST"
-              mkdir -p "$DEST"
-              cp -R "$SRC"/* "$DEST"/ || true
+            # 3) If found a Windows prebuild directory, materialize it
+            if [ -n "$SRC" ]; then
+              echo "[win-gate] Materializing Windows prebuilds from $SRC to $WIN_PREBUILD_DIR"
+              mkdir -p "$WIN_PREBUILD_DIR"
+              cp -R "$SRC"/* "$WIN_PREBUILD_DIR"/ || true
             fi
 
-            # 4) Final decision
-            if [ -d "$DEST" ] && [ -n "$(ls -A "$DEST" 2>/dev/null || true)" ]; then
+            # 4) Final decision: check specifically for Windows prebuilds
+            if [ -d "$WIN_PREBUILD_DIR" ] && [ -n "$(find "$WIN_PREBUILD_DIR" -maxdepth 1 -name "*.node" -print -quit 2>/dev/null)" ]; then
+              echo "[win-check] Windows prebuilds confirmed in $WIN_PREBUILD_DIR"
+              ls -la "$WIN_PREBUILD_DIR"
               echo "found=true" >> $GITHUB_OUTPUT
             else
+              echo "[win-check] No Windows prebuilds found after search"
               echo "found=false" >> $GITHUB_OUTPUT
             fi
           fi
