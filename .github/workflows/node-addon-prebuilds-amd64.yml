@@ -232,6 +232,10 @@ jobs:
     name: Prebuild Windows (x64)
     runs-on: windows-2022
     timeout-minutes: 360
+    permissions:
+      contents: read
+      actions: read
+
     steps:
       - name: Checkout (with submodules + LFS)
         uses: actions/checkout@v4
@@ -257,11 +261,59 @@ jobs:
           VER=$(node -p "require('./OrcaSlicerAddon/bindings/node/package.json').version")
           echo "version=$VER" >> $GITHUB_OUTPUT
 
+
+      - name: Find repo-wide prebuild artifact by name+version (windows)
+        id: find_repo_prebuild_win
+        uses: actions/github-script@v7
+        env:
+          TARGET_NAME: prebuild-windows-${{ steps.pkg.outputs.version }}
+        with:
+          script: |
+            const target = process.env.TARGET_NAME;
+            const perPage = 100;
+            let page = 1;
+            let best = null;
+            while (true) {
+              const { data } = await github.rest.actions.listArtifactsForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                per_page: perPage,
+                page,
+              });
+              const artifacts = data.artifacts || [];
+              if (artifacts.length === 0) break;
+              for (const a of artifacts) {
+                if (!a.expired && a.name === target) {
+                  if (!best || new Date(a.created_at) > new Date(best.created_at)) best = a;
+                }
+              }
+              if (artifacts.length < perPage) break;
+              page++;
+            }
+            if (best && best.workflow_run && best.workflow_run.id) {
+              core.setOutput('run_id', String(best.workflow_run.id));
+              core.setOutput('artifact_name', best.name);
+            } else {
+              core.setOutput('run_id', '');
+              core.setOutput('artifact_name', '');
+            }
+
+      - name: Download repo-wide prebuild by name+version (windows)
+        if: steps.find_repo_prebuild_win.outputs.run_id != ''
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          run_id: ${{ steps.find_repo_prebuild_win.outputs.run_id }}
+          name: ${{ steps.find_repo_prebuild_win.outputs.artifact_name }}
+          path: prebuild-windows-${{ steps.pkg.outputs.version }}
+          if_no_artifact_found: ignore
+
       - name: Try download existing prebuild for same version (windows)
         uses: dawidd6/action-download-artifact@v6
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: node-addon-prebuilds-amd64.yml
-          workflow_conclusion: completed
+          workflow_conclusion: ""
           name: prebuild-windows-${{ steps.pkg.outputs.version }}
           path: .
           search_artifacts: true
@@ -271,8 +323,9 @@ jobs:
       - name: Try fallback download legacy prebuild (windows)
         uses: dawidd6/action-download-artifact@v6
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: node-addon-prebuilds-amd64.yml
-          workflow_conclusion: completed
+          workflow_conclusion: ""
           name: prebuild-windows
           path: .
           search_artifacts: true
@@ -400,8 +453,9 @@ jobs:
         if: steps.check_prebuilt.outputs.found == 'false'
         uses: dawidd6/action-download-artifact@v6
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: node-addon-prebuilds-amd64.yml
-          workflow_conclusion: completed
+          workflow_conclusion: ""
           name: orca-build-windows
           path: .
           search_artifacts: true
