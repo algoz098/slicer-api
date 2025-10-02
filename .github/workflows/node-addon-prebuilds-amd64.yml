@@ -449,6 +449,79 @@ jobs:
             fi
           fi
 
+      - name: Find repo-wide Orca CLI artifact (Windows)
+        if: steps.check_prebuilt.outputs.found == 'false'
+        id: find_repo_orcawin
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const perPage = 100;
+            let page = 1;
+            let best = null;
+            while (true) {
+              const { data } = await github.rest.actions.listArtifactsForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                per_page: perPage,
+                page,
+              });
+              const artifacts = data.artifacts || [];
+              if (artifacts.length === 0) break;
+              for (const a of artifacts) {
+                if (!a.expired && a.name === 'orcaslicer-cli-Windows') {
+                  if (!best || new Date(a.created_at) > new Date(best.created_at)) best = a;
+                }
+              }
+              if (artifacts.length < perPage) break;
+              page++;
+            }
+            core.setOutput('run_id', best && best.workflow_run ? String(best.workflow_run.id) : '');
+            core.setOutput('artifact_name', best ? best.name : '');
+
+      - name: Download repo-wide Orca CLI (Windows)
+        if: steps.check_prebuilt.outputs.found == 'false' && steps.find_repo_orcawin.outputs.run_id != ''
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          run_id: ${{ steps.find_repo_orcawin.outputs.run_id }}
+          name: ${{ steps.find_repo_orcawin.outputs.artifact_name }}
+          path: orca-cli-windows
+          if_no_artifact_found: ignore
+
+      - name: Materialize Orca CLI artifact into OrcaSlicer
+        if: steps.check_prebuilt.outputs.found == 'false' && steps.find_repo_orcawin.outputs.run_id != ''
+        shell: bash
+        run: |
+          echo "Contents of downloaded Orca CLI artifact (orcaslicer-cli-Windows):"
+          ls -laR orca-cli-windows || true
+          # Extract any nested archives first
+          find orca-cli-windows -maxdepth 4 -type f \( -iname "*.zip" -o -iname "*.tar" -o -iname "*.tar.gz" -o -iname "*.tgz" \) -print -exec sh -c '
+            f="$1"; dest="$(dirname "$1")"; echo "[cli] Extracting $f into $dest...";
+            tar -xf "$f" -C "$dest" 2>/dev/null || tar -xzf "$f" -C "$dest" 2>/dev/null || { command -v unzip >/dev/null 2>&1 && unzip -o "$f" -d "$dest" >/dev/null; } || true
+          ' sh {} \; 2>/dev/null || true
+
+          mkdir -p OrcaSlicer
+          if [ -d "orca-cli-windows/OrcaSlicer/build" ] || [ -d "orca-cli-windows/OrcaSlicer/deps/build" ]; then
+            cp -R orca-cli-windows/OrcaSlicer/* OrcaSlicer/
+          else
+            CAND=$(find orca-cli-windows -type d -name OrcaSlicer -print -quit 2>/dev/null || true)
+            if [ -n "$CAND" ]; then
+              cp -R "$CAND"/* OrcaSlicer/
+            else
+              BUILD_DIR=$(find orca-cli-windows -type d -name build -print -quit 2>/dev/null || true)
+              if [ -n "$BUILD_DIR" ]; then
+                PARENT="$(dirname "$BUILD_DIR")"
+                echo "[cli] Found build dir at $BUILD_DIR; copying parent $PARENT into OrcaSlicer/"
+                cp -R "$PARENT"/* OrcaSlicer/
+              else
+                echo "[cli] No structured build dirs found; copying all contents into OrcaSlicer/"
+                cp -R orca-cli-windows/* OrcaSlicer/ || true
+              fi
+            fi
+          fi
+          echo "Listing OrcaSlicer after CLI materialization:"
+          ls -laR OrcaSlicer || true
+
       - name: Try download cached Orca build from previous successful run
         if: steps.check_prebuilt.outputs.found == 'false'
         uses: dawidd6/action-download-artifact@v6
