@@ -266,7 +266,7 @@ jobs:
         id: find_repo_prebuild_win
         uses: actions/github-script@v7
         env:
-          TARGET_NAME: prebuild-windows
+          TARGET_NAME: prebuild-windows-${{ steps.pkg.outputs.version }}
         with:
           script: |
             const target = process.env.TARGET_NAME;
@@ -308,37 +308,38 @@ jobs:
           path: prebuild-windows-${{ steps.pkg.outputs.version }}
           if_no_artifact_found: ignore
 
-      - name: Try download existing prebuild (windows, unversioned)
+      - name: Try download existing prebuild (windows, versioned)
         uses: dawidd6/action-download-artifact@v6
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: node-addon-prebuilds-amd64.yml
           workflow_conclusion: ""
-          name: prebuild-windows
-          path: .
+          name: prebuild-windows-${{ steps.pkg.outputs.version }}
+          path: prebuild-windows-${{ steps.pkg.outputs.version }}
           search_artifacts: true
           if_no_artifact_found: ignore
 
 
-      - name: Try fallback download legacy prebuild (windows)
+      - name: Try fallback download legacy prebuild (windows, versioned)
         uses: dawidd6/action-download-artifact@v6
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: node-addon-prebuilds-amd64.yml
           workflow_conclusion: ""
-          name: prebuild-windows
-          path: .
+          name: prebuild-windows-${{ steps.pkg.outputs.version }}
+          path: prebuild-windows-${{ steps.pkg.outputs.version }}
           search_artifacts: true
           if_no_artifact_found: ignore
 
       - name: Materialize downloaded windows prebuild into expected location
         shell: bash
         run: |
-          ROOT="prebuild-windows"
+          ROOT="prebuild-windows-${{ steps.pkg.outputs.version }}"
           echo "Listing windows prebuild artifact roots..."
           ls -la "$ROOT" || true
           ls -la . || true
           PREBUILDS_DIR=""
+
           if [ -d "$ROOT" ]; then
             PREBUILDS_DIR=$(find "$ROOT" -type d -name prebuilds -print -quit 2>/dev/null || true)
           fi
@@ -396,7 +397,7 @@ jobs:
         run: |
           DEST="OrcaSlicerAddon/bindings/node/prebuilds"
           WIN_PREBUILD_DIR="$DEST/win32-x64"
-          ROOT="prebuild-windows"
+          ROOT="prebuild-windows-${{ steps.pkg.outputs.version }}"
 
           echo "[win-check] Looking for Windows prebuilds in $WIN_PREBUILD_DIR"
           echo "[win-check] Current contents of $DEST:"
@@ -535,7 +536,7 @@ jobs:
           workflow: node-addon-prebuilds-amd64.yml
           workflow_conclusion: ""
           name: orca-build-windows
-          path: .
+          path: orca-build-windows
           search_artifacts: true
           if_no_artifact_found: ignore
 
@@ -545,28 +546,40 @@ jobs:
         run: |
           echo "Contents of downloaded Windows cache artifact (orca-build-windows):"
           ls -laR orca-build-windows || true
-          # Try to expose content by extracting any nested archives first (zip/tar/tgz)
-          find orca-build-windows -maxdepth 4 -type f \( -iname "*.zip" -o -iname "*.tar" -o -iname "*.tar.gz" -o -iname "*.tgz" \) -print -exec sh -c '
-            f="$1"; dest="$(dirname "$1")"; echo "[cache] Extracting $f into $dest...";
-            tar -xf "$f" -C "$dest" 2>/dev/null || tar -xzf "$f" -C "$dest" 2>/dev/null || { command -v unzip >/dev/null 2>&1 && unzip -o "$f" -d "$dest" >/dev/null; } || true
-          ' sh {} \; 2>/dev/null || true
 
-          mkdir -p OrcaSlicer
+          # The artifact should contain OrcaSlicer/build/** and OrcaSlicer/deps/build/**
+          # Copy directly if the structure is correct
           if [ -d "orca-build-windows/OrcaSlicer/build" ] || [ -d "orca-build-windows/OrcaSlicer/deps/build" ]; then
-            cp -R orca-build-windows/OrcaSlicer/* OrcaSlicer/
+            echo "Found correct structure in artifact, copying..."
+            mkdir -p OrcaSlicer
+            cp -R orca-build-windows/OrcaSlicer/* OrcaSlicer/ 2>/dev/null || true
           else
-            CAND=$(find orca-build-windows -type d -name OrcaSlicer -print -quit 2>/dev/null || true)
-            if [ -n "$CAND" ]; then
-              cp -R "$CAND"/* OrcaSlicer/
+            # Try to find the OrcaSlicer directory anywhere in the artifact
+            ORCA_DIR=$(find orca-build-windows -type d -name OrcaSlicer -print -quit 2>/dev/null || true)
+            if [ -n "$ORCA_DIR" ]; then
+              echo "Found OrcaSlicer directory at: $ORCA_DIR"
+              mkdir -p OrcaSlicer
+              cp -R "$ORCA_DIR"/* OrcaSlicer/ 2>/dev/null || true
             else
-              BUILD_DIR=$(find orca-build-windows -type d -name build -print -quit 2>/dev/null || true)
+              echo "No OrcaSlicer directory found in artifact, trying to find build directories..."
+              # Look for build and deps/build directories directly
+              BUILD_DIR=$(find orca-build-windows -type d -path "*/build" -not -path "*/deps/build" -print -quit 2>/dev/null || true)
+              DEPS_BUILD_DIR=$(find orca-build-windows -type d -path "*/deps/build" -print -quit 2>/dev/null || true)
+
+              mkdir -p OrcaSlicer
               if [ -n "$BUILD_DIR" ]; then
-                PARENT="$(dirname "$BUILD_DIR")"
-                echo "[cache] Found build dir at $BUILD_DIR; copying parent $PARENT into OrcaSlicer/"
-                cp -R "$PARENT"/* OrcaSlicer/
+                echo "Found build directory at: $BUILD_DIR"
+                mkdir -p OrcaSlicer/build
+                cp -R "$BUILD_DIR"/* OrcaSlicer/build/ 2>/dev/null || true
+              fi
+              if [ -n "$DEPS_BUILD_DIR" ]; then
+                echo "Found deps/build directory at: $DEPS_BUILD_DIR"
+                mkdir -p OrcaSlicer/deps/build
+                cp -R "$DEPS_BUILD_DIR"/* OrcaSlicer/deps/build/ 2>/dev/null || true
               fi
             fi
           fi
+
           echo "Listing OrcaSlicer after materialization:"
           ls -laR OrcaSlicer || true
 
@@ -575,31 +588,43 @@ jobs:
         id: check_cache
         shell: bash
         run: |
-          # Consider cache present if there is any non-empty 'build' directory under OrcaSlicer
-          BUILD_FOUND=$(find OrcaSlicer -maxdepth 4 -type d -name build -print -quit 2>/dev/null || true)
-          if [ -n "$BUILD_FOUND" ] && [ -n "$(ls -A "$BUILD_FOUND" 2>/dev/null || true)" ]; then
-            echo "Cached Orca build directory structure present at: $BUILD_FOUND"
-            echo "found=true" >> $GITHUB_OUTPUT
-          elif [ -d "OrcaSlicer/deps/build" ] && [ -n "$(ls -A "OrcaSlicer/deps/build" 2>/dev/null || true)" ]; then
-            echo "Cached Orca deps build present."
+          # Validate that required libraries actually exist before considering cache valid
+          LIBSLIC3R_FOUND=false
+          SEMVER_FOUND=false
+
+          # Check for libslic3r.lib in Release or RelWithDebInfo
+          if [ -f "OrcaSlicer/build/src/libslic3r/Release/libslic3r.lib" ] || \
+             [ -f "OrcaSlicer/build/src/libslic3r/RelWithDebInfo/libslic3r.lib" ]; then
+            echo "Found libslic3r.lib"
+            LIBSLIC3R_FOUND=true
+          fi
+
+          # Check for semver.lib in Release or RelWithDebInfo
+          if [ -f "OrcaSlicer/build/lib/Release/semver.lib" ] || \
+             [ -f "OrcaSlicer/build/lib/RelWithDebInfo/semver.lib" ]; then
+            echo "Found semver.lib"
+            SEMVER_FOUND=true
+          fi
+
+          # Check if deps are built
+          DEPS_FOUND=false
+          if [ -d "OrcaSlicer/deps/build/OrcaSlicer_dep" ] && [ -n "$(ls -A "OrcaSlicer/deps/build/OrcaSlicer_dep" 2>/dev/null || true)" ]; then
+            echo "Found OrcaSlicer_dep directory"
+            DEPS_FOUND=true
+          fi
+
+          # Cache is valid only if we have both required libs AND deps
+          if [ "$LIBSLIC3R_FOUND" = true ] && [ "$SEMVER_FOUND" = true ] && [ "$DEPS_FOUND" = true ]; then
+            echo "Valid cached Orca build found with all required libraries"
             echo "found=true" >> $GITHUB_OUTPUT
           else
-            # Additional heuristics: VS multi-config dirs or any binary outputs
-            CONFIG_DIR=$(find OrcaSlicer -maxdepth 6 -type d \( -name RelWithDebInfo -o -name Release -o -name Debug -o -name MinSizeRel \) -print -quit 2>/dev/null || true)
-            if [ -n "$CONFIG_DIR" ]; then
-              echo "Found VS config dir under OrcaSlicer: $CONFIG_DIR"
-              echo "found=true" >> $GITHUB_OUTPUT
-            else
-              ANY_BIN=$(find OrcaSlicer -maxdepth 8 -type f \( -iname "*.lib" -o -iname "*.dll" -o -iname "*.pdb" \) -print -quit 2>/dev/null || true)
-              if [ -n "$ANY_BIN" ]; then
-                echo "Found binary outputs under OrcaSlicer (e.g., .lib/.dll/.pdb): $ANY_BIN"
-                echo "found=true" >> $GITHUB_OUTPUT
-              else
-                echo "No cached Orca build detected. Contents of OrcaSlicer (if any):"
-                ls -laR OrcaSlicer || true
-                echo "found=false" >> $GITHUB_OUTPUT
-              fi
-            fi
+            echo "Cached build incomplete or missing required libraries:"
+            echo "  libslic3r: $LIBSLIC3R_FOUND"
+            echo "  semver: $SEMVER_FOUND"
+            echo "  deps: $DEPS_FOUND"
+            echo "Contents of OrcaSlicer (if any):"
+            ls -laR OrcaSlicer || true
+            echo "found=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Build OrcaSlicer dependencies with CMake
@@ -609,10 +634,12 @@ jobs:
           cd OrcaSlicer/deps
           mkdir -p build
           cd build
-          cmake .. -G "Visual Studio 17 2022" -A x64
-          cmake --build . --config Release --parallel 2
+          cmake .. -G "Visual Studio 17 2022" -A x64 -DDESTDIR="${GITHUB_WORKSPACE}/OrcaSlicer/deps/build/OrcaSlicer_dep" -DCMAKE_BUILD_TYPE=Release
+          cmake --build . --config Release --parallel 2 --target deps
           echo "Dependencies built. Listing deps/build:"
           ls -la || dir
+          echo "Listing OrcaSlicer_dep:"
+          ls -laR OrcaSlicer_dep || dir OrcaSlicer_dep /s
 
       - name: Build OrcaSlicer with CMake
         if: steps.check_prebuilt.outputs.found == 'false' && steps.check_cache.outputs.found == 'false'
@@ -621,7 +648,7 @@ jobs:
           cd OrcaSlicer
           mkdir -p build
           cd build
-          cmake .. -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release
+          cmake .. -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="${GITHUB_WORKSPACE}/OrcaSlicer/deps/build/OrcaSlicer_dep/usr/local"
           cmake --build . --config Release --parallel 2 --target libslic3r libslic3r_cgal semver
           echo "OrcaSlicer libs built. Listing build/src/libslic3r:"
           ls -laR src/libslic3r || dir src\libslic3r /s
@@ -658,7 +685,7 @@ jobs:
         if: steps.check_prebuilt.outputs.found == 'false'
         uses: actions/upload-artifact@v4
         with:
-          name: prebuild-windows
+          name: prebuild-windows-${{ steps.pkg.outputs.version }}
           path: |
             OrcaSlicerAddon/bindings/node/prebuilds/**
           if-no-files-found: error
