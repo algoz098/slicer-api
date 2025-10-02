@@ -443,8 +443,8 @@ jobs:
         id: check_cache
         shell: bash
         run: |
-          # Consider cache present if there is any non-empty 'build' directory under OrcaSlicer (any depth up to 3)
-          BUILD_FOUND=$(find OrcaSlicer -type d -name build -maxdepth 4 -print -quit 2>/dev/null || true)
+          # Consider cache present if there is any non-empty 'build' directory under OrcaSlicer
+          BUILD_FOUND=$(find OrcaSlicer -maxdepth 4 -type d -name build -print -quit 2>/dev/null || true)
           if [ -n "$BUILD_FOUND" ] && [ -n "$(ls -A "$BUILD_FOUND" 2>/dev/null || true)" ]; then
             echo "Cached Orca build directory structure present at: $BUILD_FOUND"
             echo "found=true" >> $GITHUB_OUTPUT
@@ -452,9 +452,22 @@ jobs:
             echo "Cached Orca deps build present."
             echo "found=true" >> $GITHUB_OUTPUT
           else
-            echo "No cached Orca build detected. Contents of OrcaSlicer (if any):"
-            ls -laR OrcaSlicer || true
-            echo "found=false" >> $GITHUB_OUTPUT
+            # Additional heuristics: VS multi-config dirs or any binary outputs
+            CONFIG_DIR=$(find OrcaSlicer -maxdepth 6 -type d \( -name RelWithDebInfo -o -name Release -o -name Debug -o -name MinSizeRel \) -print -quit 2>/dev/null || true)
+            if [ -n "$CONFIG_DIR" ]; then
+              echo "Found VS config dir under OrcaSlicer: $CONFIG_DIR"
+              echo "found=true" >> $GITHUB_OUTPUT
+            else
+              ANY_BIN=$(find OrcaSlicer -maxdepth 8 -type f \( -iname "*.lib" -o -iname "*.dll" -o -iname "*.pdb" \) -print -quit 2>/dev/null || true)
+              if [ -n "$ANY_BIN" ]; then
+                echo "Found binary outputs under OrcaSlicer (e.g., .lib/.dll/.pdb): $ANY_BIN"
+                echo "found=true" >> $GITHUB_OUTPUT
+              else
+                echo "No cached Orca build detected. Contents of OrcaSlicer (if any):"
+                ls -laR OrcaSlicer || true
+                echo "found=false" >> $GITHUB_OUTPUT
+              fi
+            fi
           fi
 
       - name: Build OrcaSlicer (deps + slicer) with VS2022
