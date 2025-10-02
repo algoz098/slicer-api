@@ -634,8 +634,8 @@ jobs:
           cd OrcaSlicer/deps
           mkdir -p build
           cd build
-          cmake .. -G "Visual Studio 17 2022" -A x64 -DDESTDIR="${GITHUB_WORKSPACE}/OrcaSlicer/deps/build/OrcaSlicer_dep" -DCMAKE_BUILD_TYPE=Release
-          cmake --build . --config Release --parallel 2 --target deps
+          cmake .. -G "Visual Studio 17 2022" -A x64 -DDESTDIR="${GITHUB_WORKSPACE}/OrcaSlicer/deps/build/OrcaSlicer_dep" -DCMAKE_BUILD_TYPE=Release -DDEP_DEBUG=OFF -DORCA_INCLUDE_DEBUG_INFO=OFF
+          cmake --build . --config Release --target deps -- -m
           echo "Dependencies built. Listing deps/build:"
           ls -la || dir
           echo "Listing OrcaSlicer_dep:"
@@ -648,8 +648,8 @@ jobs:
           cd OrcaSlicer
           mkdir -p build
           cd build
-          cmake .. -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="${GITHUB_WORKSPACE}/OrcaSlicer/deps/build/OrcaSlicer_dep/usr/local"
-          cmake --build . --config Release --parallel 2 --target libslic3r libslic3r_cgal semver
+          cmake .. -G "Visual Studio 17 2022" -A x64 -DBBL_RELEASE_TO_PUBLIC=1 -DORCA_TOOLS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="${GITHUB_WORKSPACE}/OrcaSlicer/deps/build/OrcaSlicer_dep/usr/local"
+          cmake --build . --config Release --target libslic3r libslic3r_cgal semver -- -m
           echo "OrcaSlicer libs built. Listing build/src/libslic3r:"
           ls -laR src/libslic3r || dir src\libslic3r /s
 
