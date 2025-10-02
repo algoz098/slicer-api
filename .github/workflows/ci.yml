@@ -34,16 +34,36 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Debug git submodule status
+        run: |
+          echo "Git submodule status:"
+          git submodule status || true
+          echo ""
+          echo "Contents of .gitmodules:"
+          cat .gitmodules || true
+          echo ""
+          echo "Current directory contents:"
+          ls -la
+        shell: bash
 
       - name: Verify OrcaSlicer submodule
         run: |
           echo "Checking if OrcaSlicer directory exists..."
           ls -la
-          if [ ! -d "OrcaSlicer" ]; then
-            echo "ERROR: OrcaSlicer directory not found after checkout"
+          if [ ! -d "OrcaSlicer" ] || [ -z "$(ls -A OrcaSlicer 2>/dev/null)" ]; then
+            echo "ERROR: OrcaSlicer directory not found or empty after checkout"
             echo "Attempting manual submodule init..."
             git submodule update --init --recursive
+
+            # Verify again after manual init
+            if [ ! -d "OrcaSlicer" ] || [ -z "$(ls -A OrcaSlicer 2>/dev/null)" ]; then
+              echo "FATAL: Failed to initialize OrcaSlicer submodule"
+              exit 1
+            fi
           fi
+
           echo "Checking for version.inc..."
           if [ -f "OrcaSlicer/version.inc" ]; then
             echo "version.inc found:"
@@ -51,6 +71,7 @@ jobs:
           else
             echo "ERROR: OrcaSlicer/version.inc not found"
             ls -la OrcaSlicer/ || echo "OrcaSlicer directory is empty or doesn't exist"
+            exit 1
           fi
         shell: bash
 
