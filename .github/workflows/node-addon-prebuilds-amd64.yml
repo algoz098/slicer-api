@@ -413,17 +413,26 @@ jobs:
         run: |
           echo "Contents of downloaded Windows cache artifact (orca-build-windows):"
           ls -laR orca-build-windows || true
-          if [ -d "orca-build-windows/OrcaSlicer/build" ]; then
-            mkdir -p OrcaSlicer
+          # Try to expose content by extracting any nested archives first (zip/tar/tgz)
+          find orca-build-windows -maxdepth 4 -type f \( -iname "*.zip" -o -iname "*.tar" -o -iname "*.tar.gz" -o -iname "*.tgz" \) -print -exec sh -c '
+            f="$1"; dest="$(dirname "$1")"; echo "[cache] Extracting $f into $dest...";
+            tar -xf "$f" -C "$dest" 2>/dev/null || tar -xzf "$f" -C "$dest" 2>/dev/null || { command -v unzip >/dev/null 2>&1 && unzip -o "$f" -d "$dest" >/dev/null; } || true
+          ' sh {} \; 2>/dev/null || true
+
+          mkdir -p OrcaSlicer
+          if [ -d "orca-build-windows/OrcaSlicer/build" ] || [ -d "orca-build-windows/OrcaSlicer/deps/build" ]; then
             cp -R orca-build-windows/OrcaSlicer/* OrcaSlicer/
-          elif [ -d "orca-build-windows/build" ]; then
-            mkdir -p OrcaSlicer
-            cp -R orca-build-windows/* OrcaSlicer/
           else
             CAND=$(find orca-build-windows -type d -name OrcaSlicer -print -quit 2>/dev/null || true)
             if [ -n "$CAND" ]; then
-              mkdir -p OrcaSlicer
               cp -R "$CAND"/* OrcaSlicer/
+            else
+              BUILD_DIR=$(find orca-build-windows -type d -name build -print -quit 2>/dev/null || true)
+              if [ -n "$BUILD_DIR" ]; then
+                PARENT="$(dirname "$BUILD_DIR")"
+                echo "[cache] Found build dir at $BUILD_DIR; copying parent $PARENT into OrcaSlicer/"
+                cp -R "$PARENT"/* OrcaSlicer/
+              fi
             fi
           fi
           echo "Listing OrcaSlicer after materialization:"
@@ -434,9 +443,13 @@ jobs:
         id: check_cache
         shell: bash
         run: |
-          if { [ -d "OrcaSlicer/build" ] && [ -n "$(ls -A "OrcaSlicer/build" 2>/dev/null || true)" ]; } || \
-             { [ -d "OrcaSlicer/deps/build" ] && [ -n "$(ls -A "OrcaSlicer/deps/build" 2>/dev/null || true)" ]; }; then
-            echo "Cached Orca build directory structure present."
+          # Consider cache present if there is any non-empty 'build' directory under OrcaSlicer (any depth up to 3)
+          BUILD_FOUND=$(find OrcaSlicer -type d -name build -maxdepth 4 -print -quit 2>/dev/null || true)
+          if [ -n "$BUILD_FOUND" ] && [ -n "$(ls -A "$BUILD_FOUND" 2>/dev/null || true)" ]; then
+            echo "Cached Orca build directory structure present at: $BUILD_FOUND"
+            echo "found=true" >> $GITHUB_OUTPUT
+          elif [ -d "OrcaSlicer/deps/build" ] && [ -n "$(ls -A "OrcaSlicer/deps/build" 2>/dev/null || true)" ]; then
+            echo "Cached Orca deps build present."
             echo "found=true" >> $GITHUB_OUTPUT
           else
             echo "No cached Orca build detected. Contents of OrcaSlicer (if any):"
