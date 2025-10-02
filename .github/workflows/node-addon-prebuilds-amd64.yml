@@ -46,12 +46,12 @@ jobs:
           VER=$(node -p "require('./OrcaSlicerAddon/bindings/node/package.json').version")
           echo "version=$VER" >> $GITHUB_OUTPUT
 
-      - name: Try download existing prebuild for same version (linux)
+      - name: Try download existing prebuild (linux, unversioned)
         uses: dawidd6/action-download-artifact@v6
         with:
           workflow: node-addon-prebuilds-amd64.yml
           workflow_conclusion: completed
-          name: prebuild-linux-${{ steps.pkg.outputs.version }}
+          name: prebuild-linux
           path: .
           search_artifacts: true
           if_no_artifact_found: ignore
@@ -71,7 +71,7 @@ jobs:
       - name: Materialize downloaded linux prebuild into expected location
         shell: bash
         run: |
-          ROOT="prebuild-linux-${{ steps.pkg.outputs.version }}"
+          ROOT="prebuild-linux"
           echo "Listing linux prebuild artifact roots..."
           ls -la "$ROOT" || true
           ls -la . || true
@@ -142,7 +142,7 @@ jobs:
         shell: bash
         run: |
           DEST="OrcaSlicerAddon/bindings/node/prebuilds"
-          ROOT="prebuild-linux-${{ steps.pkg.outputs.version }}"
+          ROOT="prebuild-linux"
           echo "[gate] DEST=$DEST ROOT=$ROOT"
           ls -la "$DEST" 2>/dev/null || true
 
@@ -219,11 +219,11 @@ jobs:
         run: bash "$GITHUB_WORKSPACE/scripts/ci/list_staged_prebuilds.sh"
         shell: bash
 
-      - name: Upload artifact (prebuild-linux-${{ steps.pkg.outputs.version }})
+      - name: Upload artifact (prebuild-linux)
         if: steps.check_prebuilt.outputs.found == 'false'
         uses: actions/upload-artifact@v4
         with:
-          name: prebuild-linux-${{ steps.pkg.outputs.version }}
+          name: prebuild-linux
           path: |
             OrcaSlicerAddon/bindings/node/prebuilds/**
           if-no-files-found: error
@@ -266,7 +266,7 @@ jobs:
         id: find_repo_prebuild_win
         uses: actions/github-script@v7
         env:
-          TARGET_NAME: prebuild-windows-${{ steps.pkg.outputs.version }}
+          TARGET_NAME: prebuild-windows
         with:
           script: |
             const target = process.env.TARGET_NAME;
@@ -308,13 +308,13 @@ jobs:
           path: prebuild-windows-${{ steps.pkg.outputs.version }}
           if_no_artifact_found: ignore
 
-      - name: Try download existing prebuild for same version (windows)
+      - name: Try download existing prebuild (windows, unversioned)
         uses: dawidd6/action-download-artifact@v6
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: node-addon-prebuilds-amd64.yml
           workflow_conclusion: ""
-          name: prebuild-windows-${{ steps.pkg.outputs.version }}
+          name: prebuild-windows
           path: .
           search_artifacts: true
           if_no_artifact_found: ignore
@@ -334,7 +334,7 @@ jobs:
       - name: Materialize downloaded windows prebuild into expected location
         shell: bash
         run: |
-          ROOT="prebuild-windows-${{ steps.pkg.outputs.version }}"
+          ROOT="prebuild-windows"
           echo "Listing windows prebuild artifact roots..."
           ls -la "$ROOT" || true
           ls -la . || true
@@ -395,7 +395,7 @@ jobs:
         shell: bash
         run: |
           DEST="OrcaSlicerAddon/bindings/node/prebuilds"
-          ROOT="prebuild-windows-${{ steps.pkg.outputs.version }}"
+          ROOT="prebuild-windows"
           # 0) Try to expose content by extracting any archives (works even if unzip is missing via tar)
           if [ -d "$ROOT" ]; then
             find "$ROOT" -maxdepth 3 -type f \( -iname "*.zip" -o -iname "*.tar" -o -iname "*.tar.gz" -o -iname "*.tgz" \) -print -exec sh -c '
@@ -597,12 +597,29 @@ jobs:
             fi
           fi
 
-      - name: Build OrcaSlicer (deps + slicer) with VS2022
+      - name: Build OrcaSlicer dependencies with CMake
         if: steps.check_prebuilt.outputs.found == 'false' && steps.check_cache.outputs.found == 'false'
-        shell: cmd
+        shell: bash
+        run: |
+          cd OrcaSlicer/deps
+          mkdir -p build
+          cd build
+          cmake .. -G "Visual Studio 17 2022" -A x64
+          cmake --build . --config Release --parallel 2
+          echo "Dependencies built. Listing deps/build:"
+          ls -la || dir
+
+      - name: Build OrcaSlicer with CMake
+        if: steps.check_prebuilt.outputs.found == 'false' && steps.check_cache.outputs.found == 'false'
+        shell: bash
         run: |
           cd OrcaSlicer
-          call build_release_vs2022.bat
+          mkdir -p build
+          cd build
+          cmake .. -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release
+          cmake --build . --config Release --parallel 2 --target libslic3r libslic3r_cgal semver
+          echo "OrcaSlicer libs built. Listing build/src/libslic3r:"
+          ls -laR src/libslic3r || dir src\libslic3r /s
 
       - name: Upload cached Orca build for reuse
         if: steps.check_prebuilt.outputs.found == 'false' && steps.check_cache.outputs.found == 'false'
@@ -632,11 +649,11 @@ jobs:
         shell: bash
         run: bash "$GITHUB_WORKSPACE/scripts/ci/list_staged_prebuilds.sh"
 
-      - name: Upload artifact (prebuild-windows-${{ steps.pkg.outputs.version }})
+      - name: Upload artifact (prebuild-windows)
         if: steps.check_prebuilt.outputs.found == 'false'
         uses: actions/upload-artifact@v4
         with:
-          name: prebuild-windows-${{ steps.pkg.outputs.version }}
+          name: prebuild-windows
           path: |
             OrcaSlicerAddon/bindings/node/prebuilds/**
           if-no-files-found: error

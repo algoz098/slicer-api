@@ -44,6 +44,21 @@ for (const p of candidatePaths) {
     log("failed to load", p);
   }
 }
+
+// Check if prebuilt exists but for different platform
+const prebuildsDir = path.join(__dirname, "prebuilds");
+if (fs.existsSync(prebuildsDir)) {
+  const available = fs.readdirSync(prebuildsDir).filter(d => {
+    const stat = fs.statSync(path.join(prebuildsDir, d));
+    return stat.isDirectory();
+  });
+  if (available.length > 0 && !available.includes(`${process.platform}-${process.arch}`)) {
+    const msg = `Prebuilt binaries available for: ${available.join(", ")} but not for current platform: ${process.platform}-${process.arch}`;
+    log(msg);
+    throw new Error(msg);
+  }
+}
+
 // Fall back to mod1 error for clearer message in dev
 log("falling back to require(mod1)", mod1);
 module.exports = wrapAsMiddleware(require(mod1));

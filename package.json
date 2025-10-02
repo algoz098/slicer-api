@@ -1,39 +1,10 @@
 {
-  "name": "orcaslicer-addon",
-  "version": "0.1.0",
+  "name": "orcaaddon-use-test",
+  "version": "1.0.0",
+  "description": "Test project to validate orcaslicer-addon package installation",
   "private": true,
-  "description": "Node.js N-API addon for OrcaSlicer engine; repository root package re-exports the addon.",
-  "main": "OrcaSlicerAddon/bindings/node/index.js",
-  "types": "OrcaSlicerAddon/bindings/node/types/index.d.ts",
+  "type": "commonjs",
   "scripts": {
-    "postinstall": "npx cmake-js build --directory OrcaSlicerAddon/bindings/node",
-    "build": "npm run build --prefix OrcaSlicerAddon/bindings/node",
-    "configure": "npm run configure --prefix OrcaSlicerAddon/bindings/node",
-    "test": "npm test --prefix OrcaSlicerAddon/bindings/node"
-  },
-  "devDependencies": {
-    "cmake-js": "^7.3.1"
-  },
-  "engines": {
-    "node": ">=16"
-  },
-  "files": [
-    "OrcaSlicerAddon/bindings/node/**/*",
-    "OrcaSlicer/resources/**/*",
-    "OrcaSlicerAddon/src/**/*",
-    "OrcaSlicerAddon/CMakeLists.txt",
-    "OrcaSlicerAddon/build/**/*",
-    "OrcaSlicerAddon/examples/**/*",
-    "example_files/**/*"
-  ],
-  "keywords": [
-    "orcaslicer",
-    "slicing",
-    "3d-printing",
-    "n-api",
-    "native-addon"
-  ],
-  "dependencies": {
-    "yauzl": "^3.2.0"
+    "test": "node test.js"
   }
 }
