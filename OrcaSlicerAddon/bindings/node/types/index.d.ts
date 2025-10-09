@@ -32,6 +32,8 @@ export interface SliceParams {
   transferFilamentCustomizations?: boolean;
   transferProcessCustomizations?: boolean;
   transferProjectOverrides?: boolean;
+  // Behavior flags
+  center?: boolean; // center object(s) on bed before slicing (default false)
   // Preferred: options (values coerced to string internally)
   options?: Record<string, string | number | boolean>;
   // Back-compat: custom (string-only)
@@ -47,7 +49,7 @@ export interface VendorBundle {
 export function initialize(opts?: InitializeOptions): void;
 export function version(): string;
 export function getModelInfo(file: string): Promise<ModelInfo>;
-export function slice(params: SliceParams): Promise<{ output: string; usedOptions?: string[]; ignoredOptions?: string[] }>;
+export function slice(params: SliceParams): Promise<{ output: string; usedOptions?: string[]; ignoredOptions?: string[]; estimatedTimeSec?: number; filamentUsedGrams?: number }>;
 
 // Lazy loading controls (synchronous)
 export function loadVendor(vendorId: string): void;
@@ -55,3 +57,6 @@ export function loadVendorBundle(bundle: VendorBundle): void;
 export function loadPrinterProfile(name: string): void;
 export function loadFilamentProfile(name: string): void;
 export function loadProcessProfile(name: string): void;
+
+// Klipper/Moonraker integration
+export { KlipperClient, SliceAndSend } from './klipper';

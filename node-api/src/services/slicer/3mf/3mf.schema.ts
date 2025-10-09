@@ -17,7 +17,10 @@ export const slicer3MfSchema = Type.Object(
     size: Type.Optional(Type.Number({ minimum: 0 })),
     dataBase64: Type.Optional(Type.String()),
     usedOptions: Type.Optional(Type.Array(Type.String())),
-    ignoredOptions: Type.Optional(Type.Array(Type.String()))
+    ignoredOptions: Type.Optional(Type.Array(Type.String())),
+    // Novos campos: tempo estimado (segundos) e filamento usado (gramas)
+    estimatedTimeSec: Type.Optional(Type.Number({ minimum: 0 })),
+    filamentUsedGrams: Type.Optional(Type.Number({ minimum: 0 }))
   },
   { $id: 'Slicer3Mf', additionalProperties: false }
 )
@@ -40,6 +43,11 @@ export const slicer3MfDataSchema = Type.Object(
     printerProfile: Type.Optional(Type.String()),
     filamentProfile: Type.Optional(Type.String()),
     processProfile: Type.Optional(Type.String()),
+    // Novo: centralizar e habilitar suporte (booleanos, default false quando omitido)
+    center: Type.Optional(Type.Boolean()),
+    support: Type.Optional(Type.Boolean()),
+    // Opcional: tipo de bed/placa (ex: "High Temp Plate", "Cool Plate", "Textured PEI Plate")
+    bedType: Type.Optional(Type.String()),
     // Controle de transferência de customizações do 3MF (default true se omitido)
     transferPrinterCustomizations: Type.Optional(Type.Boolean()),
     transferFilamentCustomizations: Type.Optional(Type.Boolean()),

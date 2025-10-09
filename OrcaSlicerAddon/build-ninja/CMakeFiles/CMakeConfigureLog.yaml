@@ -20,9 +20,6 @@ events:
     names:
       - "uname"
     candidate_directories:
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/bin/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/sbin/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
       - "/usr/local/bin/"
       - "/System/Cryptexes/App/usr/bin/"
       - "/usr/bin/"
@@ -37,15 +34,10 @@ events:
       - "/opt/homebrew/bin/"
       - "/opt/homebrew/sbin/"
     searched_directories:
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/bin/uname"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/sbin/uname"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/uname"
       - "/usr/local/bin/uname"
       - "/System/Cryptexes/App/usr/bin/uname"
     found: "/usr/bin/uname"
     search_context:
-      CMAKE_PREFIX_PATH:
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local"
       ENV{PATH}:
         - "/usr/local/bin"
         - "/System/Cryptexes/App/usr/bin"
@@ -88,9 +80,6 @@ events:
       - "ninja"
       - "samu"
     candidate_directories:
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/bin/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/sbin/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
       - "/usr/local/bin/"
       - "/System/Cryptexes/App/usr/bin/"
       - "/usr/bin/"
@@ -105,15 +94,6 @@ events:
       - "/opt/homebrew/bin/"
       - "/opt/homebrew/sbin/"
     searched_directories:
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/bin/ninja-build"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/bin/ninja"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/bin/samu"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/sbin/ninja-build"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/sbin/ninja"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/sbin/samu"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/ninja-build"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/ninja"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/samu"
       - "/usr/local/bin/ninja-build"
       - "/usr/local/bin/ninja"
       - "/usr/local/bin/samu"
@@ -150,8 +130,6 @@ events:
       - "/opt/homebrew/bin/ninja-build"
     found: "/opt/homebrew/bin/ninja"
     search_context:
-      CMAKE_PREFIX_PATH:
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local"
       ENV{PATH}:
         - "/usr/local/bin"
         - "/System/Cryptexes/App/usr/bin"
@@ -192,9 +170,6 @@ events:
       - "icx"
       - "clang++"
     candidate_directories:
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/bin/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/sbin/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
       - "/usr/local/bin/"
       - "/System/Cryptexes/App/usr/bin/"
       - "/usr/bin/"
@@ -209,15 +184,10 @@ events:
       - "/opt/homebrew/bin/"
       - "/opt/homebrew/sbin/"
     searched_directories:
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/bin/c++"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/sbin/c++"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/c++"
       - "/usr/local/bin/c++"
       - "/System/Cryptexes/App/usr/bin/c++"
     found: "/usr/bin/c++"
     search_context:
-      CMAKE_PREFIX_PATH:
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local"
       ENV{PATH}:
         - "/usr/local/bin"
         - "/System/Cryptexes/App/usr/bin"
@@ -258,8 +228,6 @@ events:
       - "/opt/homebrew/share/cmake/Modules/"
     found: "/opt/homebrew/share/cmake/Modules/CMakeCXXCompilerId.cpp.in"
     search_context:
-      CMAKE_PREFIX_PATH:
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local"
       ENV{PATH}:
         - "/usr/local/bin"
         - "/System/Cryptexes/App/usr/bin"
@@ -294,7 +262,7 @@ events:
       Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "a.out"
       
       The CXX compiler identification is AppleClang, found in:
-        /Users/maosone/Downloads/orcaslicer-addon/OrcaSlicerCli/build-ninja/CMakeFiles/4.1.1/CompilerIdCXX/a.out
+        /Users/maosone/Documents/slicer-api/OrcaSlicerAddon/build-ninja/CMakeFiles/4.1.1/CompilerIdCXX/a.out
       
   -
     kind: "message-v1"
@@ -372,8 +340,6 @@ events:
       - "/opt/homebrew/sbin/"
     found: "/usr/bin/ar"
     search_context:
-      CMAKE_PREFIX_PATH:
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local"
       ENV{PATH}:
         - "/usr/local/bin"
         - "/System/Cryptexes/App/usr/bin"
@@ -423,8 +389,6 @@ events:
       - "/opt/homebrew/sbin/"
     found: "/usr/bin/ranlib"
     search_context:
-      CMAKE_PREFIX_PATH:
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local"
       ENV{PATH}:
         - "/usr/local/bin"
         - "/System/Cryptexes/App/usr/bin"
@@ -474,8 +438,6 @@ events:
       - "/opt/homebrew/sbin/"
     found: "/usr/bin/strip"
     search_context:
-      CMAKE_PREFIX_PATH:
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local"
       ENV{PATH}:
         - "/usr/local/bin"
         - "/System/Cryptexes/App/usr/bin"
@@ -525,8 +487,6 @@ events:
       - "/opt/homebrew/sbin/"
     found: "/usr/bin/ld"
     search_context:
-      CMAKE_PREFIX_PATH:
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local"
       ENV{PATH}:
         - "/usr/local/bin"
         - "/System/Cryptexes/App/usr/bin"
@@ -576,8 +536,6 @@ events:
       - "/opt/homebrew/sbin/"
     found: "/usr/bin/nm"
     search_context:
-      CMAKE_PREFIX_PATH:
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local"
       ENV{PATH}:
         - "/usr/local/bin"
         - "/System/Cryptexes/App/usr/bin"
@@ -627,8 +585,6 @@ events:
       - "/opt/homebrew/sbin/"
     found: "/usr/bin/objdump"
     search_context:
-      CMAKE_PREFIX_PATH:
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local"
       ENV{PATH}:
         - "/usr/local/bin"
         - "/System/Cryptexes/App/usr/bin"
@@ -692,8 +648,6 @@ events:
       - "/opt/homebrew/sbin/objcopy"
     found: false
     search_context:
-      CMAKE_PREFIX_PATH:
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local"
       ENV{PATH}:
         - "/usr/local/bin"
         - "/System/Cryptexes/App/usr/bin"
@@ -757,8 +711,6 @@ events:
       - "/opt/homebrew/sbin/readelf"
     found: false
     search_context:
-      CMAKE_PREFIX_PATH:
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local"
       ENV{PATH}:
         - "/usr/local/bin"
         - "/System/Cryptexes/App/usr/bin"
@@ -822,8 +774,6 @@ events:
       - "/opt/homebrew/sbin/dlltool"
     found: false
     search_context:
-      CMAKE_PREFIX_PATH:
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local"
       ENV{PATH}:
         - "/usr/local/bin"
         - "/System/Cryptexes/App/usr/bin"
@@ -887,8 +837,6 @@ events:
       - "/opt/homebrew/sbin/addr2line"
     found: false
     search_context:
-      CMAKE_PREFIX_PATH:
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local"
       ENV{PATH}:
         - "/usr/local/bin"
         - "/System/Cryptexes/App/usr/bin"
@@ -952,8 +900,6 @@ events:
       - "/opt/homebrew/sbin/tapi"
     found: false
     search_context:
-      CMAKE_PREFIX_PATH:
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local"
       ENV{PATH}:
         - "/usr/local/bin"
         - "/System/Cryptexes/App/usr/bin"
@@ -988,9 +934,6 @@ events:
     names:
       - "install_name_tool"
     candidate_directories:
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/bin/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/sbin/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
       - "/usr/local/bin/"
       - "/System/Cryptexes/App/usr/bin/"
       - "/usr/bin/"
@@ -1005,15 +948,10 @@ events:
       - "/opt/homebrew/bin/"
       - "/opt/homebrew/sbin/"
     searched_directories:
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/bin/install_name_tool"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/sbin/install_name_tool"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/install_name_tool"
       - "/usr/local/bin/install_name_tool"
       - "/System/Cryptexes/App/usr/bin/install_name_tool"
     found: "/usr/bin/install_name_tool"
     search_context:
-      CMAKE_PREFIX_PATH:
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local"
       ENV{PATH}:
         - "/usr/local/bin"
         - "/System/Cryptexes/App/usr/bin"
@@ -1038,8 +976,8 @@ events:
     checks:
       - "Detecting CXX compiler ABI info"
     directories:
-      source: "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicerCli/build-ninja/CMakeFiles/CMakeScratch/TryCompile-j1B9QJ"
-      binary: "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicerCli/build-ninja/CMakeFiles/CMakeScratch/TryCompile-j1B9QJ"
+      source: "/Users/maosone/Documents/slicer-api/OrcaSlicerAddon/build-ninja/CMakeFiles/CMakeScratch/TryCompile-AOINkk"
+      binary: "/Users/maosone/Documents/slicer-api/OrcaSlicerAddon/build-ninja/CMakeFiles/CMakeScratch/TryCompile-AOINkk"
     cmakeVariables:
       CMAKE_CXX_FLAGS: ""
       CMAKE_CXX_FLAGS_DEBUG: "-g"
@@ -1052,17 +990,17 @@ events:
       variable: "CMAKE_CXX_ABI_COMPILED"
       cached: true
       stdout: |
-        Change Dir: '/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicerCli/build-ninja/CMakeFiles/CMakeScratch/TryCompile-j1B9QJ'
+        Change Dir: '/Users/maosone/Documents/slicer-api/OrcaSlicerAddon/build-ninja/CMakeFiles/CMakeScratch/TryCompile-AOINkk'
         
-        Run Build Command(s): /opt/homebrew/bin/ninja -v cmTC_e7dd9
-        [1/2] /usr/bin/c++   -arch arm64   -v -Wl,-v -MD -MT CMakeFiles/cmTC_e7dd9.dir/CMakeCXXCompilerABI.cpp.o -MF CMakeFiles/cmTC_e7dd9.dir/CMakeCXXCompilerABI.cpp.o.d -o CMakeFiles/cmTC_e7dd9.dir/CMakeCXXCompilerABI.cpp.o -c /opt/homebrew/share/cmake/Modules/CMakeCXXCompilerABI.cpp
+        Run Build Command(s): /opt/homebrew/bin/ninja -v cmTC_250bc
+        [1/2] /usr/bin/c++   -arch arm64   -v -Wl,-v -MD -MT CMakeFiles/cmTC_250bc.dir/CMakeCXXCompilerABI.cpp.o -MF CMakeFiles/cmTC_250bc.dir/CMakeCXXCompilerABI.cpp.o.d -o CMakeFiles/cmTC_250bc.dir/CMakeCXXCompilerABI.cpp.o -c /opt/homebrew/share/cmake/Modules/CMakeCXXCompilerABI.cpp
         Apple clang version 17.0.0 (clang-1700.0.13.5)
         Target: arm64-apple-darwin24.5.0
         Thread model: posix
         InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
         clang++: warning: -Wl,-v: 'linker' input unused [-Wunused-command-line-argument]
         ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/../include/c++/v1"
-         "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1 -triple arm64-apple-macosx15.0.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCXXCompilerABI.cpp -mrelocation-model pic -pic-level 2 -mframe-pointer=non-leaf -fno-strict-return -ffp-contract=on -fno-rounding-math -funwind-tables=1 -fobjc-msgsend-selector-stubs -target-sdk-version=15.5 -fvisibility-inlines-hidden-static-local-var -fdefine-target-os-macros -fno-assume-unique-vtables -fno-modulemap-allow-subdirectory-search -target-cpu apple-m1 -target-feature +zcm -target-feature +zcz -target-feature +v8.5a -target-feature +aes -target-feature +altnzcv -target-feature +ccdp -target-feature +complxnum -target-feature +crc -target-feature +dotprod -target-feature +fp-armv8 -target-feature +fp16fml -target-feature +fptoint -target-feature +fullfp16 -target-feature +jsconv -target-feature +lse -target-feature +neon -target-feature +pauth -target-feature +perfmon -target-feature +predres -target-feature +ras -target-feature +rcpc -target-feature +rdm -target-feature +sb -target-feature +sha2 -target-feature +sha3 -target-feature +specrestrict -target-feature +ssbs -target-abi darwinpcs -debugger-tuning=lldb -fdebug-compilation-dir=/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicerCli/build-ninja/CMakeFiles/CMakeScratch/TryCompile-j1B9QJ -target-linker-version 1167.5 -v -fcoverage-compilation-dir=/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicerCli/build-ninja/CMakeFiles/CMakeScratch/TryCompile-j1B9QJ -resource-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/17 -dependency-file CMakeFiles/cmTC_e7dd9.dir/CMakeCXXCompilerABI.cpp.o.d -skip-unused-modulemap-deps -MT CMakeFiles/cmTC_e7dd9.dir/CMakeCXXCompilerABI.cpp.o -sys-header-deps -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I/usr/local/include -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1 -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/17/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include -Wno-reorder-init-list -Wno-implicit-int-float-conversion -Wno-c99-designator -Wno-final-dtor-non-final-class -Wno-extra-semi-stmt -Wno-misleading-indentation -Wno-quoted-include-in-framework-header -Wno-implicit-fallthrough -Wno-enum-enum-conversion -Wno-enum-float-conversion -Wno-elaborated-enum-base -Wno-reserved-identifier -Wno-gnu-folding-constant -fdeprecated-macro -ferror-limit 19 -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fno-cxx-modules -fskip-odr-check-in-gmf -fcxx-exceptions -fexceptions -fmax-type-align=16 -fcommon -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -clang-vendor-feature=+disableAtImportPrivateFrameworkInImplementationError -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_e7dd9.dir/CMakeCXXCompilerABI.cpp.o -x c++ /opt/homebrew/share/cmake/Modules/CMakeCXXCompilerABI.cpp
+         "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1 -triple arm64-apple-macosx15.0.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCXXCompilerABI.cpp -mrelocation-model pic -pic-level 2 -mframe-pointer=non-leaf -fno-strict-return -ffp-contract=on -fno-rounding-math -funwind-tables=1 -fobjc-msgsend-selector-stubs -target-sdk-version=15.5 -fvisibility-inlines-hidden-static-local-var -fdefine-target-os-macros -fno-assume-unique-vtables -fno-modulemap-allow-subdirectory-search -target-cpu apple-m1 -target-feature +zcm -target-feature +zcz -target-feature +v8.5a -target-feature +aes -target-feature +altnzcv -target-feature +ccdp -target-feature +complxnum -target-feature +crc -target-feature +dotprod -target-feature +fp-armv8 -target-feature +fp16fml -target-feature +fptoint -target-feature +fullfp16 -target-feature +jsconv -target-feature +lse -target-feature +neon -target-feature +pauth -target-feature +perfmon -target-feature +predres -target-feature +ras -target-feature +rcpc -target-feature +rdm -target-feature +sb -target-feature +sha2 -target-feature +sha3 -target-feature +specrestrict -target-feature +ssbs -target-abi darwinpcs -debugger-tuning=lldb -fdebug-compilation-dir=/Users/maosone/Documents/slicer-api/OrcaSlicerAddon/build-ninja/CMakeFiles/CMakeScratch/TryCompile-AOINkk -target-linker-version 1167.5 -v -fcoverage-compilation-dir=/Users/maosone/Documents/slicer-api/OrcaSlicerAddon/build-ninja/CMakeFiles/CMakeScratch/TryCompile-AOINkk -resource-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/17 -dependency-file CMakeFiles/cmTC_250bc.dir/CMakeCXXCompilerABI.cpp.o.d -skip-unused-modulemap-deps -MT CMakeFiles/cmTC_250bc.dir/CMakeCXXCompilerABI.cpp.o -sys-header-deps -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I/usr/local/include -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1 -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/17/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include -Wno-reorder-init-list -Wno-implicit-int-float-conversion -Wno-c99-designator -Wno-final-dtor-non-final-class -Wno-extra-semi-stmt -Wno-misleading-indentation -Wno-quoted-include-in-framework-header -Wno-implicit-fallthrough -Wno-enum-enum-conversion -Wno-enum-float-conversion -Wno-elaborated-enum-base -Wno-reserved-identifier -Wno-gnu-folding-constant -fdeprecated-macro -ferror-limit 19 -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fno-cxx-modules -fskip-odr-check-in-gmf -fcxx-exceptions -fexceptions -fmax-type-align=16 -fcommon -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -clang-vendor-feature=+disableAtImportPrivateFrameworkInImplementationError -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_250bc.dir/CMakeCXXCompilerABI.cpp.o -x c++ /opt/homebrew/share/cmake/Modules/CMakeCXXCompilerABI.cpp
         clang -cc1 version 17.0.0 (clang-1700.0.13.5) default target arm64-apple-darwin24.5.0
         ignoring nonexistent directory "/usr/local/include"
         ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include"
@@ -1076,12 +1014,12 @@ events:
          /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include
          /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks (framework directory)
         End of search list.
-        [2/2] : && /usr/bin/c++ -arch arm64 -Wl,-search_paths_first -Wl,-headerpad_max_install_names  -v -Wl,-v CMakeFiles/cmTC_e7dd9.dir/CMakeCXXCompilerABI.cpp.o -o cmTC_e7dd9   && :
+        [2/2] : && /usr/bin/c++ -arch arm64 -Wl,-search_paths_first -Wl,-headerpad_max_install_names  -v -Wl,-v CMakeFiles/cmTC_250bc.dir/CMakeCXXCompilerABI.cpp.o -o cmTC_250bc   && :
         Apple clang version 17.0.0 (clang-1700.0.13.5)
         Target: arm64-apple-darwin24.5.0
         Thread model: posix
         InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
-         "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld" -demangle -lto_library /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/libLTO.dylib -dynamic -arch arm64 -platform_version macos 15.0.0 15.5 -syslibroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -mllvm -enable-linkonceodr-outlining -o cmTC_e7dd9 -L/usr/local/lib -search_paths_first -headerpad_max_install_names -v CMakeFiles/cmTC_e7dd9.dir/CMakeCXXCompilerABI.cpp.o -lc++ -lSystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/17/lib/darwin/libclang_rt.osx.a
+         "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld" -demangle -lto_library /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/libLTO.dylib -dynamic -arch arm64 -platform_version macos 15.0.0 15.5 -syslibroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -mllvm -enable-linkonceodr-outlining -o cmTC_250bc -L/usr/local/lib -search_paths_first -headerpad_max_install_names -v CMakeFiles/cmTC_250bc.dir/CMakeCXXCompilerABI.cpp.o -lc++ -lSystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/17/lib/darwin/libclang_rt.osx.a
         @(#)PROGRAM:ld PROJECT:ld-1167.5
         BUILD 01:45:05 Apr 30 2025
         configured to support archs: armv6 armv7 armv7s arm64 arm64e arm64_32 i386 x86_64 x86_64h armv6m armv7k armv7m armv7em
@@ -1137,17 +1075,17 @@ events:
       Parsed CXX implicit link information:
         link line regex: [^( *|.*[/\\])(ld[0-9]*(|\\.[a-rt-z][a-z]*|\\.s[a-np-z][a-z]*|\\.so[a-z]+)|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
         linker tool regex: [^[ 	]*(->|")?[ 	]*(([^"]*[/\\])?(ld[0-9]*(|\\.[a-rt-z][a-z]*|\\.s[a-np-z][a-z]*|\\.so[a-z]+)))("|,| |$)]
-        ignore line: [Change Dir: '/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicerCli/build-ninja/CMakeFiles/CMakeScratch/TryCompile-j1B9QJ']
+        ignore line: [Change Dir: '/Users/maosone/Documents/slicer-api/OrcaSlicerAddon/build-ninja/CMakeFiles/CMakeScratch/TryCompile-AOINkk']
         ignore line: []
-        ignore line: [Run Build Command(s): /opt/homebrew/bin/ninja -v cmTC_e7dd9]
-        ignore line: [[1/2] /usr/bin/c++   -arch arm64   -v -Wl -v -MD -MT CMakeFiles/cmTC_e7dd9.dir/CMakeCXXCompilerABI.cpp.o -MF CMakeFiles/cmTC_e7dd9.dir/CMakeCXXCompilerABI.cpp.o.d -o CMakeFiles/cmTC_e7dd9.dir/CMakeCXXCompilerABI.cpp.o -c /opt/homebrew/share/cmake/Modules/CMakeCXXCompilerABI.cpp]
+        ignore line: [Run Build Command(s): /opt/homebrew/bin/ninja -v cmTC_250bc]
+        ignore line: [[1/2] /usr/bin/c++   -arch arm64   -v -Wl -v -MD -MT CMakeFiles/cmTC_250bc.dir/CMakeCXXCompilerABI.cpp.o -MF CMakeFiles/cmTC_250bc.dir/CMakeCXXCompilerABI.cpp.o.d -o CMakeFiles/cmTC_250bc.dir/CMakeCXXCompilerABI.cpp.o -c /opt/homebrew/share/cmake/Modules/CMakeCXXCompilerABI.cpp]
         ignore line: [Apple clang version 17.0.0 (clang-1700.0.13.5)]
         ignore line: [Target: arm64-apple-darwin24.5.0]
         ignore line: [Thread model: posix]
         ignore line: [InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin]
         ignore line: [clang++: warning: -Wl -v: 'linker' input unused [-Wunused-command-line-argument]]
         ignore line: [ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/../include/c++/v1"]
-        ignore line: [ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1 -triple arm64-apple-macosx15.0.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCXXCompilerABI.cpp -mrelocation-model pic -pic-level 2 -mframe-pointer=non-leaf -fno-strict-return -ffp-contract=on -fno-rounding-math -funwind-tables=1 -fobjc-msgsend-selector-stubs -target-sdk-version=15.5 -fvisibility-inlines-hidden-static-local-var -fdefine-target-os-macros -fno-assume-unique-vtables -fno-modulemap-allow-subdirectory-search -target-cpu apple-m1 -target-feature +zcm -target-feature +zcz -target-feature +v8.5a -target-feature +aes -target-feature +altnzcv -target-feature +ccdp -target-feature +complxnum -target-feature +crc -target-feature +dotprod -target-feature +fp-armv8 -target-feature +fp16fml -target-feature +fptoint -target-feature +fullfp16 -target-feature +jsconv -target-feature +lse -target-feature +neon -target-feature +pauth -target-feature +perfmon -target-feature +predres -target-feature +ras -target-feature +rcpc -target-feature +rdm -target-feature +sb -target-feature +sha2 -target-feature +sha3 -target-feature +specrestrict -target-feature +ssbs -target-abi darwinpcs -debugger-tuning=lldb -fdebug-compilation-dir=/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicerCli/build-ninja/CMakeFiles/CMakeScratch/TryCompile-j1B9QJ -target-linker-version 1167.5 -v -fcoverage-compilation-dir=/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicerCli/build-ninja/CMakeFiles/CMakeScratch/TryCompile-j1B9QJ -resource-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/17 -dependency-file CMakeFiles/cmTC_e7dd9.dir/CMakeCXXCompilerABI.cpp.o.d -skip-unused-modulemap-deps -MT CMakeFiles/cmTC_e7dd9.dir/CMakeCXXCompilerABI.cpp.o -sys-header-deps -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I/usr/local/include -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1 -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/17/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include -Wno-reorder-init-list -Wno-implicit-int-float-conversion -Wno-c99-designator -Wno-final-dtor-non-final-class -Wno-extra-semi-stmt -Wno-misleading-indentation -Wno-quoted-include-in-framework-header -Wno-implicit-fallthrough -Wno-enum-enum-conversion -Wno-enum-float-conversion -Wno-elaborated-enum-base -Wno-reserved-identifier -Wno-gnu-folding-constant -fdeprecated-macro -ferror-limit 19 -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fno-cxx-modules -fskip-odr-check-in-gmf -fcxx-exceptions -fexceptions -fmax-type-align=16 -fcommon -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -clang-vendor-feature=+disableAtImportPrivateFrameworkInImplementationError -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_e7dd9.dir/CMakeCXXCompilerABI.cpp.o -x c++ /opt/homebrew/share/cmake/Modules/CMakeCXXCompilerABI.cpp]
+        ignore line: [ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1 -triple arm64-apple-macosx15.0.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCXXCompilerABI.cpp -mrelocation-model pic -pic-level 2 -mframe-pointer=non-leaf -fno-strict-return -ffp-contract=on -fno-rounding-math -funwind-tables=1 -fobjc-msgsend-selector-stubs -target-sdk-version=15.5 -fvisibility-inlines-hidden-static-local-var -fdefine-target-os-macros -fno-assume-unique-vtables -fno-modulemap-allow-subdirectory-search -target-cpu apple-m1 -target-feature +zcm -target-feature +zcz -target-feature +v8.5a -target-feature +aes -target-feature +altnzcv -target-feature +ccdp -target-feature +complxnum -target-feature +crc -target-feature +dotprod -target-feature +fp-armv8 -target-feature +fp16fml -target-feature +fptoint -target-feature +fullfp16 -target-feature +jsconv -target-feature +lse -target-feature +neon -target-feature +pauth -target-feature +perfmon -target-feature +predres -target-feature +ras -target-feature +rcpc -target-feature +rdm -target-feature +sb -target-feature +sha2 -target-feature +sha3 -target-feature +specrestrict -target-feature +ssbs -target-abi darwinpcs -debugger-tuning=lldb -fdebug-compilation-dir=/Users/maosone/Documents/slicer-api/OrcaSlicerAddon/build-ninja/CMakeFiles/CMakeScratch/TryCompile-AOINkk -target-linker-version 1167.5 -v -fcoverage-compilation-dir=/Users/maosone/Documents/slicer-api/OrcaSlicerAddon/build-ninja/CMakeFiles/CMakeScratch/TryCompile-AOINkk -resource-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/17 -dependency-file CMakeFiles/cmTC_250bc.dir/CMakeCXXCompilerABI.cpp.o.d -skip-unused-modulemap-deps -MT CMakeFiles/cmTC_250bc.dir/CMakeCXXCompilerABI.cpp.o -sys-header-deps -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I/usr/local/include -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1 -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/17/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include -Wno-reorder-init-list -Wno-implicit-int-float-conversion -Wno-c99-designator -Wno-final-dtor-non-final-class -Wno-extra-semi-stmt -Wno-misleading-indentation -Wno-quoted-include-in-framework-header -Wno-implicit-fallthrough -Wno-enum-enum-conversion -Wno-enum-float-conversion -Wno-elaborated-enum-base -Wno-reserved-identifier -Wno-gnu-folding-constant -fdeprecated-macro -ferror-limit 19 -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fno-cxx-modules -fskip-odr-check-in-gmf -fcxx-exceptions -fexceptions -fmax-type-align=16 -fcommon -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -clang-vendor-feature=+disableAtImportPrivateFrameworkInImplementationError -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_250bc.dir/CMakeCXXCompilerABI.cpp.o -x c++ /opt/homebrew/share/cmake/Modules/CMakeCXXCompilerABI.cpp]
         ignore line: [clang -cc1 version 17.0.0 (clang-1700.0.13.5) default target arm64-apple-darwin24.5.0]
         ignore line: [ignoring nonexistent directory "/usr/local/include"]
         ignore line: [ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include"]
@@ -1161,12 +1099,12 @@ events:
         ignore line: [ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include]
         ignore line: [ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks (framework directory)]
         ignore line: [End of search list.]
-        ignore line: [[2/2] : && /usr/bin/c++ -arch arm64 -Wl -search_paths_first -Wl -headerpad_max_install_names  -v -Wl -v CMakeFiles/cmTC_e7dd9.dir/CMakeCXXCompilerABI.cpp.o -o cmTC_e7dd9   && :]
+        ignore line: [[2/2] : && /usr/bin/c++ -arch arm64 -Wl -search_paths_first -Wl -headerpad_max_install_names  -v -Wl -v CMakeFiles/cmTC_250bc.dir/CMakeCXXCompilerABI.cpp.o -o cmTC_250bc   && :]
         ignore line: [Apple clang version 17.0.0 (clang-1700.0.13.5)]
         ignore line: [Target: arm64-apple-darwin24.5.0]
         ignore line: [Thread model: posix]
         ignore line: [InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin]
-        link line: [ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld" -demangle -lto_library /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/libLTO.dylib -dynamic -arch arm64 -platform_version macos 15.0.0 15.5 -syslibroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -mllvm -enable-linkonceodr-outlining -o cmTC_e7dd9 -L/usr/local/lib -search_paths_first -headerpad_max_install_names -v CMakeFiles/cmTC_e7dd9.dir/CMakeCXXCompilerABI.cpp.o -lc++ -lSystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/17/lib/darwin/libclang_rt.osx.a]
+        link line: [ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld" -demangle -lto_library /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/libLTO.dylib -dynamic -arch arm64 -platform_version macos 15.0.0 15.5 -syslibroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -mllvm -enable-linkonceodr-outlining -o cmTC_250bc -L/usr/local/lib -search_paths_first -headerpad_max_install_names -v CMakeFiles/cmTC_250bc.dir/CMakeCXXCompilerABI.cpp.o -lc++ -lSystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/17/lib/darwin/libclang_rt.osx.a]
           arg [/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld] ==> ignore
           arg [-demangle] ==> ignore
           arg [-lto_library] ==> ignore, skip following value
@@ -1183,12 +1121,12 @@ events:
           arg [-mllvm] ==> ignore
           arg [-enable-linkonceodr-outlining] ==> ignore
           arg [-o] ==> ignore
-          arg [cmTC_e7dd9] ==> ignore
+          arg [cmTC_250bc] ==> ignore
           arg [-L/usr/local/lib] ==> dir [/usr/local/lib]
           arg [-search_paths_first] ==> ignore
           arg [-headerpad_max_install_names] ==> ignore
           arg [-v] ==> ignore
-          arg [CMakeFiles/cmTC_e7dd9.dir/CMakeCXXCompilerABI.cpp.o] ==> ignore
+          arg [CMakeFiles/cmTC_250bc.dir/CMakeCXXCompilerABI.cpp.o] ==> ignore
           arg [-lc++] ==> lib [c++]
           arg [-lSystem] ==> lib [System]
           arg [/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/17/lib/darwin/libclang_rt.osx.a] ==> lib [/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/17/lib/darwin/libclang_rt.osx.a]
@@ -1230,17 +1168,17 @@ events:
       - "/opt/homebrew/share/cmake/Modules/CheckCXXSourceCompiles.cmake:103 (cmake_check_source_compiles)"
       - "/opt/homebrew/share/cmake/Modules/FindThreads.cmake:99 (check_cxx_source_compiles)"
       - "/opt/homebrew/share/cmake/Modules/FindThreads.cmake:163 (_threads_check_libc)"
-      - "CMakeLists.txt:94 (find_package)"
+      - "CMakeLists.txt:101 (find_package)"
     checks:
       - "Performing Test CMAKE_HAVE_LIBC_PTHREAD"
     directories:
-      source: "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicerCli/build-ninja/CMakeFiles/CMakeScratch/TryCompile-gauIXS"
-      binary: "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicerCli/build-ninja/CMakeFiles/CMakeScratch/TryCompile-gauIXS"
+      source: "/Users/maosone/Documents/slicer-api/OrcaSlicerAddon/build-ninja/CMakeFiles/CMakeScratch/TryCompile-OzANae"
+      binary: "/Users/maosone/Documents/slicer-api/OrcaSlicerAddon/build-ninja/CMakeFiles/CMakeScratch/TryCompile-OzANae"
     cmakeVariables:
       CMAKE_CXX_FLAGS: ""
       CMAKE_CXX_FLAGS_DEBUG: "-g"
       CMAKE_EXE_LINKER_FLAGS: ""
-      CMAKE_MODULE_PATH: "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicerCli/../OrcaSlicer/cmake/modules"
+      CMAKE_MODULE_PATH: "/Users/maosone/Documents/slicer-api/OrcaSlicer/cmake/modules"
       CMAKE_OSX_ARCHITECTURES: ""
       CMAKE_OSX_DEPLOYMENT_TARGET: "11.3"
       CMAKE_OSX_SYSROOT: ""
@@ -1248,17 +1186,17 @@ events:
       variable: "CMAKE_HAVE_LIBC_PTHREAD"
       cached: true
       stdout: |
-        Change Dir: '/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicerCli/build-ninja/CMakeFiles/CMakeScratch/TryCompile-gauIXS'
+        Change Dir: '/Users/maosone/Documents/slicer-api/OrcaSlicerAddon/build-ninja/CMakeFiles/CMakeScratch/TryCompile-OzANae'
         
-        Run Build Command(s): /opt/homebrew/bin/ninja -v cmTC_639f1
-        [1/2] /usr/bin/c++ -DCMAKE_HAVE_LIBC_PTHREAD  -std=gnu++17 -arch arm64 -mmacosx-version-min=11.3 -MD -MT CMakeFiles/cmTC_639f1.dir/src.cxx.o -MF CMakeFiles/cmTC_639f1.dir/src.cxx.o.d -o CMakeFiles/cmTC_639f1.dir/src.cxx.o -c /Users/maosone/Downloads/orcaslicer-addon/OrcaSlicerCli/build-ninja/CMakeFiles/CMakeScratch/TryCompile-gauIXS/src.cxx
-        [2/2] : && /usr/bin/c++ -arch arm64 -mmacosx-version-min=11.3 -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/cmTC_639f1.dir/src.cxx.o -o cmTC_639f1   && :
+        Run Build Command(s): /opt/homebrew/bin/ninja -v cmTC_9a444
+        [1/2] /usr/bin/c++ -DCMAKE_HAVE_LIBC_PTHREAD  -std=gnu++17 -arch arm64 -mmacosx-version-min=11.3 -MD -MT CMakeFiles/cmTC_9a444.dir/src.cxx.o -MF CMakeFiles/cmTC_9a444.dir/src.cxx.o.d -o CMakeFiles/cmTC_9a444.dir/src.cxx.o -c /Users/maosone/Documents/slicer-api/OrcaSlicerAddon/build-ninja/CMakeFiles/CMakeScratch/TryCompile-OzANae/src.cxx
+        [2/2] : && /usr/bin/c++ -arch arm64 -mmacosx-version-min=11.3 -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/cmTC_9a444.dir/src.cxx.o -o cmTC_9a444   && :
         
       exitCode: 0
   -
     kind: "find-v1"
     backtrace:
-      - "CMakeLists.txt:99 (find_path)"
+      - "CMakeLists.txt:106 (find_path)"
     mode: "path"
     variable: "BOOST_INCLUDE_DIR"
     description: "Path to a file."
@@ -1273,12 +1211,10 @@ events:
     names:
       - "boost/optional.hpp"
     candidate_directories:
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/build/arm64/deps/usr/local/include/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/build/arm64/deps/usr/local/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/include/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/build/arm64/deps/usr/local/include/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/include/"
+      - "/Users/maosone/Documents/slicer-api/OrcaSlicer/build/arm64/deps/usr/local/include/"
+      - "/Users/maosone/Documents/slicer-api/OrcaSlicer/build/arm64/deps/usr/local/"
+      - "/Users/maosone/Documents/slicer-api/OrcaSlicer/build/arm64/deps/usr/local/include/"
+      - "/Users/maosone/Documents/slicer-api/OrcaSlicer/deps/build/destdir/usr/local/include/"
       - "/usr/local/bin/"
       - "/System/Cryptexes/App/usr/bin/"
       - "/usr/bin/"
@@ -1325,12 +1261,10 @@ events:
       - "/usr/local/include/"
       - "/usr/include/"
     searched_directories:
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/build/arm64/deps/usr/local/include/boost.framework/Headers/optional.hpp"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/build/arm64/deps/usr/local/boost.framework/Headers/optional.hpp"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/include/boost.framework/Headers/optional.hpp"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/boost.framework/Headers/optional.hpp"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/build/arm64/deps/usr/local/include/boost.framework/Headers/optional.hpp"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/include/boost.framework/Headers/optional.hpp"
+      - "/Users/maosone/Documents/slicer-api/OrcaSlicer/build/arm64/deps/usr/local/include/boost.framework/Headers/optional.hpp"
+      - "/Users/maosone/Documents/slicer-api/OrcaSlicer/build/arm64/deps/usr/local/boost.framework/Headers/optional.hpp"
+      - "/Users/maosone/Documents/slicer-api/OrcaSlicer/build/arm64/deps/usr/local/include/boost.framework/Headers/optional.hpp"
+      - "/Users/maosone/Documents/slicer-api/OrcaSlicer/deps/build/destdir/usr/local/include/boost.framework/Headers/optional.hpp"
       - "/usr/local/bin/boost.framework/Headers/optional.hpp"
       - "/System/Cryptexes/App/usr/bin/boost.framework/Headers/optional.hpp"
       - "/usr/bin/boost.framework/Headers/optional.hpp"
@@ -1376,13 +1310,29 @@ events:
       - "/opt/homebrew/include/boost.framework/Headers/optional.hpp"
       - "/usr/local/include/boost.framework/Headers/optional.hpp"
       - "/usr/include/boost.framework/Headers/optional.hpp"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/build/arm64/deps/usr/local/include/boost/optional.hpp"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/build/arm64/deps/usr/local/boost/optional.hpp"
-    found: "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/include/"
+      - "/Users/maosone/Documents/slicer-api/OrcaSlicer/build/arm64/deps/usr/local/include/boost/optional.hpp"
+      - "/Users/maosone/Documents/slicer-api/OrcaSlicer/build/arm64/deps/usr/local/boost/optional.hpp"
+      - "/Users/maosone/Documents/slicer-api/OrcaSlicer/build/arm64/deps/usr/local/include/boost/optional.hpp"
+      - "/Users/maosone/Documents/slicer-api/OrcaSlicer/deps/build/destdir/usr/local/include/boost/optional.hpp"
+      - "/usr/local/bin/boost/optional.hpp"
+      - "/System/Cryptexes/App/usr/bin/boost/optional.hpp"
+      - "/usr/bin/boost/optional.hpp"
+      - "/bin/boost/optional.hpp"
+      - "/usr/sbin/boost/optional.hpp"
+      - "/sbin/boost/optional.hpp"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/boost/optional.hpp"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/boost/optional.hpp"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/boost/optional.hpp"
+      - "/Library/Apple/usr/bin/boost/optional.hpp"
+      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/boost/optional.hpp"
+      - "/opt/homebrew/bin/boost/optional.hpp"
+      - "/opt/homebrew/sbin/boost/optional.hpp"
+      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/boost/optional.hpp"
+      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/boost/optional.hpp"
+    found: "/opt/homebrew/include/"
     search_context:
       CMAKE_PREFIX_PATH:
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicerCli/../OrcaSlicer/build/arm64/deps/usr/local"
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local"
+        - "/Users/maosone/Documents/slicer-api/OrcaSlicer/build/arm64/deps/usr/local"
       ENV{PATH}:
         - "/usr/local/bin"
         - "/System/Cryptexes/App/usr/bin"
@@ -1413,1232 +1363,6 @@ events:
         - "/opt/local"
       CMAKE_SYSTEM_INCLUDE_PATH:
         - "/usr/include/X11"
-      CMAKE_SYSTEM_FRAMEWORK_PATH:
-        - "~/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Network/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Library/Frameworks"
-        - "/Library/Frameworks"
-        - "/Network/Library/Frameworks"
-        - "/System/Library/Frameworks"
-...
-
----
-events:
-  -
-    kind: "find-v1"
-    backtrace:
-      - "src/CMakeLists.txt:862 (find_library)"
-    mode: "library"
-    variable: "EXPAT_LIB"
-    description: "Path to a library."
-    settings:
-      SearchFramework: "FIRST"
-      SearchAppBundle: "FIRST"
-      CMAKE_FIND_USE_CMAKE_PATH: true
-      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
-      CMAKE_FIND_USE_INSTALL_PREFIX: true
-    names:
-      - "expat"
-    candidate_directories:
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
-      - "/usr/local/bin/"
-      - "/System/Cryptexes/App/usr/bin/"
-      - "/usr/bin/"
-      - "/bin/"
-      - "/usr/sbin/"
-      - "/sbin/"
-      - "/Library/Apple/usr/bin/"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/"
-      - "/opt/homebrew/bin/"
-      - "/opt/homebrew/sbin/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/"
-      - "/opt/homebrew/lib/"
-      - "/opt/homebrew/"
-      - "/usr/local/lib/"
-      - "/usr/local/"
-      - "/usr/lib/"
-      - "/usr/"
-      - "/opt/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/"
-      - "/Library/Frameworks/"
-      - "/System/Library/Frameworks/"
-    searched_directories:
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
-      - "/usr/local/bin/"
-      - "/System/Cryptexes/App/usr/bin/"
-      - "/usr/bin/"
-      - "/bin/"
-      - "/usr/sbin/"
-      - "/sbin/"
-      - "/Library/Apple/usr/bin/"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/"
-      - "/opt/homebrew/bin/"
-      - "/opt/homebrew/sbin/"
-    found: "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/libexpat.tbd"
-    search_context:
-      CMAKE_PREFIX_PATH:
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/build/arm64-ninja/deps/usr/local"
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local"
-      ENV{PATH}:
-        - "/usr/local/bin"
-        - "/System/Cryptexes/App/usr/bin"
-        - "/usr/bin"
-        - "/bin"
-        - "/usr/sbin"
-        - "/sbin"
-        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin"
-        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin"
-        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin"
-        - "/Library/Apple/usr/bin"
-        - "/Library/Frameworks/Python.framework/Versions/3.13/bin"
-        - "/opt/homebrew/bin"
-        - "/opt/homebrew/sbin"
-      CMAKE_INSTALL_PREFIX: "/usr/local"
-      CMAKE_SYSTEM_PREFIX_PATH:
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr"
-        - "/opt/homebrew"
-        - "/usr/local"
-        - "/usr"
-        - "/"
-        - "/opt/homebrew"
-        - "/usr/local"
-        - "/usr/X11R6"
-        - "/usr/pkg"
-        - "/opt"
-        - "/sw"
-        - "/opt/local"
-      CMAKE_SYSTEM_LIBRARY_PATH:
-        - "/usr/lib/X11"
-      CMAKE_SYSTEM_FRAMEWORK_PATH:
-        - "~/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Network/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Library/Frameworks"
-        - "/Library/Frameworks"
-        - "/Network/Library/Frameworks"
-        - "/System/Library/Frameworks"
-  -
-    kind: "find-v1"
-    backtrace:
-      - "src/CMakeLists.txt:871 (find_library)"
-    mode: "library"
-    variable: "CRYPTO_LIB"
-    description: "Path to a library."
-    settings:
-      SearchFramework: "FIRST"
-      SearchAppBundle: "FIRST"
-      CMAKE_FIND_USE_CMAKE_PATH: true
-      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
-      CMAKE_FIND_USE_INSTALL_PREFIX: true
-    names:
-      - "crypto"
-    candidate_directories:
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
-      - "/usr/local/bin/"
-      - "/System/Cryptexes/App/usr/bin/"
-      - "/usr/bin/"
-      - "/bin/"
-      - "/usr/sbin/"
-      - "/sbin/"
-      - "/Library/Apple/usr/bin/"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/"
-      - "/opt/homebrew/bin/"
-      - "/opt/homebrew/sbin/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/"
-      - "/opt/homebrew/lib/"
-      - "/opt/homebrew/"
-      - "/usr/local/lib/"
-      - "/usr/local/"
-      - "/usr/lib/"
-      - "/usr/"
-      - "/opt/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/"
-      - "/Library/Frameworks/"
-      - "/System/Library/Frameworks/"
-    found: "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/libcrypto.a"
-    search_context:
-      CMAKE_PREFIX_PATH:
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/build/arm64-ninja/deps/usr/local"
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local"
-      ENV{PATH}:
-        - "/usr/local/bin"
-        - "/System/Cryptexes/App/usr/bin"
-        - "/usr/bin"
-        - "/bin"
-        - "/usr/sbin"
-        - "/sbin"
-        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin"
-        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin"
-        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin"
-        - "/Library/Apple/usr/bin"
-        - "/Library/Frameworks/Python.framework/Versions/3.13/bin"
-        - "/opt/homebrew/bin"
-        - "/opt/homebrew/sbin"
-      CMAKE_INSTALL_PREFIX: "/usr/local"
-      CMAKE_SYSTEM_PREFIX_PATH:
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr"
-        - "/opt/homebrew"
-        - "/usr/local"
-        - "/usr"
-        - "/"
-        - "/opt/homebrew"
-        - "/usr/local"
-        - "/usr/X11R6"
-        - "/usr/pkg"
-        - "/opt"
-        - "/sw"
-        - "/opt/local"
-      CMAKE_SYSTEM_LIBRARY_PATH:
-        - "/usr/lib/X11"
-      CMAKE_SYSTEM_FRAMEWORK_PATH:
-        - "~/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Network/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Library/Frameworks"
-        - "/Library/Frameworks"
-        - "/Network/Library/Frameworks"
-        - "/System/Library/Frameworks"
-  -
-    kind: "find-v1"
-    backtrace:
-      - "/opt/homebrew/share/cmake/Modules/FindZLIB.cmake:152 (find_path)"
-      - "src/CMakeLists.txt:882 (find_package)"
-    mode: "path"
-    variable: "ZLIB_INCLUDE_DIR"
-    description: "Path to a file."
-    settings:
-      SearchFramework: "FIRST"
-      SearchAppBundle: "FIRST"
-      CMAKE_FIND_USE_CMAKE_PATH: true
-      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
-      CMAKE_FIND_USE_INSTALL_PREFIX: true
-    names:
-      - "zlib.h"
-    candidate_directories:
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/build/arm64-ninja/deps/usr/local/include/include/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/build/arm64-ninja/deps/usr/local/include/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/build/arm64-ninja/deps/usr/local/include/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/build/arm64-ninja/deps/usr/local/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/include/include/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/include/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/include/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
-      - "/usr/local/bin/include/"
-      - "/usr/local/bin/"
-      - "/System/Cryptexes/App/usr/bin/include/"
-      - "/System/Cryptexes/App/usr/bin/"
-      - "/usr/bin/include/"
-      - "/usr/bin/"
-      - "/bin/include/"
-      - "/bin/"
-      - "/usr/sbin/include/"
-      - "/usr/sbin/"
-      - "/sbin/include/"
-      - "/sbin/"
-      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/include/"
-      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/"
-      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/include/"
-      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/"
-      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/include/"
-      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/"
-      - "/Library/Apple/usr/bin/include/"
-      - "/Library/Apple/usr/bin/"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/include/"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/"
-      - "/opt/homebrew/bin/include/"
-      - "/opt/homebrew/bin/"
-      - "/opt/homebrew/sbin/include/"
-      - "/opt/homebrew/sbin/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/include/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/"
-      - "/opt/homebrew/include/include/"
-      - "/opt/homebrew/include/"
-      - "/opt/homebrew/include/"
-      - "/opt/homebrew/"
-      - "/usr/local/include/include/"
-      - "/usr/local/include/"
-      - "/usr/local/include/"
-      - "/usr/local/"
-      - "/usr/include/include/"
-      - "/usr/include/"
-      - "/usr/include/"
-      - "/usr/"
-      - "/include/include/"
-      - "/include/"
-      - "/usr/X11R6/include/include/"
-      - "/usr/X11R6/include/"
-      - "/usr/X11R6/include/"
-      - "/usr/X11R6/"
-      - "/usr/pkg/include/include/"
-      - "/usr/pkg/include/"
-      - "/usr/pkg/include/"
-      - "/usr/pkg/"
-      - "/opt/include/include/"
-      - "/opt/include/"
-      - "/opt/include/"
-      - "/opt/"
-      - "/sw/include/include/"
-      - "/sw/include/"
-      - "/sw/include/"
-      - "/sw/"
-      - "/opt/local/include/include/"
-      - "/opt/local/include/"
-      - "/opt/local/include/"
-      - "/opt/local/"
-      - "/usr/include/X11/include/"
-      - "/usr/include/X11/"
-      - "/Users/maosone/Library/Frameworks/include/"
-      - "/Users/maosone/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks/include/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Network/Library/Frameworks/include/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Network/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/include/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/include/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/include/"
-      - "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/"
-      - "/Library/Frameworks/include/"
-      - "/Library/Frameworks/"
-      - "/Network/Library/Frameworks/include/"
-      - "/Network/Library/Frameworks/"
-      - "/System/Library/Frameworks/include/"
-      - "/System/Library/Frameworks/"
-      - "/zlib/include/"
-      - "/zlib/"
-    searched_directories:
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/build/arm64-ninja/deps/usr/local/include/include/zlib.h"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/build/arm64-ninja/deps/usr/local/include/zlib.h"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/build/arm64-ninja/deps/usr/local/include/zlib.h"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/build/arm64-ninja/deps/usr/local/zlib.h"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/include/include/zlib.h"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/include/zlib.h"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/include/zlib.h"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/zlib.h"
-      - "/usr/local/bin/include/zlib.h"
-      - "/usr/local/bin/zlib.h"
-      - "/System/Cryptexes/App/usr/bin/include/zlib.h"
-      - "/System/Cryptexes/App/usr/bin/zlib.h"
-      - "/usr/bin/include/zlib.h"
-      - "/usr/bin/zlib.h"
-      - "/bin/include/zlib.h"
-      - "/bin/zlib.h"
-      - "/usr/sbin/include/zlib.h"
-      - "/usr/sbin/zlib.h"
-      - "/sbin/include/zlib.h"
-      - "/sbin/zlib.h"
-      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/include/zlib.h"
-      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/zlib.h"
-      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/include/zlib.h"
-      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/zlib.h"
-      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/include/zlib.h"
-      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/zlib.h"
-      - "/Library/Apple/usr/bin/include/zlib.h"
-      - "/Library/Apple/usr/bin/zlib.h"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/include/zlib.h"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/zlib.h"
-      - "/opt/homebrew/bin/include/zlib.h"
-      - "/opt/homebrew/bin/zlib.h"
-      - "/opt/homebrew/sbin/include/zlib.h"
-      - "/opt/homebrew/sbin/zlib.h"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/include/zlib.h"
-    found: "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/"
-    search_context:
-      CMAKE_PREFIX_PATH:
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/build/arm64-ninja/deps/usr/local"
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local"
-      ENV{PATH}:
-        - "/usr/local/bin"
-        - "/System/Cryptexes/App/usr/bin"
-        - "/usr/bin"
-        - "/bin"
-        - "/usr/sbin"
-        - "/sbin"
-        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin"
-        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin"
-        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin"
-        - "/Library/Apple/usr/bin"
-        - "/Library/Frameworks/Python.framework/Versions/3.13/bin"
-        - "/opt/homebrew/bin"
-        - "/opt/homebrew/sbin"
-      CMAKE_INSTALL_PREFIX: "/usr/local"
-      CMAKE_SYSTEM_PREFIX_PATH:
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr"
-        - "/opt/homebrew"
-        - "/usr/local"
-        - "/usr"
-        - "/"
-        - "/opt/homebrew"
-        - "/usr/local"
-        - "/usr/X11R6"
-        - "/usr/pkg"
-        - "/opt"
-        - "/sw"
-        - "/opt/local"
-      CMAKE_SYSTEM_INCLUDE_PATH:
-        - "/usr/include/X11"
-      CMAKE_SYSTEM_FRAMEWORK_PATH:
-        - "~/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Network/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Library/Frameworks"
-        - "/Library/Frameworks"
-        - "/Network/Library/Frameworks"
-        - "/System/Library/Frameworks"
-  -
-    kind: "find-v1"
-    backtrace:
-      - "/opt/homebrew/share/cmake/Modules/FindZLIB.cmake:182 (find_library)"
-      - "src/CMakeLists.txt:882 (find_package)"
-    mode: "library"
-    variable: "ZLIB_LIBRARY_RELEASE"
-    description: "Path to a library."
-    settings:
-      SearchFramework: "FIRST"
-      SearchAppBundle: "FIRST"
-      CMAKE_FIND_USE_CMAKE_PATH: true
-      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
-      CMAKE_FIND_USE_INSTALL_PREFIX: true
-    names:
-      - "z"
-      - "zlib"
-      - "zdll"
-      - "zlib1"
-      - "zlibstatic"
-      - "zlibwapi"
-      - "zlibvc"
-      - "zlibstat"
-    candidate_directories:
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
-      - "/usr/local/bin/"
-      - "/System/Cryptexes/App/usr/bin/"
-      - "/usr/bin/"
-      - "/bin/"
-      - "/usr/sbin/"
-      - "/sbin/"
-      - "/Library/Apple/usr/bin/"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/"
-      - "/opt/homebrew/bin/"
-      - "/opt/homebrew/sbin/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/"
-      - "/opt/homebrew/lib/"
-      - "/opt/homebrew/lib/"
-      - "/opt/homebrew/"
-      - "/usr/local/lib/"
-      - "/usr/local/lib/"
-      - "/usr/local/"
-      - "/usr/lib/"
-      - "/usr/lib/"
-      - "/usr/"
-      - "/opt/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/"
-      - "/Library/Frameworks/"
-      - "/System/Library/Frameworks/"
-    searched_directories:
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
-      - "/usr/local/bin/"
-      - "/usr/local/bin/"
-      - "/usr/local/bin/"
-      - "/usr/local/bin/"
-      - "/usr/local/bin/"
-      - "/usr/local/bin/"
-      - "/usr/local/bin/"
-      - "/usr/local/bin/"
-      - "/System/Cryptexes/App/usr/bin/"
-      - "/System/Cryptexes/App/usr/bin/"
-      - "/System/Cryptexes/App/usr/bin/"
-      - "/System/Cryptexes/App/usr/bin/"
-      - "/System/Cryptexes/App/usr/bin/"
-      - "/System/Cryptexes/App/usr/bin/"
-      - "/System/Cryptexes/App/usr/bin/"
-      - "/System/Cryptexes/App/usr/bin/"
-      - "/usr/bin/"
-      - "/usr/bin/"
-      - "/usr/bin/"
-      - "/usr/bin/"
-      - "/usr/bin/"
-      - "/usr/bin/"
-      - "/usr/bin/"
-      - "/usr/bin/"
-      - "/bin/"
-      - "/bin/"
-      - "/bin/"
-      - "/bin/"
-      - "/bin/"
-      - "/bin/"
-      - "/bin/"
-      - "/bin/"
-      - "/usr/sbin/"
-      - "/usr/sbin/"
-      - "/usr/sbin/"
-      - "/usr/sbin/"
-      - "/usr/sbin/"
-      - "/usr/sbin/"
-      - "/usr/sbin/"
-      - "/usr/sbin/"
-      - "/sbin/"
-      - "/sbin/"
-      - "/sbin/"
-      - "/sbin/"
-      - "/sbin/"
-      - "/sbin/"
-      - "/sbin/"
-      - "/sbin/"
-      - "/Library/Apple/usr/bin/"
-      - "/Library/Apple/usr/bin/"
-      - "/Library/Apple/usr/bin/"
-      - "/Library/Apple/usr/bin/"
-      - "/Library/Apple/usr/bin/"
-      - "/Library/Apple/usr/bin/"
-      - "/Library/Apple/usr/bin/"
-      - "/Library/Apple/usr/bin/"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/"
-      - "/opt/homebrew/bin/"
-      - "/opt/homebrew/bin/"
-      - "/opt/homebrew/bin/"
-      - "/opt/homebrew/bin/"
-      - "/opt/homebrew/bin/"
-      - "/opt/homebrew/bin/"
-      - "/opt/homebrew/bin/"
-      - "/opt/homebrew/bin/"
-      - "/opt/homebrew/sbin/"
-      - "/opt/homebrew/sbin/"
-      - "/opt/homebrew/sbin/"
-      - "/opt/homebrew/sbin/"
-      - "/opt/homebrew/sbin/"
-      - "/opt/homebrew/sbin/"
-      - "/opt/homebrew/sbin/"
-      - "/opt/homebrew/sbin/"
-    found: "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/libz.tbd"
-    search_context:
-      CMAKE_PREFIX_PATH:
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/build/arm64-ninja/deps/usr/local"
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local"
-      ENV{PATH}:
-        - "/usr/local/bin"
-        - "/System/Cryptexes/App/usr/bin"
-        - "/usr/bin"
-        - "/bin"
-        - "/usr/sbin"
-        - "/sbin"
-        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin"
-        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin"
-        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin"
-        - "/Library/Apple/usr/bin"
-        - "/Library/Frameworks/Python.framework/Versions/3.13/bin"
-        - "/opt/homebrew/bin"
-        - "/opt/homebrew/sbin"
-      CMAKE_INSTALL_PREFIX: "/usr/local"
-      CMAKE_SYSTEM_PREFIX_PATH:
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr"
-        - "/opt/homebrew"
-        - "/usr/local"
-        - "/usr"
-        - "/"
-        - "/opt/homebrew"
-        - "/usr/local"
-        - "/usr/X11R6"
-        - "/usr/pkg"
-        - "/opt"
-        - "/sw"
-        - "/opt/local"
-      CMAKE_SYSTEM_LIBRARY_PATH:
-        - "/usr/lib/X11"
-      CMAKE_SYSTEM_FRAMEWORK_PATH:
-        - "~/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Network/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Library/Frameworks"
-        - "/Library/Frameworks"
-        - "/Network/Library/Frameworks"
-        - "/System/Library/Frameworks"
-  -
-    kind: "find-v1"
-    backtrace:
-      - "/opt/homebrew/share/cmake/Modules/FindZLIB.cmake:183 (find_library)"
-      - "src/CMakeLists.txt:882 (find_package)"
-    mode: "library"
-    variable: "ZLIB_LIBRARY_DEBUG"
-    description: "Path to a library."
-    settings:
-      SearchFramework: "FIRST"
-      SearchAppBundle: "FIRST"
-      CMAKE_FIND_USE_CMAKE_PATH: true
-      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
-      CMAKE_FIND_USE_INSTALL_PREFIX: true
-    names:
-      - "zd"
-      - "zlibd"
-      - "zdlld"
-      - "zlibd1"
-      - "zlib1d"
-      - "zlibstaticd"
-      - "zlibwapid"
-      - "zlibvcd"
-      - "zlibstatd"
-    candidate_directories:
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
-      - "/usr/local/bin/"
-      - "/System/Cryptexes/App/usr/bin/"
-      - "/usr/bin/"
-      - "/bin/"
-      - "/usr/sbin/"
-      - "/sbin/"
-      - "/Library/Apple/usr/bin/"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/"
-      - "/opt/homebrew/bin/"
-      - "/opt/homebrew/sbin/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/"
-      - "/opt/homebrew/lib/"
-      - "/opt/homebrew/lib/"
-      - "/opt/homebrew/"
-      - "/usr/local/lib/"
-      - "/usr/local/lib/"
-      - "/usr/local/"
-      - "/usr/lib/"
-      - "/usr/lib/"
-      - "/usr/"
-      - "/opt/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/"
-      - "/Library/Frameworks/"
-      - "/System/Library/Frameworks/"
-    searched_directories:
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
-      - "/usr/local/bin/"
-      - "/usr/local/bin/"
-      - "/usr/local/bin/"
-      - "/usr/local/bin/"
-      - "/usr/local/bin/"
-      - "/usr/local/bin/"
-      - "/usr/local/bin/"
-      - "/usr/local/bin/"
-      - "/usr/local/bin/"
-      - "/System/Cryptexes/App/usr/bin/"
-      - "/System/Cryptexes/App/usr/bin/"
-      - "/System/Cryptexes/App/usr/bin/"
-      - "/System/Cryptexes/App/usr/bin/"
-      - "/System/Cryptexes/App/usr/bin/"
-      - "/System/Cryptexes/App/usr/bin/"
-      - "/System/Cryptexes/App/usr/bin/"
-      - "/System/Cryptexes/App/usr/bin/"
-      - "/System/Cryptexes/App/usr/bin/"
-      - "/usr/bin/"
-      - "/usr/bin/"
-      - "/usr/bin/"
-      - "/usr/bin/"
-      - "/usr/bin/"
-      - "/usr/bin/"
-      - "/usr/bin/"
-      - "/usr/bin/"
-      - "/usr/bin/"
-      - "/bin/"
-      - "/bin/"
-      - "/bin/"
-      - "/bin/"
-      - "/bin/"
-      - "/bin/"
-      - "/bin/"
-      - "/bin/"
-      - "/bin/"
-      - "/usr/sbin/"
-      - "/usr/sbin/"
-      - "/usr/sbin/"
-      - "/usr/sbin/"
-      - "/usr/sbin/"
-      - "/usr/sbin/"
-      - "/usr/sbin/"
-      - "/usr/sbin/"
-      - "/usr/sbin/"
-      - "/sbin/"
-      - "/sbin/"
-      - "/sbin/"
-      - "/sbin/"
-      - "/sbin/"
-      - "/sbin/"
-      - "/sbin/"
-      - "/sbin/"
-      - "/sbin/"
-      - "/Library/Apple/usr/bin/"
-      - "/Library/Apple/usr/bin/"
-      - "/Library/Apple/usr/bin/"
-      - "/Library/Apple/usr/bin/"
-      - "/Library/Apple/usr/bin/"
-      - "/Library/Apple/usr/bin/"
-      - "/Library/Apple/usr/bin/"
-      - "/Library/Apple/usr/bin/"
-      - "/Library/Apple/usr/bin/"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/"
-      - "/opt/homebrew/bin/"
-      - "/opt/homebrew/bin/"
-      - "/opt/homebrew/bin/"
-      - "/opt/homebrew/bin/"
-      - "/opt/homebrew/bin/"
-      - "/opt/homebrew/bin/"
-      - "/opt/homebrew/bin/"
-      - "/opt/homebrew/bin/"
-      - "/opt/homebrew/bin/"
-      - "/opt/homebrew/sbin/"
-      - "/opt/homebrew/sbin/"
-      - "/opt/homebrew/sbin/"
-      - "/opt/homebrew/sbin/"
-      - "/opt/homebrew/sbin/"
-      - "/opt/homebrew/sbin/"
-      - "/opt/homebrew/sbin/"
-      - "/opt/homebrew/sbin/"
-      - "/opt/homebrew/sbin/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/"
-      - "/opt/homebrew/lib/"
-      - "/opt/homebrew/lib/"
-      - "/opt/homebrew/lib/"
-      - "/opt/homebrew/lib/"
-      - "/opt/homebrew/lib/"
-      - "/opt/homebrew/lib/"
-      - "/opt/homebrew/lib/"
-      - "/opt/homebrew/lib/"
-      - "/opt/homebrew/lib/"
-      - "/opt/homebrew/lib/"
-      - "/opt/homebrew/lib/"
-      - "/opt/homebrew/lib/"
-      - "/opt/homebrew/lib/"
-      - "/opt/homebrew/lib/"
-      - "/opt/homebrew/lib/"
-      - "/opt/homebrew/lib/"
-      - "/opt/homebrew/lib/"
-      - "/opt/homebrew/lib/"
-      - "/opt/homebrew/"
-      - "/opt/homebrew/"
-      - "/opt/homebrew/"
-      - "/opt/homebrew/"
-      - "/opt/homebrew/"
-      - "/opt/homebrew/"
-      - "/opt/homebrew/"
-      - "/opt/homebrew/"
-      - "/opt/homebrew/"
-      - "/usr/local/lib/"
-      - "/usr/local/lib/"
-      - "/usr/local/lib/"
-      - "/usr/local/lib/"
-      - "/usr/local/lib/"
-      - "/usr/local/lib/"
-      - "/usr/local/lib/"
-      - "/usr/local/lib/"
-      - "/usr/local/lib/"
-      - "/usr/local/lib/"
-      - "/usr/local/lib/"
-      - "/usr/local/lib/"
-      - "/usr/local/lib/"
-      - "/usr/local/lib/"
-      - "/usr/local/lib/"
-      - "/usr/local/lib/"
-      - "/usr/local/lib/"
-      - "/usr/local/lib/"
-      - "/usr/local/"
-      - "/usr/local/"
-      - "/usr/local/"
-      - "/usr/local/"
-      - "/usr/local/"
-      - "/usr/local/"
-      - "/usr/local/"
-      - "/usr/local/"
-      - "/usr/local/"
-      - "/usr/lib/"
-      - "/usr/lib/"
-      - "/usr/lib/"
-      - "/usr/lib/"
-      - "/usr/lib/"
-      - "/usr/lib/"
-      - "/usr/lib/"
-      - "/usr/lib/"
-      - "/usr/lib/"
-      - "/usr/lib/"
-      - "/usr/lib/"
-      - "/usr/lib/"
-      - "/usr/lib/"
-      - "/usr/lib/"
-      - "/usr/lib/"
-      - "/usr/lib/"
-      - "/usr/lib/"
-      - "/usr/lib/"
-      - "/usr/"
-      - "/usr/"
-      - "/usr/"
-      - "/usr/"
-      - "/usr/"
-      - "/usr/"
-      - "/usr/"
-      - "/usr/"
-      - "/usr/"
-      - "/opt/"
-      - "/opt/"
-      - "/opt/"
-      - "/opt/"
-      - "/opt/"
-      - "/opt/"
-      - "/opt/"
-      - "/opt/"
-      - "/opt/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/"
-      - "/Library/Frameworks/"
-      - "/Library/Frameworks/"
-      - "/Library/Frameworks/"
-      - "/Library/Frameworks/"
-      - "/Library/Frameworks/"
-      - "/Library/Frameworks/"
-      - "/Library/Frameworks/"
-      - "/Library/Frameworks/"
-      - "/Library/Frameworks/"
-      - "/System/Library/Frameworks/"
-      - "/System/Library/Frameworks/"
-      - "/System/Library/Frameworks/"
-      - "/System/Library/Frameworks/"
-      - "/System/Library/Frameworks/"
-      - "/System/Library/Frameworks/"
-      - "/System/Library/Frameworks/"
-      - "/System/Library/Frameworks/"
-      - "/System/Library/Frameworks/"
-    found: false
-    search_context:
-      CMAKE_PREFIX_PATH:
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/build/arm64-ninja/deps/usr/local"
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local"
-      ENV{PATH}:
-        - "/usr/local/bin"
-        - "/System/Cryptexes/App/usr/bin"
-        - "/usr/bin"
-        - "/bin"
-        - "/usr/sbin"
-        - "/sbin"
-        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin"
-        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin"
-        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin"
-        - "/Library/Apple/usr/bin"
-        - "/Library/Frameworks/Python.framework/Versions/3.13/bin"
-        - "/opt/homebrew/bin"
-        - "/opt/homebrew/sbin"
-      CMAKE_INSTALL_PREFIX: "/usr/local"
-      CMAKE_SYSTEM_PREFIX_PATH:
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr"
-        - "/opt/homebrew"
-        - "/usr/local"
-        - "/usr"
-        - "/"
-        - "/opt/homebrew"
-        - "/usr/local"
-        - "/usr/X11R6"
-        - "/usr/pkg"
-        - "/opt"
-        - "/sw"
-        - "/opt/local"
-      CMAKE_SYSTEM_LIBRARY_PATH:
-        - "/usr/lib/X11"
-      CMAKE_SYSTEM_FRAMEWORK_PATH:
-        - "~/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Network/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Library/Frameworks"
-        - "/Library/Frameworks"
-        - "/Network/Library/Frameworks"
-        - "/System/Library/Frameworks"
-  -
-    kind: "find-v1"
-    backtrace:
-      - "src/CMakeLists.txt:888 (find_library)"
-    mode: "library"
-    variable: "FOUNDATION"
-    description: "Path to a library."
-    settings:
-      SearchFramework: "FIRST"
-      SearchAppBundle: "FIRST"
-      CMAKE_FIND_USE_CMAKE_PATH: true
-      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
-      CMAKE_FIND_USE_INSTALL_PREFIX: true
-    names:
-      - "Foundation"
-    candidate_directories:
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
-      - "/usr/local/bin/"
-      - "/System/Cryptexes/App/usr/bin/"
-      - "/usr/bin/"
-      - "/bin/"
-      - "/usr/sbin/"
-      - "/sbin/"
-      - "/Library/Apple/usr/bin/"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/"
-      - "/opt/homebrew/bin/"
-      - "/opt/homebrew/sbin/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/"
-      - "/opt/homebrew/lib/"
-      - "/opt/homebrew/"
-      - "/usr/local/lib/"
-      - "/usr/local/"
-      - "/usr/lib/"
-      - "/usr/"
-      - "/opt/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/"
-      - "/Library/Frameworks/"
-      - "/System/Library/Frameworks/"
-    found: "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Foundation.framework"
-    search_context:
-      CMAKE_PREFIX_PATH:
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/build/arm64-ninja/deps/usr/local"
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local"
-      ENV{PATH}:
-        - "/usr/local/bin"
-        - "/System/Cryptexes/App/usr/bin"
-        - "/usr/bin"
-        - "/bin"
-        - "/usr/sbin"
-        - "/sbin"
-        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin"
-        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin"
-        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin"
-        - "/Library/Apple/usr/bin"
-        - "/Library/Frameworks/Python.framework/Versions/3.13/bin"
-        - "/opt/homebrew/bin"
-        - "/opt/homebrew/sbin"
-      CMAKE_INSTALL_PREFIX: "/usr/local"
-      CMAKE_SYSTEM_PREFIX_PATH:
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr"
-        - "/opt/homebrew"
-        - "/usr/local"
-        - "/usr"
-        - "/"
-        - "/opt/homebrew"
-        - "/usr/local"
-        - "/usr/X11R6"
-        - "/usr/pkg"
-        - "/opt"
-        - "/sw"
-        - "/opt/local"
-      CMAKE_SYSTEM_LIBRARY_PATH:
-        - "/usr/lib/X11"
-      CMAKE_SYSTEM_FRAMEWORK_PATH:
-        - "~/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Network/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Library/Frameworks"
-        - "/Library/Frameworks"
-        - "/Network/Library/Frameworks"
-        - "/System/Library/Frameworks"
-  -
-    kind: "find-v1"
-    backtrace:
-      - "src/CMakeLists.txt:889 (find_library)"
-    mode: "library"
-    variable: "MODELIO"
-    description: "Path to a library."
-    settings:
-      SearchFramework: "FIRST"
-      SearchAppBundle: "FIRST"
-      CMAKE_FIND_USE_CMAKE_PATH: true
-      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
-      CMAKE_FIND_USE_INSTALL_PREFIX: true
-    names:
-      - "ModelIO"
-    candidate_directories:
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/lib/"
-      - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local/"
-      - "/usr/local/bin/"
-      - "/System/Cryptexes/App/usr/bin/"
-      - "/usr/bin/"
-      - "/bin/"
-      - "/usr/sbin/"
-      - "/sbin/"
-      - "/Library/Apple/usr/bin/"
-      - "/Library/Frameworks/Python.framework/Versions/3.13/bin/"
-      - "/opt/homebrew/bin/"
-      - "/opt/homebrew/sbin/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/"
-      - "/opt/homebrew/lib/"
-      - "/opt/homebrew/"
-      - "/usr/local/lib/"
-      - "/usr/local/"
-      - "/usr/lib/"
-      - "/usr/"
-      - "/opt/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/"
-      - "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/"
-      - "/Library/Frameworks/"
-      - "/System/Library/Frameworks/"
-    found: "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/ModelIO.framework"
-    search_context:
-      CMAKE_PREFIX_PATH:
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/build/arm64-ninja/deps/usr/local"
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local"
-      ENV{PATH}:
-        - "/usr/local/bin"
-        - "/System/Cryptexes/App/usr/bin"
-        - "/usr/bin"
-        - "/bin"
-        - "/usr/sbin"
-        - "/sbin"
-        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin"
-        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin"
-        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin"
-        - "/Library/Apple/usr/bin"
-        - "/Library/Frameworks/Python.framework/Versions/3.13/bin"
-        - "/opt/homebrew/bin"
-        - "/opt/homebrew/sbin"
-      CMAKE_INSTALL_PREFIX: "/usr/local"
-      CMAKE_SYSTEM_PREFIX_PATH:
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr"
-        - "/opt/homebrew"
-        - "/usr/local"
-        - "/usr"
-        - "/"
-        - "/opt/homebrew"
-        - "/usr/local"
-        - "/usr/X11R6"
-        - "/usr/pkg"
-        - "/opt"
-        - "/sw"
-        - "/opt/local"
-      CMAKE_SYSTEM_LIBRARY_PATH:
-        - "/usr/lib/X11"
-      CMAKE_SYSTEM_FRAMEWORK_PATH:
-        - "~/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Network/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks"
-        - "/Applications/Xcode.app/Contents/Developer/Library/Frameworks"
-        - "/Library/Frameworks"
-        - "/Network/Library/Frameworks"
-        - "/System/Library/Frameworks"
-...
-
----
-events:
-  -
-    kind: "find-v1"
-    backtrace:
-      - "src/CMakeLists.txt:872 (find_library)"
-    mode: "library"
-    variable: "CRYPTO_LIB"
-    description: "Path to a library."
-    settings:
-      SearchFramework: "FIRST"
-      SearchAppBundle: "FIRST"
-      CMAKE_FIND_USE_CMAKE_PATH: true
-      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
-      CMAKE_FIND_USE_INSTALL_PREFIX: true
-    names:
-      - "crypto"
-      - "libcrypto"
-    candidate_directories:
-      - "/opt/homebrew/opt/openssl@3/lib/"
-    found: "/opt/homebrew/opt/openssl@3/lib/libcrypto.dylib"
-    search_context:
-      CMAKE_PREFIX_PATH:
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/build/arm64-ninja/deps/usr/local"
-        - "/Users/maosone/Downloads/orcaslicer-addon/OrcaSlicer/deps/build/destdir/usr/local"
-      ENV{PATH}:
-        - "/usr/local/bin"
-        - "/System/Cryptexes/App/usr/bin"
-        - "/usr/bin"
-        - "/bin"
-        - "/usr/sbin"
-        - "/sbin"
-        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin"
-        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin"
-        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin"
-        - "/Library/Apple/usr/bin"
-        - "/Library/Frameworks/Python.framework/Versions/3.13/bin"
-        - "/opt/homebrew/bin"
-        - "/opt/homebrew/sbin"
-      CMAKE_INSTALL_PREFIX: "/usr/local"
-      CMAKE_SYSTEM_PREFIX_PATH:
-        - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr"
-        - "/opt/homebrew"
-        - "/usr/local"
-        - "/usr"
-        - "/"
-        - "/opt/homebrew"
-        - "/usr/local"
-        - "/usr/X11R6"
-        - "/usr/pkg"
-        - "/opt"
-        - "/sw"
-        - "/opt/local"
-      CMAKE_SYSTEM_LIBRARY_PATH:
-        - "/usr/lib/X11"
       CMAKE_SYSTEM_FRAMEWORK_PATH:
         - "~/Library/Frameworks"
         - "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"

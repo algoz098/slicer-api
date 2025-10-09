@@ -31,7 +31,11 @@ await orca.slice({
   printerProfile: 'Bambu Lab X1 Carbon 0.4 nozzle',
   filamentProfile: 'Bambu PLA Basic @BBL X1C',
   processProfile: '0.20mm Standard @BBL X1C',
-  options: { sparse_infill_density: 30, layer_height: 0.24 }
+  options: {
+    sparse_infill_density: 30,
+    layer_height: 0.24,
+    curr_bed_type: 'High Temp Plate'  // Optional: override bed type
+  }
 })
 ```
 
@@ -41,6 +45,35 @@ Quick start: run the HTTP API (node-api)
   - cd node-api && npm ci && npm run compile && npm start
   - Set ORCACLI_ADDON_DIR to OrcaSlicerAddon/bindings/node if needed
   - Set ORCACLI_RESOURCES to OrcaSlicer/resources
+
+Bed Type Configuration
+The addon and HTTP API support overriding the bed/plate type. Available bed types:
+- "Default Plate" (btDefault)
+- "Cool Plate" (btPC)
+- "Engineering Plate" (btEP)
+- "High Temp Plate" (btPEI)
+- "Textured PEI Plate" (btPTE)
+- "Textured Cool Plate" (btPCT)
+- "Supertack Plate" (btSuperTack)
+
+Example via HTTP API (POST to /slicer/3mf):
+```json
+{
+  "printerProfile": "Bambu Lab A1 mini 0.4 nozzle",
+  "filamentProfile": "Generic PLA @BBL A1M",
+  "processProfile": "0.20mm Standard @BBL A1M",
+  "bedType": "High Temp Plate"
+}
+```
+
+Example via addon:
+```javascript
+await orca.slice({
+  input: 'model.3mf',
+  output: 'output.gcode.3mf',
+  options: { curr_bed_type: 'High Temp Plate' }
+})
+```
 
 Docker notes
 - The multi-stage Dockerfile now builds only the addon artifacts (no CLI stage).

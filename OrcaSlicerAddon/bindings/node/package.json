@@ -30,6 +30,10 @@
     "url": "https://github.com/<org>/<repo>/issues"
   },
   "homepage": "https://github.com/<org>/<repo>#readme",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "form-data": "^4.0.0"
+  },
   "devDependencies": {
     "cmake-js": "^7.3.1",
     "node-api-headers": "^1.0.0"
@@ -41,6 +45,8 @@
     "prebuilds/**/*",
     "build/bindings/node/*",
     "index.js",
-    "types/**/*"
+    "lib/**/*",
+    "types/**/*",
+    "examples/**/*"
   ]
 }

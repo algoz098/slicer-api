@@ -61,4 +61,15 @@ if (fs.existsSync(prebuildsDir)) {
 
 // Fall back to mod1 error for clearer message in dev
 log("falling back to require(mod1)", mod1);
-module.exports = wrapAsMiddleware(require(mod1));
+const addon = wrapAsMiddleware(require(mod1));
+
+// Attach Klipper client and high-level API
+try {
+  addon.KlipperClient = require('./lib/klipper-client');
+  addon.SliceAndSend = require('./lib/slice-and-send');
+  log("Klipper integration loaded");
+} catch (err) {
+  log("Klipper integration not available:", err.message);
+}
+
+module.exports = addon;

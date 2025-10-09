@@ -1,5 +1,6 @@
 import * as path from 'node:path'
 import * as fs from 'node:fs'
+import * as os from 'node:os'
 
 const addonDir = process.env.ORCACLI_ADDON_DIR || path.resolve(__dirname, '../../../OrcaSlicerAddon/bindings/node')
 
@@ -40,12 +41,10 @@ export default function(app: any) {
                 const filamentDir = path.join(profilesRoot, 'BBL', 'filament')
 
                 const readUtf8 = (p: string) => fs.readFileSync(p, 'utf8')
-                let vendorName = 'BBL'
                 let vendorVersion: string | number = '1'
                 try {
                     const vroot = JSON.parse(readUtf8(bblJsonPath))
                     if (vroot && typeof vroot === 'object') {
-                        if (typeof vroot.name === 'string') vendorName = vroot.name
                         if (typeof vroot.version === 'string' || typeof vroot.version === 'number') vendorVersion = vroot.version
                     }
                 } catch {}
@@ -63,7 +62,8 @@ export default function(app: any) {
 
 
                 const vendorJsonObj = {
-                    name: vendorName,
+                    // Force canonical vendor name to match bundle key and sandbox folder
+                    name: 'BBL',
                     version: vendorVersion,
                     machine_model_list: [ { name: modelName, sub_path: `machine/${modelName}.json` } ],
                     process_list: [
@@ -102,6 +102,10 @@ export default function(app: any) {
                 vendorJsonObj.process_list.push({ name: '0.20mm Standard @BBL P1P', sub_path: 'process/0.20mm Standard @BBL P1P.json' })
                 vendorJsonObj.process_list.push({ name: a1mDefaultProcess, sub_path: `process/${a1mDefaultProcess}.json` })
                 vendorJsonObj.filament_list.push({ name: a1mDefaultFilament, sub_path: `filament/${a1mDefaultFilament}.json` })
+
+                // Add A1 mini generic filament variants to ensure compatibility across materials
+                vendorJsonObj.filament_list.push({ name: 'Generic PETG @BBL A1M', sub_path: 'filament/Generic PETG @BBL A1M.json' })
+                vendorJsonObj.filament_list.push({ name: 'Generic TPU @BBL A1M', sub_path: 'filament/Generic TPU @BBL A1M.json' })
 
 
 
@@ -154,83 +158,116 @@ export default function(app: any) {
                     ]
                 }
 
+                // Helper para montar arquivos com toler e2ncia (n e3o abortar por itens opcionais)
+                const files: Record<string, string> = {}
+                const addFile = (key: string, fullPath: string, required = true) => {
+                    try {
+                        files[key] = fs.readFileSync(fullPath, 'utf8')
+                    } catch (e) {
+                        console[required ? 'error' : 'warn'](`[Orca] ${required ? 'Missing required' : 'Missing optional'} file: ${fullPath}`)
+                        if (required) throw e
+                    }
+                }
+
+                // --- BBL ---
+                // vendor root JSON inside bundle files (alguns codepaths esperam isso)
+                files['profiles/BBL.json'] = JSON.stringify(vendorJsonObj)
+                // machine (modelo e herdados)
+                addFile(`BBL/machine/${modelName}.json`, path.join(machineDir, `${modelName}.json`), true)
+                addFile('BBL/machine/fdm_machine_common.json', path.join(machineDir, 'fdm_machine_common.json'), true)
+                addFile('BBL/machine/fdm_bbl_3dp_001_common.json', path.join(machineDir, 'fdm_bbl_3dp_001_common.json'), true)
+                addFile(`BBL/machine/${nozzleName}.json`, path.join(machineDir, `${nozzleName}.json`), true)
+                // A1 mini model + nozzle (criticos)
+                addFile(`BBL/machine/${a1mModelName}.json`, path.join(machineDir, `${a1mModelName}.json`), true)
+                addFile(`BBL/machine/${a1mNozzleName}.json`, path.join(machineDir, `${a1mNozzleName}.json`), true)
+                // process (cadeia de heranca do preset padrao)
+                addFile('BBL/process/fdm_process_common.json', path.join(processDir, 'fdm_process_common.json'), true)
+                addFile('BBL/process/fdm_process_single_common.json', path.join(processDir, 'fdm_process_single_common.json'), true)
+                addFile('BBL/process/fdm_process_single_0.20.json', path.join(processDir, 'fdm_process_single_0.20.json'), true)
+                addFile(`BBL/process/${defaultProcess}.json`, path.join(processDir, `${defaultProcess}.json`), true)
+                // A1 mini default process (requer heran e7a do P1P)
+                addFile(`BBL/process/${a1mDefaultProcess}.json`, path.join(processDir, `${a1mDefaultProcess}.json`), true)
+                addFile('BBL/process/0.20mm Standard @BBL P1P.json', path.join(processDir, '0.20mm Standard @BBL P1P.json'), true)
+                // filament (bases + defaults)
+                addFile('BBL/filament/fdm_filament_common.json', path.join(filamentDir, 'fdm_filament_common.json'), true)
+                addFile('BBL/filament/fdm_filament_pla.json', path.join(filamentDir, 'fdm_filament_pla.json'), true)
+                addFile(`BBL/filament/${defaultFilament}.json`, path.join(filamentDir, `${defaultFilament}.json`), true)
+                addFile(`BBL/filament/${a1mDefaultFilament}.json`, path.join(filamentDir, `${a1mDefaultFilament}.json`), true)
+                // generic filaments ABS/PLA/PETG/TPU (opcionais para compatibilidade mais ampla)
+                addFile('BBL/filament/fdm_filament_pet.json', path.join(filamentDir, 'fdm_filament_pet.json'), true)
+                addFile('BBL/filament/fdm_filament_abs.json', path.join(filamentDir, 'fdm_filament_abs.json'), false)
+                addFile('BBL/filament/fdm_filament_tpu.json', path.join(filamentDir, 'fdm_filament_tpu.json'), false)
+                addFile('BBL/filament/Generic PLA @base.json', path.join(filamentDir, 'Generic PLA @base.json'), false)
+                addFile('BBL/filament/Generic PETG @base.json', path.join(filamentDir, 'Generic PETG @base.json'), true)
+                addFile('BBL/filament/Generic PETG @BBL A1.json', path.join(filamentDir, 'Generic PETG @BBL A1.json'), false)
+                addFile('BBL/filament/Generic ABS @base.json', path.join(filamentDir, 'Generic ABS @base.json'), false)
+                addFile('BBL/filament/Generic ABS @BBL A1.json', path.join(filamentDir, 'Generic ABS @BBL A1.json'), false)
+                addFile('BBL/filament/Generic TPU.json', path.join(filamentDir, 'Generic TPU.json'), false)
+                addFile('BBL/filament/Generic TPU @BBL A1.json', path.join(filamentDir, 'Generic TPU @BBL A1.json'), false)
+                // A1 mini extras (alguns requeridos para PETG herdado)
+                addFile('BBL/filament/Generic PETG @BBL A1M.json', path.join(filamentDir, 'Generic PETG @BBL A1M.json'), true)
+                addFile('BBL/filament/Generic TPU @BBL A1M.json', path.join(filamentDir, 'Generic TPU @BBL A1M.json'), false)
+
+                // --- Creality (co-localizado no mesmo sandbox) ---
+                files['profiles/Creality.json'] = JSON.stringify(crealityVendorJsonMinimal)
+                addFile('Creality/machine/fdm_machine_common.json', path.join(crMachineDir, 'fdm_machine_common.json'), false)
+                addFile('Creality/machine/fdm_creality_common.json', path.join(crMachineDir, 'fdm_creality_common.json'), false)
+                addFile('Creality/machine/Creality K1 Max.json', path.join(crMachineDir, 'Creality K1 Max.json'), false)
+                addFile('Creality/machine/Creality K1 Max (0.4 nozzle).json', path.join(crMachineDir, 'Creality K1 Max (0.4 nozzle).json'), false)
+                addFile('Creality/process/fdm_process_common.json', path.join(crProcessDir, 'fdm_process_common.json'), false)
+                addFile('Creality/process/fdm_process_creality_common.json', path.join(crProcessDir, 'fdm_process_creality_common.json'), false)
+                addFile('Creality/process/fdm_process_common_klipper.json', path.join(crProcessDir, 'fdm_process_common_klipper.json'), false)
+                addFile('Creality/process/0.20mm Standard @Creality K1Max (0.4 nozzle).json', path.join(crProcessDir, '0.20mm Standard @Creality K1Max (0.4 nozzle).json'), false)
+                addFile('Creality/filament/fdm_filament_common.json', path.join(crFilamentDir, 'fdm_filament_common.json'), false)
+                addFile('Creality/filament/fdm_filament_pla.json', path.join(crFilamentDir, 'fdm_filament_pla.json'), false)
+                addFile('Creality/filament/fdm_filament_pet.json', path.join(crFilamentDir, 'fdm_filament_pet.json'), false)
+                addFile('Creality/filament/fdm_filament_abs.json', path.join(crFilamentDir, 'fdm_filament_abs.json'), false)
+                addFile('Creality/filament/fdm_filament_tpu.json', path.join(crFilamentDir, 'fdm_filament_tpu.json'), false)
+                addFile('Creality/filament/Creality Generic PLA.json', path.join(crFilamentDir, 'Creality Generic PLA.json'), false)
+                addFile('Creality/filament/Creality Generic PETG.json', path.join(crFilamentDir, 'Creality Generic PETG.json'), false)
+                addFile('Creality/filament/Creality Generic ABS.json', path.join(crFilamentDir, 'Creality Generic ABS.json'), false)
+                addFile('Creality/filament/Creality Generic TPU.json', path.join(crFilamentDir, 'Creality Generic TPU.json'), false)
+                addFile('Creality/filament/Creality HF Generic PLA.json', path.join(crFilamentDir, 'Creality HF Generic PLA.json'), false)
+
                 const bundle = {
                     vendor: 'BBL',
                     vendorJson: JSON.stringify(vendorJsonObj),
-                    files: {
-                        // --- BBL ---
-                        // machine (modelo e herdados)
-                        [`BBL/machine/${modelName}.json`]: readUtf8(path.join(machineDir, `${modelName}.json`)),
-                        'BBL/machine/fdm_machine_common.json': readUtf8(path.join(machineDir, 'fdm_machine_common.json')),
-                        'BBL/machine/fdm_bbl_3dp_001_common.json': readUtf8(path.join(machineDir, 'fdm_bbl_3dp_001_common.json')),
-                        [`BBL/machine/${nozzleName}.json`]: readUtf8(path.join(machineDir, `${nozzleName}.json`)),
-                        // A1 mini model + nozzle
-                        [`BBL/machine/${a1mModelName}.json`]: readUtf8(path.join(machineDir, `${a1mModelName}.json`)),
-                        [`BBL/machine/${a1mNozzleName}.json`]: readUtf8(path.join(machineDir, `${a1mNozzleName}.json`)),
-                        // process (cadeia de heranca do preset padrao)
-                        'BBL/process/fdm_process_common.json': readUtf8(path.join(processDir, 'fdm_process_common.json')),
-                        'BBL/process/fdm_process_single_common.json': readUtf8(path.join(processDir, 'fdm_process_single_common.json')),
-                        'BBL/process/fdm_process_single_0.20.json': readUtf8(path.join(processDir, 'fdm_process_single_0.20.json')),
-                        [`BBL/process/${defaultProcess}.json`]: readUtf8(path.join(processDir, `${defaultProcess}.json`)),
-                        // A1 mini default process
-                        [`BBL/process/${a1mDefaultProcess}.json`]: readUtf8(path.join(processDir, `${a1mDefaultProcess}.json`)),
-                        // Heran e7a: P1P Standard requerido pelo A1M Standard
-                        'BBL/process/0.20mm Standard @BBL P1P.json': readUtf8(path.join(processDir, '0.20mm Standard @BBL P1P.json')),
-                        // filament (cadeia de heranca do filamento padrao)
-                        'BBL/filament/fdm_filament_common.json': readUtf8(path.join(filamentDir, 'fdm_filament_common.json')),
-                        'BBL/filament/fdm_filament_pla.json': readUtf8(path.join(filamentDir, 'fdm_filament_pla.json')),
-                        // 'BBL/filament/Bambu PLA Basic @base.json': readUtf8(path.join(filamentDir, 'Bambu PLA Basic @base.json')),
-                        [`BBL/filament/${defaultFilament}.json`]: readUtf8(path.join(filamentDir, `${defaultFilament}.json`)),
-                        // A1 mini default filament
-                        [`BBL/filament/${a1mDefaultFilament}.json`]: readUtf8(path.join(filamentDir, `${a1mDefaultFilament}.json`)),
-                        // generic filaments ABS/PLA/PETG/TPU (bases + A1 variants)
-                        'BBL/filament/fdm_filament_pet.json': readUtf8(path.join(filamentDir, 'fdm_filament_pet.json')),
-                        'BBL/filament/fdm_filament_abs.json': readUtf8(path.join(filamentDir, 'fdm_filament_abs.json')),
-                        'BBL/filament/fdm_filament_tpu.json': readUtf8(path.join(filamentDir, 'fdm_filament_tpu.json')),
-                        'BBL/filament/Generic PLA @base.json': readUtf8(path.join(filamentDir, 'Generic PLA @base.json')),
-
-                        'BBL/filament/Generic PETG @base.json': readUtf8(path.join(filamentDir, 'Generic PETG @base.json')),
-                        'BBL/filament/Generic PETG @BBL A1.json': readUtf8(path.join(filamentDir, 'Generic PETG @BBL A1.json')),
-                        'BBL/filament/Generic ABS @base.json': readUtf8(path.join(filamentDir, 'Generic ABS @base.json')),
-                        'BBL/filament/Generic ABS @BBL A1.json': readUtf8(path.join(filamentDir, 'Generic ABS @BBL A1.json')),
-                        'BBL/filament/Generic TPU.json': readUtf8(path.join(filamentDir, 'Generic TPU.json')),
-                        'BBL/filament/Generic TPU @BBL A1.json': readUtf8(path.join(filamentDir, 'Generic TPU @BBL A1.json')),
-
-                        // --- Creality (co-localizado no mesmo sandbox) ---
-                        // vendor root JSON
-                        'profiles/Creality.json': JSON.stringify(crealityVendorJsonMinimal),
-                        // machine
-                        'Creality/machine/fdm_machine_common.json': readUtf8(path.join(crMachineDir, 'fdm_machine_common.json')),
-                        'Creality/machine/fdm_creality_common.json': readUtf8(path.join(crMachineDir, 'fdm_creality_common.json')),
-                        'Creality/machine/Creality K1 Max.json': readUtf8(path.join(crMachineDir, 'Creality K1 Max.json')),
-                        'Creality/machine/Creality K1 Max (0.4 nozzle).json': readUtf8(path.join(crMachineDir, 'Creality K1 Max (0.4 nozzle).json')),
-                        // process
-                        'Creality/process/fdm_process_common.json': readUtf8(path.join(crProcessDir, 'fdm_process_common.json')),
-                        'Creality/process/fdm_process_creality_common.json': readUtf8(path.join(crProcessDir, 'fdm_process_creality_common.json')),
-                        'Creality/process/fdm_process_common_klipper.json': readUtf8(path.join(crProcessDir, 'fdm_process_common_klipper.json')),
-                        'Creality/process/0.20mm Standard @Creality K1Max (0.4 nozzle).json': readUtf8(path.join(crProcessDir, '0.20mm Standard @Creality K1Max (0.4 nozzle).json')),
-                        // filament (minimo para ficar utilizavel)
-                        'Creality/filament/fdm_filament_common.json': readUtf8(path.join(crFilamentDir, 'fdm_filament_common.json')),
-                        'Creality/filament/fdm_filament_pla.json': readUtf8(path.join(crFilamentDir, 'fdm_filament_pla.json')),
-                        'Creality/filament/fdm_filament_pet.json': readUtf8(path.join(crFilamentDir, 'fdm_filament_pet.json')),
-                        'Creality/filament/fdm_filament_abs.json': readUtf8(path.join(crFilamentDir, 'fdm_filament_abs.json')),
-                        'Creality/filament/fdm_filament_tpu.json': readUtf8(path.join(crFilamentDir, 'fdm_filament_tpu.json')),
-                        'Creality/filament/Creality Generic PLA.json': readUtf8(path.join(crFilamentDir, 'Creality Generic PLA.json')),
-                        'Creality/filament/Creality Generic PETG.json': readUtf8(path.join(crFilamentDir, 'Creality Generic PETG.json')),
-                        'Creality/filament/Creality Generic ABS.json': readUtf8(path.join(crFilamentDir, 'Creality Generic ABS.json')),
-                        'Creality/filament/Creality Generic TPU.json': readUtf8(path.join(crFilamentDir, 'Creality Generic TPU.json')),
-                        'Creality/filament/Creality HF Generic PLA.json': readUtf8(path.join(crFilamentDir, 'Creality HF Generic PLA.json')),
-                    }
+                    files,
                 }
 
                 // Carrega sandbox interno do addon com apenas esses arquivos
                 if (typeof (orca as any).loadVendorBundle === 'function') {
                     (orca as any).loadVendorBundle(bundle)
+                    // DEBUG: verificar materializacao dos arquivos criticos no sandbox do addon
+                    try {
+                        const sandbox = path.join(os.tmpdir(), '.orcaslicercli', `bundle-${process.pid}`)
+                        const critical = [
+                            path.join(sandbox, 'profiles', 'BBL', 'machine', `${a1mModelName}.json`),
+                            path.join(sandbox, 'profiles', 'BBL', 'machine', `${a1mNozzleName}.json`),
+                            path.join(sandbox, 'profiles', 'BBL', 'filament', 'Generic PETG @base.json'),
+                            path.join(sandbox, 'profiles', 'BBL', 'filament', 'fdm_filament_pet.json'),
+                            path.join(sandbox, 'profiles', 'BBL', 'filament', 'Generic PETG @BBL A1M.json')
+                        ]
+                        for (const p of critical) {
+                            const ok = fs.existsSync(p) && fs.statSync(p).size > 0
+                            console.log(`[Orca][debug] sandbox check: ${ok ? 'OK' : 'MISSING/EMPTY'} -> ${p}`)
+                        }
+                    } catch (e) {
+                        console.warn('[Orca][debug] sandbox check failed:', e)
+                    }
                     // Primeiro registre todos os vendors do sandbox atual
                     if (typeof (orca as any).loadVendor === 'function') {
                         try { (orca as any).loadVendor('BBL') } catch {}
                         try { (orca as any).loadVendor('Creality') } catch {}
                     }
+                    // Pré-carregar filamentos A1M comuns para resolver substituições de projeto (ex.: PETG)
+                    try {
+                        const orcaAny = (orca as any)
+                        if (typeof orcaAny.loadFilamentProfile === 'function') {
+                            try { orcaAny.loadFilamentProfile('Generic PLA @BBL A1M') } catch {}
+                            try { orcaAny.loadFilamentProfile('Generic PETG @BBL A1M') } catch {}
+                        }
+                    } catch {}
                     // Só depois materialize os perfis padrão (BBL A1 0.4)
                     // Nenhum preset materializado aqui; será definido após carregar vendors externos (public/profiles)
                     console.log(`[Orca] Loaded vendors BBL + Creality (sandbox interno); nenhum preset materializado neste passo`)

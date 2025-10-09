@@ -19,6 +19,8 @@
 #include <chrono>
 
 #include <fstream>
+#include <regex>
+
 
 // Thin addon will dlopen the engine library at runtime; no direct core linkage.
 static std::mutex g_mutex; // serialize heavy operations
@@ -53,11 +55,11 @@ static std::string g_current_resources; // track current resourcesPath for persi
 
 // C FFI mirrors EngineAPI.hpp (kept locally to avoid compile-time dependency)
 typedef void* orcacli_handle;
-typedef struct { bool success; const char* message; const char* error_details; } orcacli_operation_result;
+typedef struct { bool success; const char* message; const char* error_details; double estimated_time_sec; double filament_used_grams; } orcacli_operation_result;
 typedef struct { const char* filename; uint32_t object_count; uint32_t triangle_count; double volume; const char* bounding_box; bool is_valid; } orcacli_model_info;
 // key/value override
 typedef struct { const char* key; const char* value; } orcacli_kv;
-typedef struct { const char* input_file; const char* output_file; const char* config_file; const char* preset_name; const char* printer_profile; const char* filament_profile; const char* process_profile; int32_t plate_index; bool verbose; bool dry_run; bool transfer_printer_customizations; bool transfer_filament_customizations; bool transfer_process_customizations; bool transfer_project_overrides; const orcacli_kv* overrides; int32_t overrides_count; } orcacli_slice_params;
+typedef struct { const char* input_file; const char* output_file; const char* config_file; const char* preset_name; const char* printer_profile; const char* filament_profile; const char* process_profile; int32_t plate_index; bool verbose; bool dry_run; bool transfer_printer_customizations; bool transfer_filament_customizations; bool transfer_process_customizations; bool transfer_project_overrides; bool center_on_bed; const orcacli_kv* overrides; int32_t overrides_count; } orcacli_slice_params;
 
 typedef orcacli_handle       (*PF_orcacli_create)();
 typedef void                 (*PF_orcacli_destroy)(orcacli_handle);
@@ -481,12 +483,16 @@ struct SliceWork {
     bool transfer_filament_customizations=true;
     bool transfer_process_customizations=true;
     bool transfer_project_overrides=true;
+    bool center_on_bed=false;
   } p;
   // store options as strings and build C array for FFI
   std::vector<std::pair<std::string,std::string>> opts;
   std::vector<orcacli_kv> kvs;
   std::string err;
   std::string msg; // JSON from engine with used/ignored keys (on success)
+  // native stats propagated from engine
+  double est_time_sec = -1.0;
+  double fil_used_grams = -1.0;
 };
 
 static void SliceExecute(napi_env env, void* data) {
@@ -507,6 +513,7 @@ static void SliceExecute(napi_env env, void* data) {
   p.transfer_filament_customizations  = w->p.transfer_filament_customizations;
   p.transfer_process_customizations   = w->p.transfer_process_customizations;
   p.transfer_project_overrides        = w->p.transfer_project_overrides;
+  p.center_on_bed                     = w->p.center_on_bed;
   // Build overrides array (pointers valid due to storage in w->opts)
   if (!w->opts.empty()) {
     w->kvs.clear(); w->kvs.reserve(w->opts.size());
@@ -525,9 +532,12 @@ static void SliceExecute(napi_env env, void* data) {
   if (w->p.verbose) { fprintf(stderr, "DEBUG: [addon] returned from g_ffi.slice (success=%d)\n", (int)r.success); fflush(stderr); }
   if (!r.success) {
     w->err = r.message ? r.message : "slice failed";
-  } else if (r.message) {
+  } else {
     // capture JSON payload from engine (used/ignored overrides)
-    try { w->msg = r.message; } catch (...) {}
+    if (r.message) { try { w->msg = r.message; } catch (...) {} }
+    // capture native stats
+    w->est_time_sec = r.estimated_time_sec;
+    w->fil_used_grams = r.filament_used_grams;
   }
   if (g_ffi.free_result) g_ffi.free_result(&r);
 }
@@ -577,7 +587,13 @@ static void SliceComplete(napi_env env, napi_status status, void* data) {
           }
         }
       }
+
     }
+
+
+    // Native stats from engine (no parsing)
+    if (w->est_time_sec >= 0.0) { napi_value nv; napi_create_double(env, w->est_time_sec, &nv); napi_set_named_property(env, obj, "estimatedTimeSec", nv); }
+    if (w->fil_used_grams >= 0.0) { napi_value nv; napi_create_double(env, w->fil_used_grams, &nv); napi_set_named_property(env, obj, "filamentUsedGrams", nv); }
 
     napi_resolve_deferred(env, w->deferred, obj);
   }
@@ -624,6 +640,8 @@ static napi_value Slice(napi_env env, napi_callback_info info) {
   set_bool("transferFilamentCustomizations", work->p.transfer_filament_customizations);
   set_bool("transferProcessCustomizations", work->p.transfer_process_customizations);
   set_bool("transferProjectOverrides", work->p.transfer_project_overrides);
+  // Behavior flags
+  set_bool("center", work->p.center_on_bed);
 
   // Collect options from params.options and params.custom
   auto collect_kv = [&](napi_value mapObj){

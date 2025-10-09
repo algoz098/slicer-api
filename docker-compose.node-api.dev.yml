@@ -30,6 +30,12 @@ services:
       - ./:/workspace
       - node-api-node_modules:/workspace/node-api/node_modules
 
+    # Increase stack size to handle complex models with shared objects
+    ulimits:
+      stack:
+        soft: 67108864  # 64MB
+        hard: 67108864  # 64MB
+
     # Start dev server with hot reload
     command:
       - /bin/bash

@@ -46,10 +46,9 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
 
     const orca = await this.options.app.get('orca')
 
-    const { options, printerProfile, filamentProfile, processProfile } = data ?? {options: {}}
+    const { options, printerProfile, filamentProfile, processProfile, center, bedType } = data ?? {options: {}}
     const reqField = data.field ?? 'file'
     const anyParams: any = params ?? {}
-
 
     const filesContainer = anyParams?.koa?.request?.files ?? anyParams?.files ?? anyParams?.koa?.ctx?.request?.files
 
@@ -104,6 +103,8 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
     let output: string
     let usedOptions: string[] | undefined
     let ignoredOptions: string[] | undefined
+    let estimatedTimeSec: number | undefined
+    let filamentUsedGrams: number | undefined
 
     // Normalize profiles for BBL A1 vs A1 mini when caller only passes generic filament
     const pPrinter = printerProfile
@@ -117,34 +118,46 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
       if (pFilament && /@BBL A1M\b/.test(pFilament)) pFilament = pFilament.replace('@BBL A1M', '@BBL A1')
     }
 
-    console.log('-------')
-    console.log(data.plate)
-    console.log('-------')
+    console.log(`-------`)
+    console.log(center)
+    console.log(`-------`)
+    // if (!false) throw new  Error("1");
 
+    // Prepare options with bedType override if provided
+    const finalOptions = { ...options }
+    finalOptions.curr_bed_type = bedType ?? 'High Temp Plate'
+
+    // console.log(JSON.stringify(finalOptions, null, 2))
+    // if (!false) throw new Error("lock")
     try {
       const res = await orca.slice({
         input: inputPath,
         output: outPath,
         plate: data.plate,
-        options,
+        options: finalOptions,
+        center: true,
         printerProfile: pPrinter,
         processProfile: pProcess,
         filamentProfile: pFilament,
         transferPrinterCustomizations: data.transferPrinterCustomizations ?? true,
         transferFilamentCustomizations: data.transferFilamentCustomizations ?? true,
-        transferProcessCustomizations: data.transferProcessCustomizations ?? true,
-        transferProjectOverrides: data.transferProjectOverrides ?? true
+        transferProcessCustomizations: true,
+        transferProjectOverrides: true
       })
       output = res.output
+
       usedOptions = (res as any)?.usedOptions
       ignoredOptions = (res as any)?.ignoredOptions
+      estimatedTimeSec = (res as any)?.estimatedTimeSec
+      filamentUsedGrams = (res as any)?.filamentUsedGrams
     } catch (err: any) {
-      const msg = String(err?.message || err)
+      const msg = String(err?.message ?? err ?? '')
       const lower = msg.toLowerCase()
       if (lower.includes('unknown') || lower.includes('invalid') || lower.includes('unrecognized') || lower.includes('failed to set')) {
         throw new BadRequest(`Invalid override option(s): ${msg}`)
       }
-      throw err
+      // Always throw a proper Error instance to avoid "error: undefined" logs
+      throw new Error(msg || 'Slice failed')
     }
 
     // Garante existência do arquivo antes de responder.
@@ -163,7 +176,9 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
       size: content.length,
       // dataBase64,
       usedOptions,
-      ignoredOptions
+      ignoredOptions,
+      estimatedTimeSec,
+      filamentUsedGrams
     }
   }
 

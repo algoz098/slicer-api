@@ -15,6 +15,9 @@ typedef struct {
     bool success;
     const char* message;        // optional; owned by library; free with orcacli_free_string or orcacli_free_result
     const char* error_details;  // optional; owned by library; free with orcacli_free_string or orcacli_free_result
+    // Native engine statistics (present on successful slice if libslic3r available)
+    double estimated_time_sec;   // <0 if not available
+    double filament_used_grams;  // <0 if not available
 } orcacli_operation_result;
 
 // Model info for validation/introspection
@@ -50,6 +53,8 @@ typedef struct {
     bool        transfer_filament_customizations;
     bool        transfer_process_customizations;
     bool        transfer_project_overrides;
+    // Behavior flags
+    bool        center_on_bed;
     // Optional config overrides (applied after profiles). The memory is owned by caller and must live through the call.
     const orcacli_kv* overrides;  // optional
     int32_t     overrides_count;  // number of entries in overrides

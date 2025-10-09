@@ -32,6 +32,9 @@ public:
         bool success = false;
         std::string message;
         std::string error_details;
+        // Native engine statistics (if available)
+        double estimated_time_sec = -1.0;
+        double filament_used_grams = -1.0;
 
         OperationResult() = default;
         OperationResult(bool success, const std::string& message = "", const std::string& error_details = "")
@@ -58,6 +61,8 @@ public:
         bool transfer_filament_customizations = true;
         bool transfer_process_customizations = true;
         bool transfer_project_overrides = true;
+        // Behavior flags
+        bool center_on_bed = false;
     };
 
     /**

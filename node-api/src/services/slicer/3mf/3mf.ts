@@ -66,8 +66,19 @@ export const slicer3Mf = (app: Application) => {
             if (Number.isFinite(n)) data.plate = n
           }
 
+          // Coerce multipart 'center' (string) to boolean (accept common truthy/falsey values)
+          if (data?.center != null && typeof data?.center === 'string') {
+            const v = String(data.center).trim().toLowerCase()
+            data.center = v === 'true' || v === '1' || v === 'on' || v === 'yes'
+          }
+
+          if (data?.transferFilamentCustomizations != null && typeof data?.transferFilamentCustomizations === 'string') {
+            data.transferFilamentCustomizations = data.transferFilamentCustomizations === 'false' ? false : true
+          }
+
           if (!data) ctx.data = {}
-          
+          else ctx.data = data
+
         },
         schemaHooks.validateData(slicer3MfDataValidator),
         schemaHooks.resolveData(slicer3MfDataResolver)

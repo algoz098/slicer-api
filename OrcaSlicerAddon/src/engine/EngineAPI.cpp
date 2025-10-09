@@ -33,9 +33,19 @@ static char* dup_cstr(const std::string& s) {
 extern "C" {
 
 orcacli_handle orcacli_create() {
+    std::cout << "========================================" << std::endl;
+    std::cout << "🚀 ORCACLI_CREATE() - Multi-color fix version!" << std::endl;
+    std::cout << "📅 Build: " << __DATE__ << " " << __TIME__ << std::endl;
+    std::cout << "========================================" << std::endl;
     try {
-        return new Engine();
+        Engine* engine = new Engine();
+        std::cout << "✅ Engine created successfully at " << (void*)engine << std::endl;
+        return engine;
+    } catch (const std::exception& e) {
+        std::cout << "❌ Failed to create engine: " << e.what() << std::endl;
+        return nullptr;
     } catch (...) {
+        std::cout << "❌ Failed to create engine: unknown error" << std::endl;
         return nullptr;
     }
 }
@@ -52,6 +62,9 @@ static orcacli_operation_result make_result(const OrcaSlicerCli::CliCore::Operat
     o.success = r.success;
     o.message = r.message.empty() ? nullptr : dup_cstr(r.message);
     o.error_details = r.error_details.empty() ? nullptr : dup_cstr(r.error_details);
+    // propagate native stats
+    o.estimated_time_sec = r.estimated_time_sec;
+    o.filament_used_grams = r.filament_used_grams;
     return o;
 }
 
@@ -147,6 +160,8 @@ orcacli_operation_result orcacli_slice(orcacli_handle h, const orcacli_slice_par
     p.transfer_filament_customizations = params->transfer_filament_customizations;
     p.transfer_process_customizations  = params->transfer_process_customizations;
     p.transfer_project_overrides       = params->transfer_project_overrides;
+    // Behavior flags
+    p.center_on_bed = params->center_on_bed;
     // Forward overrides into SlicingParams.custom_settings; validation will happen inside CliCore::slice()
     if (params->overrides && params->overrides_count > 0) {
         if (params->verbose) {
