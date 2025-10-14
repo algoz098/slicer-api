@@ -15,7 +15,7 @@ DOCKER_BUILD_FLAGS="${DOCKER_BUILD_FLAGS:-}"
 PLATFORM="${PLATFORM:-}"
 TAG_ADDON_BASE="${TAG_ADDON_BASE:-orca-addon:base}"
 TAG_ADDON_SLIM="${TAG_ADDON_SLIM:-orca-addon:addon-slim}"
-ORCASLICER_SUFFIX="${ORCASLICER_SUFFIX:-a}"
+ORCASLICER_SUFFIX="${ORCASLICER_SUFFIX:-c}"
 REGISTRY="${REGISTRY:-ghcr.io}"
 
 # Derive owner (lowercased) from git remote or env fallback

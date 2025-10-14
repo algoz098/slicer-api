@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-suffix="${ORCASLICER_SUFFIX:-}"
+suffix="${ORCASLICER_SUFFIX:-c}"
 
 # Check if OrcaSlicer directory exists
 if [[ ! -d "OrcaSlicer" ]]; then

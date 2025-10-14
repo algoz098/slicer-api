@@ -1710,17 +1710,32 @@ public:
             }
             size_t max_extruder_needed = used_extruders.empty() ? 1 : (*used_extruders.rbegin() + 1);
 
+            std::cout << "========================================" << std::endl;
+            std::cout << "🎨 [COLOR DEBUG] Extruder Usage Analysis" << std::endl;
             std::cout << "Used extruders: ";
             for (int e : used_extruders) std::cout << e << " ";
             std::cout << std::endl;
             std::cout << "Max extruder needed: " << max_extruder_needed << std::endl;
+            std::cout << "detected_extruders (from 3MF): " << detected_extruders << std::endl;
+            std::cout << "========================================" << std::endl;
 
             if (fil_colour_pre) {
-                std::cout << "filament_colour BEFORE: " << fil_colour_pre->values.size() << std::endl;
+                std::cout << "🎨 [COLOR DEBUG] filament_colour BEFORE trimming: " << fil_colour_pre->values.size() << " colors: ";
+                for (const auto& c : fil_colour_pre->values) std::cout << c << " ";
+                std::cout << std::endl;
+
                 if (fil_colour_pre->values.size() > max_extruder_needed) {
-                    std::cout << "TRIMMING filament_colour: " << fil_colour_pre->values.size() << " -> " << max_extruder_needed << std::endl;
+                    std::cout << "🎨 [COLOR DEBUG] ⚠️  TRIMMING filament_colour: " << fil_colour_pre->values.size() << " -> " << max_extruder_needed << std::endl;
                     fil_colour_pre->values.resize(max_extruder_needed);
+
+                    std::cout << "🎨 [COLOR DEBUG] filament_colour AFTER trimming: " << fil_colour_pre->values.size() << " colors: ";
+                    for (const auto& c : fil_colour_pre->values) std::cout << c << " ";
+                    std::cout << std::endl;
+                } else {
+                    std::cout << "🎨 [COLOR DEBUG] ✅ No trimming needed (size matches or is less than max_extruder_needed)" << std::endl;
                 }
+            } else {
+                std::cout << "🎨 [COLOR DEBUG] ⚠️  filament_colour is NULL!" << std::endl;
             }
 
             if (fil_diameter_pre) {
@@ -2130,6 +2145,19 @@ public:
                 }
                 std::cout << "DEBUG:   Total vertices: " << total_vertices << std::endl;
                 std::cout << "DEBUG:   Total triangles: " << total_triangles << std::endl;
+
+                // DEBUG: Log final filament_colour state before process()
+                try {
+                    const auto& fpc = print->full_print_config();
+                    if (auto* fil_colour_final = fpc.opt<Slic3r::ConfigOptionStrings>("filament_colour")) {
+                        std::cout << "🎨 [COLOR DEBUG] FINAL filament_colour before process() (" << fil_colour_final->values.size() << "): ";
+                        for (const auto& c : fil_colour_final->values) std::cout << c << " ";
+                        std::cout << std::endl;
+                    }
+                } catch (const std::exception& e) {
+                    std::cout << "🎨 [COLOR DEBUG] Failed to read final filament_colour: " << e.what() << std::endl;
+                }
+
                 std::cout << "DEBUG: ========================================" << std::endl;
                 std::cout.flush();
 
@@ -2285,10 +2313,15 @@ public:
 
                 // Prepare PlateData for store_bbs_3mf
                 Slic3r::PlateData plate;
-                plate.plate_index = (plate_id > 0 ? plate_id - 1 : 0); // zero-based
+                // FIX: Always use plate_index = 0 for single-plate export
+                // OrcaSlicer uses (plate_index + 1) for file naming, so:
+                // - plate_index = 0 → generates plate_1.gcode ✅
+                // - plate_index = 1 → generates plate_2.gcode ❌
+                // Since we're exporting only ONE plate (the current one), it should always be index 0
+                plate.plate_index = 0;
                 plate.is_sliced_valid = true;
 
-                std::cout << "🔍 [3MF-2] PlateData created, plate_index=" << plate.plate_index << std::endl;
+                std::cout << "🔍 [3MF-2] PlateData created, plate_index=" << plate.plate_index << " (input plate_id=" << plate_id << ")" << std::endl;
 
                 // Set gcode_file so it gets embedded in the 3MF
                 plate.gcode_file = tmp_gcode.string();
@@ -2455,10 +2488,16 @@ public:
 
                 std::cout << "🔍 [3MF-13] Setting strategy flags" << std::endl;
 
-                // Strategy: match OrcaSlicer's export_project strategy exactly
-                // OrcaSlicer uses: Silence|WithGcode|SplitModel|UseLoadedId|ShareMesh
+                // Strategy: Generate 3MF with G-code only (no 3D model)
+                // SkipModel: Skip embedding the 3D model mesh in the 3MF (only include G-code, thumbnails, metadata)
+                // WithGcode: Include G-code file in the 3MF
+                // Silence: Suppress verbose logging
+                // SplitModel: Save objects per file (Production Extension)
+                // UseLoadedId: Use loaded IDs for identify_id
+                // ShareMesh: Share mesh between objects
                 sp.strategy = Slic3r::SaveStrategy::Silence |
                               Slic3r::SaveStrategy::WithGcode |
+                              Slic3r::SaveStrategy::SkipModel |
                               Slic3r::SaveStrategy::SplitModel |
                               Slic3r::SaveStrategy::UseLoadedId |
                               Slic3r::SaveStrategy::ShareMesh;
@@ -2960,6 +2999,15 @@ CliCore::OperationResult CliCore::slice(const SlicingParams& params) {
 
     // Load printer profile if specified
     if (!params.printer_profile.empty()) {
+        std::cout << "🎨 [COLOR DEBUG] Loading printer profile: " << params.printer_profile << std::endl;
+
+        // Check if it's a K2 Plus printer
+        if (params.printer_profile.find("K2 Plus") != std::string::npos ||
+            params.printer_profile.find("K2Plus") != std::string::npos ||
+            params.printer_profile.find("k2plus") != std::string::npos) {
+            std::cout << "🎨 [COLOR DEBUG] ⚠️  DETECTED K2 PLUS PRINTER - Special handling may be needed!" << std::endl;
+        }
+
         auto result = loadPrinterProfile(params.printer_profile);
         if (!result.success) {
             return OperationResult(false, "Failed to load printer profile: " + params.printer_profile, result.error_details);
@@ -3311,6 +3359,7 @@ CliCore::OperationResult CliCore::slice(const SlicingParams& params) {
                           << "'" << std::endl;
 
                 // Final guard: if still on Default Printer and project presets exist, select them (honor granular transfer_* flags)
+                // IMPORTANT: Respect explicit user-provided profiles - do NOT override them with 3MF presets
                 {
                     const std::string curr_pr = m_impl->preset_bundle.printers.get_selected_preset_name();
                     if (m_impl->transfer_printer_customizations && (curr_pr.empty() || curr_pr == "Default Printer") && !m_impl->project_printer_preset.empty()) {
@@ -3323,16 +3372,26 @@ CliCore::OperationResult CliCore::slice(const SlicingParams& params) {
                         }
                     }
                     // Ensure project print and filament presets are selected if provided by 3MF
-                    if (m_impl->transfer_process_customizations && !m_impl->project_print_preset.empty()) {
+                    // BUT: Only if user did NOT provide explicit profiles via CLI
+                    if (m_impl->transfer_process_customizations && !user_proc && !m_impl->project_print_preset.empty()) {
                         if (m_impl->preset_bundle.prints.select_preset_by_name(m_impl->project_print_preset, /*force=*/true)) {
                             std::cout << "DEBUG: Final-guard selected process from project preset: '"
                                       << m_impl->project_print_preset << "'" << std::endl;
                         }
                     }
-                    if (m_impl->transfer_filament_customizations && !m_impl->project_filament_preset.empty()) {
+                    if (m_impl->transfer_filament_customizations && !user_fil && !m_impl->project_filament_preset.empty()) {
                         if (m_impl->preset_bundle.filaments.select_preset_by_name(m_impl->project_filament_preset, /*force=*/true)) {
                             std::cout << "DEBUG: Final-guard selected filament from project preset: '"
                                       << m_impl->project_filament_preset << "'" << std::endl;
+                        }
+                    }
+                    // If user provided explicit filament profile, ensure it's still selected
+                    if (user_fil && !params.filament_profile.empty()) {
+                        std::cout << "DEBUG: Final-guard: Re-ensuring user-provided filament profile: '"
+                                  << params.filament_profile << "'" << std::endl;
+                        auto r = loadFilamentProfile(params.filament_profile);
+                        if (!r.success) {
+                            std::cout << "WARN: Failed to re-apply user filament profile in final-guard: " << r.error_details << std::endl;
                         }
                     }
                     m_impl->preset_bundle.update_compatible(Slic3r::PresetSelectCompatibleType::Always);
@@ -4183,7 +4242,22 @@ CliCore::OperationResult CliCore::loadFilamentProfile(const std::string& filamen
 
         // Update compatibility after selection and refresh working config
         m_impl->preset_bundle.update_compatible(Slic3r::PresetSelectCompatibleType::Always);
+
+        // DEBUG: Log filament_colour BEFORE full_config_secure()
+        if (auto* fil_colour_before = m_impl->config->opt<Slic3r::ConfigOptionStrings>("filament_colour", false)) {
+            std::cout << "🔍 [DEBUG] filament_colour BEFORE full_config_secure() (" << fil_colour_before->values.size() << "): ";
+            for (const auto& c : fil_colour_before->values) std::cout << c << " ";
+            std::cout << std::endl;
+        }
+
         *m_impl->config = m_impl->preset_bundle.full_config_secure();
+
+        // DEBUG: Log filament_colour AFTER full_config_secure()
+        if (auto* fil_colour_after = m_impl->config->opt<Slic3r::ConfigOptionStrings>("filament_colour", false)) {
+            std::cout << "🔍 [DEBUG] filament_colour AFTER full_config_secure() (" << fil_colour_after->values.size() << "): ";
+            for (const auto& c : fil_colour_after->values) std::cout << c << " ";
+            std::cout << std::endl;
+        }
 
         std::cout << "DEBUG: Loaded filament profile (via PresetBundle): " << fil_name << std::endl;
         return OperationResult(true, "Filament profile loaded successfully: " + fil_name);

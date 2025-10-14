@@ -9,7 +9,7 @@ on:
 
 
 env:
-  ORCASLICER_SUFFIX: "a"
+  ORCASLICER_SUFFIX: "c"
 
 jobs:
   prebuild:

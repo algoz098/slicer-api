@@ -8,7 +8,7 @@ on:
     branches: [ main ]
 
 env:
-  ORCASLICER_SUFFIX: "a"
+  ORCASLICER_SUFFIX: "c"
 
 jobs:
   linux-prebuild:

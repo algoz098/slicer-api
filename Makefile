@@ -5,8 +5,8 @@
 	deps-push-local core-push-local addon-base-push-local addon-slim-push-local addon-push-local push-all-local
 
 # ---- Configuracao ----
-# Pode sobrescrever via ambiente: make OWNER=me ORCASLICER_SUFFIX=b
-ORCASLICER_SUFFIX ?= b
+# Pode sobrescrever via ambiente: make OWNER=me ORCASLICER_SUFFIX=c
+ORCASLICER_SUFFIX ?= c
 REGISTRY ?= ghcr.io
 # Tenta deduzir o owner a partir do git remote
 OWNER ?= $(shell git config --get remote.origin.url | awk -F'[/:]' '{print $$(NF-1)}')
