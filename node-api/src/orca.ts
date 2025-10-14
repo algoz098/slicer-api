@@ -2,10 +2,10 @@ import * as path from 'node:path'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 
-const addonDir = process.env.ORCACLI_ADDON_DIR || path.resolve(__dirname, '../../../OrcaSlicerAddon/bindings/node')
+const addonDir = process.env.ORCACLI_ADDON_DIR || path.resolve(__dirname, '../../OrcaSlicerAddon/bindings/node')
 
 const orca = require(addonDir)
-const resourcesPath = process.env.ORCACLI_RESOURCES || path.resolve(__dirname, '../../../OrcaSlicer/resources')
+const resourcesPath = process.env.ORCACLI_RESOURCES || path.resolve(__dirname, '../../OrcaSlicer/resources')
 
 export default function(app: any) {
     try {
