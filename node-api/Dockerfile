@@ -25,11 +25,27 @@ FROM ${ADDON_BASE} AS runtime
 ENV NODE_ENV=production \
     ORCACLI_RESOURCES=/opt/orca/OrcaSlicer/resources
 
-# Install unzip tools as a fallback in case jszip is not available at runtime
-RUN apt-get update && apt-get install -y --no-install-recommends unzip p7zip-full && rm -rf /var/lib/apt/lists/*
+# Install unzip tools and runtime libraries required by the engine
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      unzip \
+      p7zip-full \
+      libstdc++6 \
+      libgcc-s1 \
+      libexpat1 \
+      libssl3 \
+      libfontconfig1 \
+      libtbb12 \
+      libgomp1 \
+      libglu1-mesa \
+      libglew2.2 \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/orca/node-api
 COPY --from=builder /opt/orca/node-api /opt/orca/node-api
+
+# Debug: Show what's in the prebuilds directory
+RUN echo "=== Contents of addon prebuilds directory ===" && \
+    ls -laR /opt/orca/OrcaSlicerAddon/bindings/node/prebuilds || echo "Prebuilds directory not found"
 
 # Expose default HTTP port
 EXPOSE 3030

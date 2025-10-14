@@ -153,6 +153,19 @@ WORKDIR /opt/orca
 # Provide resources path as default (can be overridden by consumers)
 ENV ORCACLI_RESOURCES=/opt/orca/OrcaSlicer/resources
 
+# Install runtime libraries required by the engine
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      libstdc++6 \
+      libgcc-s1 \
+      libexpat1 \
+      libssl3 \
+      libfontconfig1 \
+      libtbb12 \
+      libgomp1 \
+      libglu1-mesa \
+      libglew2.2 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy only resources and a minimal addon directory (index.js + prebuilds)
 COPY --from=addoncore /opt/orca/OrcaSlicer/resources ./OrcaSlicer/resources
 RUN mkdir -p /opt/orca/OrcaSlicerAddon/bindings/node/prebuilds
@@ -164,6 +177,14 @@ COPY --from=addoncore /opt/orca/OrcaSlicerAddon/bindings/node/prebuilds /opt/orc
 # Show what was produced (helps diagnosing during image build)
 RUN ls -la /opt/orca/OrcaSlicerAddon/bindings/node && \
     find /opt/orca/OrcaSlicerAddon/bindings/node/prebuilds -maxdepth 2 -type f -print || true
+
+# Verify that liborcacli_engine.so exists in prebuilds
+RUN if [ ! -f /opt/orca/OrcaSlicerAddon/bindings/node/prebuilds/linux-x64/liborcacli_engine.so ]; then \
+      echo "ERROR: liborcacli_engine.so not found in prebuilds/linux-x64/"; \
+      echo "Available files:"; \
+      find /opt/orca/OrcaSlicerAddon/bindings/node/prebuilds -type f; \
+      exit 1; \
+    fi
 
 # No default CMD — this image is intended to be a base layer.
 # Example of consumption in a downstream Dockerfile:
