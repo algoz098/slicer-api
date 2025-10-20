@@ -34,6 +34,7 @@ export interface SliceParams {
   transferProjectOverrides?: boolean;
   // Behavior flags
   center?: boolean; // center object(s) on bed before slicing (default false)
+  autoRealignIfNeeded?: boolean; // automatically realign on bed if elements are out-of-bounds
   // Preferred: options (values coerced to string internally)
   options?: Record<string, string | number | boolean>;
   // Back-compat: custom (string-only)

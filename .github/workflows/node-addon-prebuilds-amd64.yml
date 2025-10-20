@@ -7,8 +7,6 @@ on:
   pull_request:
     branches: [ main ]
 
-env:
-  ORCASLICER_SUFFIX: "c"
 
 jobs:
   linux-prebuild:
@@ -26,6 +24,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      - name: Set ORCASLICER_SUFFIX from VERSION_SUFFIX
+        run: echo "ORCASLICER_SUFFIX=$(cat VERSION_SUFFIX)" >> $GITHUB_ENV
+        shell: bash
 
       - name: Ensure Git LFS objects are present
         run: |

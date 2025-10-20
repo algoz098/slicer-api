@@ -136,6 +136,7 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
         plate: data.plate,
         options: finalOptions,
         center: true,
+        autoRealignIfNeeded: true,
         printerProfile: pPrinter,
         processProfile: pProcess,
         filamentProfile: pFilament,

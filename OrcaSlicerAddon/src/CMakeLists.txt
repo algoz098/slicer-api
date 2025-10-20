@@ -175,6 +175,22 @@ if(LIBSLIC3R_PATH AND SEMVER_PATH)
 
     message(STATUS "libslic3r integration enabled")
 
+    # NLopt linkage (required by libnest2d optimizers used by arrange)
+    set(_HAVE_NLOPT FALSE)
+    find_package(NLopt QUIET)
+    if(TARGET NLopt::nlopt)
+        set(_HAVE_NLOPT TRUE)
+        target_link_libraries(orcacli_core NLopt::nlopt)
+    else()
+        set(_NLOPT_PREFIX "${ORCASLICER_DEPS_PREFIX}")
+        set(_NLOPT_LIB "${_NLOPT_PREFIX}/lib/libnlopt.a")
+        if(EXISTS "${_NLOPT_LIB}")
+            set(_HAVE_NLOPT TRUE)
+            target_link_libraries(orcacli_core "${_NLOPT_LIB}")
+            target_include_directories(orcacli_core PRIVATE "${_NLOPT_PREFIX}/include")
+        endif()
+    endif()
+
 else()
     message(FATAL_ERROR "Required OrcaSlicer libraries not found (libslic3r/semver). Placeholders are not allowed — build must link libs successfully.")
 endif()
@@ -971,6 +987,16 @@ add_library(orcacli_engine SHARED
 
 # Link the core into the engine
 target_link_libraries(orcacli_engine PRIVATE orcacli_core)
+# Ensure NLopt is linked into the engine for dlopen-time resolution
+if(_HAVE_NLOPT)
+    if(TARGET NLopt::nlopt)
+        target_link_libraries(orcacli_engine PRIVATE NLopt::nlopt)
+    elseif(EXISTS "${_NLOPT_LIB}")
+        target_link_libraries(orcacli_engine PRIVATE "${_NLOPT_LIB}")
+        target_include_directories(orcacli_engine PRIVATE "${_NLOPT_PREFIX}/include")
+    endif()
+endif()
+
 
 # Define version string for the engine API (consumed by Node addon)
 target_compile_definitions(orcacli_engine PRIVATE ORCACLI_VERSION_STRING=\"${PROJECT_VERSION}\")

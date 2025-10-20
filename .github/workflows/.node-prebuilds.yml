@@ -8,8 +8,6 @@ on:
     branches: [ node-api ]
 
 
-env:
-  ORCASLICER_SUFFIX: "c"
 
 jobs:
   prebuild:
@@ -28,6 +26,10 @@ jobs:
       - name: Compute OrcaSlicer submodule SHA
         id: orcasha
         run: bash "$GITHUB_WORKSPACE/scripts/ci/compute_orca_sha.sh"
+
+      - name: Set ORCASLICER_SUFFIX from VERSION_SUFFIX
+        run: echo "ORCASLICER_SUFFIX=$(cat VERSION_SUFFIX)" >> $GITHUB_ENV
+        shell: bash
 
 
 

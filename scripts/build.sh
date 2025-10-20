@@ -15,7 +15,27 @@ DOCKER_BUILD_FLAGS="${DOCKER_BUILD_FLAGS:-}"
 PLATFORM="${PLATFORM:-}"
 TAG_ADDON_BASE="${TAG_ADDON_BASE:-orca-addon:base}"
 TAG_ADDON_SLIM="${TAG_ADDON_SLIM:-orca-addon:addon-slim}"
-ORCASLICER_SUFFIX="${ORCASLICER_SUFFIX:-c}"
+# Resolve suffix with precedence: env > .env > VERSION_SUFFIX (KEY=VAL or raw) > 'c'
+resolve_suffix() {
+  if [[ -n "${ORCASLICER_SUFFIX:-}" ]]; then echo -n "$ORCASLICER_SUFFIX"; return; fi
+  if [[ -f ".env" ]] && grep -q "^ORCASLICER_SUFFIX=" .env; then
+    # shellcheck disable=SC1091
+    . ./.env >/dev/null 2>&1 || true
+    if [[ -n "${ORCASLICER_SUFFIX:-}" ]]; then echo -n "$ORCASLICER_SUFFIX"; return; fi
+  fi
+  if [[ -f "VERSION_SUFFIX" ]]; then
+    if grep -q "=" VERSION_SUFFIX; then
+      # shellcheck disable=SC1091
+      . ./VERSION_SUFFIX >/dev/null 2>&1 || true
+      if [[ -n "${ORCASLICER_SUFFIX:-}" ]]; then echo -n "$ORCASLICER_SUFFIX"; return; fi
+    else
+      tr -d '[:space:]' < VERSION_SUFFIX; return
+    fi
+  fi
+  echo -n c
+}
+
+ORCASLICER_SUFFIX="$(resolve_suffix)"
 REGISTRY="${REGISTRY:-ghcr.io}"
 
 # Derive owner (lowercased) from git remote or env fallback

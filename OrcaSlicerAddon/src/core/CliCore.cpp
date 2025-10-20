@@ -15,6 +15,9 @@
 
 #include <string>
 #include <vector>
+#include <libslic3r/Arrange.hpp>
+#include <libslic3r/ModelArrange.hpp>
+
 #include <limits>
 #include <cstdlib>
 #include <cstdint>
@@ -52,6 +55,7 @@
 #include "libslic3r/PresetBundle.hpp"
 #include "libslic3r/AppConfig.hpp"
     #include "libslic3r/Geometry.hpp"
+    #include "libslic3r/BuildVolume.hpp"
 
 #include "libslic3r/Preset.hpp"
 #include "libslic3r/GCode/ThumbnailData.hpp"
@@ -130,6 +134,7 @@ public:
     bool transfer_project_overrides = true;
     // Behavior flags
     bool center_on_bed = false;
+    bool auto_realign_if_needed = false;
 
     // Multi-material detection
     size_t detected_extruders = 0;
@@ -2008,6 +2013,316 @@ public:
 
             // NOTE: Print object was already created at the beginning of performSlicing()
             // This is necessary to avoid accessing null pointer in earlier code
+            // VALIDATION + OPTIONAL AUTO-REALIGN: ensure all elements fit the printable area, or auto-realign if enabled
+            try {
+                const auto &pc = print->config();
+                Slic3r::BuildVolume build_volume(pc.printable_area.values, pc.printable_height);
+                if (build_volume.valid()) {
+                    auto check_outside = [&](std::string &msg)->bool{
+                        const Slic3r::Vec3d po = print->get_plate_origin();
+                        const Slic3r::Vec3d shift_xy(-po(0), -po(1), 0.0);
+                        // Check model instances
+                        for (const auto *obj : model->objects) {
+                            if (!obj) continue;
+                            for (const auto *inst : obj->instances) {
+                                if (!inst) continue;
+                                Slic3r::BoundingBoxf3 bb = obj->instance_bounding_box(*inst);
+                                Slic3r::BoundingBoxf3 bb_local(bb.min + shift_xy, bb.max + shift_xy);
+                                auto state = build_volume.volume_state_bbox(bb_local, /*ignore_bottom=*/true);
+                                if (state != Slic3r::BuildVolume::ObjectState::Inside) {
+                                    std::string name = obj->name.empty() ? std::string("objeto") : obj->name;
+                                    msg = std::string("Elementos fora da área de impressão: '") + name + "' " +
+                                          (state == Slic3r::BuildVolume::ObjectState::Colliding ? "parcialmente" : "totalmente") +
+                                          " fora da área para o perfil selecionado.";
+                                    return true;
+                                }
+                            }
+                        }
+                        // Check Prime/Wipe Tower
+                        bool prime_enabled = false; try { prime_enabled = pc.enable_prime_tower.getBool(); } catch (...) {}
+                        if (prime_enabled || print->has_wipe_tower()) {
+                            float wtx = 0.f, wty = 0.f;
+                            try { wtx = pc.wipe_tower_x.get_at(0); } catch (...) {}
+                            try { wty = pc.wipe_tower_y.get_at(0); } catch (...) {}
+                            Slic3r::Vec3d pt(double(wtx), double(wty), 0.0);
+                            Slic3r::BoundingBoxf3 wtbb(pt, pt);
+                            auto state = build_volume.volume_state_bbox(wtbb, /*ignore_bottom=*/true);
+                            if (state != Slic3r::BuildVolume::ObjectState::Inside) {
+                                msg = "Elementos fora da área de impressão: Prime Tower fora da área válida para o perfil selecionado.";
+                                return true;
+                            }
+                        }
+                        return false; // all inside
+                    };
+
+                    std::string oob_msg;
+                    if (check_outside(oob_msg)) {
+                        if (auto_realign_if_needed) {
+                            bool is_bbl = false; try { is_bbl = preset_bundle.is_bbl_vendor(); } catch (...) {}
+                            bool fixed = false;
+                            // Use the same arrangement algorithm as the GUI (libnest2d-based)
+                            // Build bed shape from current config and run arrange_objects
+                            try {
+                                // Build selected items (instances) and run full arrange pipeline like GUI
+                                Slic3r::ModelInstancePtrs instances;
+                                auto selected = Slic3r::get_arrange_polys(*model, instances);
+
+                                Slic3r::arrangement::ArrangeParams params;
+                                params.min_obj_distance = 0;
+                                params.allow_rotations  = false;
+                                params.do_final_align   = true;
+                                // Align to Y axis for i3 style printers if available
+                                try {
+                                    if (const auto *ps = config->option<Slic3r::ConfigOptionEnum<Slic3r::PrinterStructure>>("printer_structure"))
+                                        params.align_to_y_axis = (ps->value == Slic3r::PrinterStructure::psI3);
+                                } catch (...) {}
+                                // Sequential print detection via print_sequence
+                                try {
+                                    if (const auto *seq = config->option<Slic3r::ConfigOptionEnum<Slic3r::PrintSequence>>("print_sequence"))
+                                        params.is_seq_print = (seq->value == Slic3r::PrintSequence::ByObject);
+                                } catch (...) {}
+
+                                // Update params and selected inflation per GUI helpers
+                                Slic3r::arrangement::update_arrange_params(params, config.get(), selected);
+                                Slic3r::arrangement::update_selected_items_inflation(selected, config.get(), params);
+                                Slic3r::arrangement::update_selected_items_axis_align(selected, config.get(), params);
+
+                                // Build shrunk bed and prepare wipe/prime tower exclusion like GUI
+                                // Determine if prime tower is needed/enabled and create a reserved region for it
+                                try {
+                                    bool prime_enabled = false;
+                                    try { prime_enabled = config->opt_bool("enable_prime_tower"); } catch (...) {}
+                                    if (prime_enabled || (print && print->has_wipe_tower())) {
+                                        // Tower size from config
+                                        double tower_w = 0.0;
+                                        if (auto *pw = config->opt<Slic3r::ConfigOptionFloat>("prime_tower_width", false)) tower_w = pw->value;
+                                        double tower_brim = 0.0;
+                                        if (auto *pb = config->opt<Slic3r::ConfigOptionFloat>("prime_tower_brim_width", false)) tower_brim = pb->value;
+                                        // params.brim_skirt_distance is in internal coords; convert to mm for arithmetic below
+                                        const double skirt_mm = Slic3r::unscale<double>(params.brim_skirt_distance);
+                                        const double tower_margin = std::max(1.0, skirt_mm);
+                                        const double half_w = 0.5 * (tower_w + 2.0 * tower_brim);
+
+                                        // Shrunk bed polygon and bbox (scaled ints)
+                                        Slic3r::Points bed_pts_for_wt = Slic3r::arrangement::get_shrink_bedpts(config.get(), params);
+                                        if (bed_pts_for_wt.empty()) {
+                                            std::cout << "DEBUG: get_shrink_bedpts returned empty; skipping prime tower exclusion" << std::endl;
+                                        } else {
+                                        Slic3r::BoundingBox bedbb_scaled = Slic3r::Polygon(bed_pts_for_wt).bounding_box();
+                                        // Compute a target position near top-right inside bed with margin (mm)
+                                        const double minx_mm = Slic3r::unscale<double>(bedbb_scaled.min.x());
+                                        const double miny_mm = Slic3r::unscale<double>(bedbb_scaled.min.y());
+                                        const double maxx_mm = Slic3r::unscale<double>(bedbb_scaled.max.x());
+                                        const double maxy_mm = Slic3r::unscale<double>(bedbb_scaled.max.y());
+
+                                        // lower-left anchoring: subtract full width (2*half_w)
+                                        double tx_mm = maxx_mm - (2.0 * half_w + tower_margin);
+                                        double ty_mm = maxy_mm - (2.0 * half_w + tower_margin);
+
+                                        // If config already has tower position, prefer keeping it if inside bed
+                                        float conf_wtx = 0.f, conf_wty = 0.f;
+                                        bool has_conf_pos = false;
+                                        try { if (auto *wx = config->opt<Slic3r::ConfigOptionFloats>("wipe_tower_x", false)) { if (!wx->values.empty()) { conf_wtx = wx->values[0]; has_conf_pos = true; } } } catch (...) {}
+                                        try { if (auto *wy = config->opt<Slic3r::ConfigOptionFloats>("wipe_tower_y", false)) { if (!wy->values.empty()) { conf_wty = wy->values[0]; has_conf_pos = has_conf_pos && true; } } } catch (...) {}
+
+                                        // Check if existing conf position is inside shrunk bed; if so, use it
+                                        if (has_conf_pos) {
+                                            // existing config is already in local bed coords (mm)
+                                            Slic3r::Vec3d pt_local(double(conf_wtx), double(conf_wty), 0.0);
+                                            Slic3r::BoundingBoxf3 wtbb_local(pt_local, pt_local);
+                                            Slic3r::BuildVolume bv(pc.printable_area.values, double(pc.printable_height));
+                                            auto st = bv.volume_state_bbox(wtbb_local, /*ignore_bottom=*/true);
+                                            if (st == Slic3r::BuildVolume::ObjectState::Inside) {
+                                                tx_mm = pt_local(0); ty_mm = pt_local(1);
+                                            }
+                                        }
+
+                                        // Create an exclusion rectangle polygon around (tx_mm, ty_mm)
+                                        if (half_w > 0.0) {
+                                            const coord_t dx = Slic3r::scaled<coord_t>(half_w);
+                                            const coord_t dy = Slic3r::scaled<coord_t>(half_w);
+
+                                            Slic3r::arrangement::ArrangePolygon wt_ap;
+                                            wt_ap.name = "WipeTower";
+                                            wt_ap.is_virt_object = true;
+                                            wt_ap.is_wipe_tower = true;
+                                            ++wt_ap.priority;
+                                            Slic3r::Polygon r;
+                                            r.points.clear();
+                                            // lower-left anchored rectangle of size (2*dx, 2*dy)
+                                            r.points.push_back(Slic3r::Point(0, 0));
+                                            r.points.push_back(Slic3r::Point(2*dx, 0));
+                                            r.points.push_back(Slic3r::Point(2*dx, 2*dy));
+                                            r.points.push_back(Slic3r::Point(0, 2*dy));
+                                            wt_ap.poly.contour = std::move(r);
+                                            // translation is lower-left corner in local bed coords
+                                            wt_ap.translation.x() = Slic3r::scaled<coord_t>(tx_mm);
+                                            wt_ap.translation.y() = Slic3r::scaled<coord_t>(ty_mm);
+                                            params.excluded_regions.emplace_back(std::move(wt_ap));
+
+                                            // Persist tower position into config/project in LOCAL bed coords (mm)
+                                            const float new_wtx = float(tx_mm);
+                                            const float new_wty = float(ty_mm);
+                                            Slic3r::ConfigOptionFloats wtx, wty;
+                                            wtx.values = { new_wtx }; wty.values = { new_wty };
+                                            try { config->set_key_value("wipe_tower_x", new Slic3r::ConfigOptionFloats(wtx)); } catch (...) {}
+                                            try { config->set_key_value("wipe_tower_y", new Slic3r::ConfigOptionFloats(wty)); } catch (...) {}
+                                            try { preset_bundle.project_config.set_key_value("wipe_tower_x", new Slic3r::ConfigOptionFloats(wtx)); } catch (...) {}
+                                            try { preset_bundle.project_config.set_key_value("wipe_tower_y", new Slic3r::ConfigOptionFloats(wty)); } catch (...) {}
+                                        }
+                                        }
+
+                                    }
+                                } catch (...) {}
+
+                                Slic3r::Points bed_pts = Slic3r::arrangement::get_shrink_bedpts(config.get(), params);
+
+
+                                std::cout << "DEBUG: arrange: selected=" << selected.size() << ", excludes=" << params.excluded_regions.size() << ", bedpts=" << bed_pts.size() << std::endl;
+                                size_t dbg_n = std::min<size_t>(selected.size(), 3);
+                                for (size_t i = 0; i < dbg_n; ++i) {
+                                    Slic3r::BoundingBox bb(selected[i].poly.contour.points);
+                                    auto w = bb.size().x(); auto h = bb.size().y();
+                                    std::cout << "DEBUG: selected[" << i << "] bb w=" << w << " h=" << h << std::endl;
+                                }
+
+                                // Build bed and arrange
+                                // Excluded regions already sized (wipe tower includes brim); no inflation on excluded regions here.
+                                Slic3r::arrangement::arrange(selected, params.excluded_regions, bed_pts, params);
+
+                                // Apply transforms back to instances
+                                (void)Slic3r::apply_arrange_polys(selected, instances, nullptr);
+
+                                fixed = true; // We attempted to arrange; validation below will confirm
+                                // Re-apply print with updated model transforms to mirror GUI behavior
+                                try {
+                                    Slic3r::DynamicPrintConfig apply2 = *config;
+                                    print->apply(*model, apply2);
+                                } catch (const std::exception &e) {
+                                    std::cout << "WARN: apply() after arrange failed: " << e.what() << std::endl;
+                                }
+
+                            } catch (...) {
+                                fixed = false;
+                            }
+                            if (fixed) {
+                                oob_msg.clear();
+                                if (!check_outside(oob_msg)) {
+                                    std::cout << "INFO: Realinhamento automático aplicado com sucesso para caber na mesa." << std::endl;
+                                } else {
+                                    // Ainda fora: se for Prime Tower, tentar reposicionar automaticamente para o centro da mesa
+                                    bool tried_repos = false;
+                                    if (oob_msg.find("Prime Tower") != std::string::npos) {
+                                        tried_repos = true;
+                                        try {
+                                            double minx = std::numeric_limits<double>::max();
+                                            double miny = std::numeric_limits<double>::max();
+                                            double maxx = std::numeric_limits<double>::lowest();
+                                            double maxy = std::numeric_limits<double>::lowest();
+                                            for (const auto &pt : pc.printable_area.values) {
+                                                minx = std::min(minx, (double)pt(0));
+                                                miny = std::min(miny, (double)pt(1));
+                                                maxx = std::max(maxx, (double)pt(0));
+                                                maxy = std::max(maxy, (double)pt(1));
+                                            }
+                                            const double cx_local = 0.5 * (minx + maxx);
+                                            const double cy_local = 0.5 * (miny + maxy);
+                                            const float new_wtx = float(cx_local);
+                                            const float new_wty = float(cy_local);
+
+                                            Slic3r::ConfigOptionFloats wtx, wty;
+                                            wtx.values = { new_wtx };
+                                            wty.values = { new_wty };
+                                            try { config->set_key_value("wipe_tower_x", new Slic3r::ConfigOptionFloats(wtx)); } catch (...) {}
+                                            try { config->set_key_value("wipe_tower_y", new Slic3r::ConfigOptionFloats(wty)); } catch (...) {}
+                                            try { preset_bundle.project_config.set_key_value("wipe_tower_x", new Slic3r::ConfigOptionFloats(wtx)); } catch (...) {}
+                                            try { preset_bundle.project_config.set_key_value("wipe_tower_y", new Slic3r::ConfigOptionFloats(wty)); } catch (...) {}
+
+                                            try {
+                                                Slic3r::DynamicPrintConfig apply2 = *config;
+                                                print->apply(*model, apply2);
+                                            } catch (const std::exception &e) {
+                                                std::cout << "WARN: re-apply após reposicionar Prime Tower falhou: " << e.what() << std::endl;
+                                            }
+
+                                            oob_msg.clear();
+                                            if (!check_outside(oob_msg)) {
+                                                std::cout << "INFO: Prime Tower reposicionada automaticamente para o centro da mesa." << std::endl;
+                                            } else {
+                                                last_error = oob_msg + " Mesmo após realinhamento e reposicionamento da Prime Tower.";
+                                                return false;
+                                            }
+                                        } catch (const std::exception &e) {
+                                        	last_error = std::string("Falha ao reposicionar Prime Tower automaticamente: ") + e.what();
+                                            return false;
+                                        }
+                                    }
+
+                                    if (!tried_repos) {
+                                        last_error = oob_msg + " Mesmo após realinhamento automático.";
+                                        return false;
+                                    }
+                                }
+                            } else {
+                                // Se o realinhamento padrão falhar, ainda tenta reposicionar Prime Tower
+                                if (oob_msg.find("Prime Tower") != std::string::npos) {
+                                    try {
+                                        double minx = std::numeric_limits<double>::max();
+                                        double miny = std::numeric_limits<double>::max();
+                                        double maxx = std::numeric_limits<double>::lowest();
+                                        double maxy = std::numeric_limits<double>::lowest();
+                                        for (const auto &pt : pc.printable_area.values) {
+                                            minx = std::min(minx, (double)pt(0));
+                                            miny = std::min(miny, (double)pt(1));
+                                            maxx = std::max(maxx, (double)pt(0));
+                                            maxy = std::max(maxy, (double)pt(1));
+                                        }
+                                        const double cx_local = 0.5 * (minx + maxx);
+                                        const double cy_local = 0.5 * (miny + maxy);
+                                        const float new_wtx = float(cx_local);
+                                        const float new_wty = float(cy_local);
+
+                                        Slic3r::ConfigOptionFloats wtx, wty;
+                                        wtx.values = { new_wtx };
+                                        wty.values = { new_wty };
+                                        try { config->set_key_value("wipe_tower_x", new Slic3r::ConfigOptionFloats(wtx)); } catch (...) {}
+                                        try { config->set_key_value("wipe_tower_y", new Slic3r::ConfigOptionFloats(wty)); } catch (...) {}
+                                        try { preset_bundle.project_config.set_key_value("wipe_tower_x", new Slic3r::ConfigOptionFloats(wtx)); } catch (...) {}
+                                        try { preset_bundle.project_config.set_key_value("wipe_tower_y", new Slic3r::ConfigOptionFloats(wty)); } catch (...) {}
+
+                                        try {
+                                            Slic3r::DynamicPrintConfig apply2 = *config;
+                                            print->apply(*model, apply2);
+                                        } catch (const std::exception &e) {
+                                            std::cout << "WARN: re-apply após reposicionar Prime Tower falhou: " << e.what() << std::endl;
+                                        }
+
+                                        oob_msg.clear();
+                                        if (!check_outside(oob_msg)) {
+                                            std::cout << "INFO: Prime Tower reposicionada automaticamente para o centro da mesa (após falha no realinhamento)." << std::endl;
+                                        } else {
+                                            last_error = oob_msg + " Mesmo após tentar reposicionar automaticamente a Prime Tower.";
+                                            return false;
+                                        }
+                                    } catch (const std::exception &e) {
+                                        last_error = std::string("Falha ao reposicionar Prime Tower automaticamente: ") + e.what();
+                                        return false;
+                                    }
+                                } else {
+                                    last_error = oob_msg + " (falha ao realinhar automaticamente)";
+                                    return false;
+                                }
+                            }
+                        } else {
+                            last_error = oob_msg;
+                            return false;
+                        }
+                    }
+                }
+            } catch (const std::exception &e) {
+                std::cout << "WARN: build-volume precheck falhou: " << e.what() << std::endl;
+            }
+
 
             // Set up status callback to track where segfault occurs
             print->set_status_callback([](const Slic3r::PrintBase::SlicingStatus& status) {
@@ -2257,6 +2572,64 @@ public:
                 } catch (const std::exception &e) {
                     std::cout << "WARN: set_plate_origin failed: " << e.what() << std::endl;
                 }
+            }
+
+            // Final safety validation: block G-code export if any element is outside the printable area
+            try {
+                const auto &pc_final = print->config();
+                Slic3r::BuildVolume build_volume_final(pc_final.printable_area.values, pc_final.printable_height);
+                if (build_volume_final.valid()) {
+                    std::string oob_msg_final;
+                    bool outside_final = false;
+
+                    // Convert instance bounding boxes to local bed coords using plate_origin
+                    const Slic3r::Vec3d po_fin = print->get_plate_origin();
+                    const Slic3r::Vec3d shift_fin(-po_fin(0), -po_fin(1), 0.0);
+
+                    // Check model instances
+                    for (const auto *obj : model->objects) {
+                        if (!obj) continue;
+                        for (const auto *inst : obj->instances) {
+                            if (!inst) continue;
+                            Slic3r::BoundingBoxf3 bb = obj->instance_bounding_box(*inst);
+                            Slic3r::BoundingBoxf3 bb_local(bb.min + shift_fin, bb.max + shift_fin);
+                            auto st = build_volume_final.volume_state_bbox(bb_local, /*ignore_bottom=*/true);
+                            if (st != Slic3r::BuildVolume::ObjectState::Inside) {
+                                std::string name = obj->name.empty() ? std::string("objeto") : obj->name;
+                                oob_msg_final = std::string("Elementos fora da área de impressão: '") + name + "' " +
+                                                (st == Slic3r::BuildVolume::ObjectState::Colliding ? "parcialmente" : "totalmente") +
+                                                " fora da área para o perfil selecionado.";
+                                outside_final = true;
+                                break;
+                            }
+                        }
+                        if (outside_final) break;
+                    }
+
+                    // Check Prime/Wipe Tower
+                    if (!outside_final) {
+                        bool prime_enabled = false; try { prime_enabled = pc_final.enable_prime_tower.getBool(); } catch (...) {}
+                        if (prime_enabled || print->has_wipe_tower()) {
+                            float wtx = 0.f, wty = 0.f;
+                            try { wtx = pc_final.wipe_tower_x.get_at(0); } catch (...) {}
+                            try { wty = pc_final.wipe_tower_y.get_at(0); } catch (...) {}
+                            Slic3r::Vec3d pt(double(wtx), double(wty), 0.0);
+                            Slic3r::BoundingBoxf3 wtbb(pt, pt);
+                            auto st = build_volume_final.volume_state_bbox(wtbb, /*ignore_bottom=*/true);
+                            if (st != Slic3r::BuildVolume::ObjectState::Inside) {
+                                oob_msg_final = "Elementos fora da área de impressão: Prime Tower fora da área válida para o perfil selecionado.";
+                                outside_final = true;
+                            }
+                        }
+                    }
+
+                    if (outside_final) {
+                        last_error = std::string("Validação final falhou. ") + oob_msg_final + " O G-code não será gerado para proteger a impressora.";
+                        return false;
+                    }
+                }
+            } catch (const std::exception &e) {
+                std::cout << "WARN: final build-volume validation failed: " << e.what() << std::endl;
             }
 
             // Decide export target by output extension
@@ -2972,6 +3345,7 @@ CliCore::OperationResult CliCore::slice(const SlicingParams& params) {
     m_impl->transfer_project_overrides       = params.transfer_project_overrides;
     // Behavior flags
     m_impl->center_on_bed = params.center_on_bed;
+    m_impl->auto_realign_if_needed = params.auto_realign_if_needed;
 
     std::cout << "DEBUG: Entering slice(): input='" << params.input_file
               << "' plate_index=" << params.plate_index

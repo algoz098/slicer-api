@@ -59,7 +59,7 @@ typedef struct { bool success; const char* message; const char* error_details; d
 typedef struct { const char* filename; uint32_t object_count; uint32_t triangle_count; double volume; const char* bounding_box; bool is_valid; } orcacli_model_info;
 // key/value override
 typedef struct { const char* key; const char* value; } orcacli_kv;
-typedef struct { const char* input_file; const char* output_file; const char* config_file; const char* preset_name; const char* printer_profile; const char* filament_profile; const char* process_profile; int32_t plate_index; bool verbose; bool dry_run; bool transfer_printer_customizations; bool transfer_filament_customizations; bool transfer_process_customizations; bool transfer_project_overrides; bool center_on_bed; const orcacli_kv* overrides; int32_t overrides_count; } orcacli_slice_params;
+typedef struct { const char* input_file; const char* output_file; const char* config_file; const char* preset_name; const char* printer_profile; const char* filament_profile; const char* process_profile; int32_t plate_index; bool verbose; bool dry_run; bool transfer_printer_customizations; bool transfer_filament_customizations; bool transfer_process_customizations; bool transfer_project_overrides; bool center_on_bed; bool auto_realign_if_needed; const orcacli_kv* overrides; int32_t overrides_count; } orcacli_slice_params;
 
 typedef orcacli_handle       (*PF_orcacli_create)();
 typedef void                 (*PF_orcacli_destroy)(orcacli_handle);
@@ -157,10 +157,11 @@ static bool ensure_engine_loaded(std::string* err_out) {
     if (g_ffi.lib) break;
     last_err = nullptr; last_path = p;
 #else
-    g_ffi.lib = dlopen(p.c_str(), RTLD_NOW);
-    fprintf(stderr, "DEBUG: [addon] ensure_engine_loaded: try '%s' => %p\n", p.c_str(), g_ffi.lib); fflush(stderr);
+    g_ffi.lib = dlopen(p.c_str(), RTLD_NOW | RTLD_GLOBAL);
+    const char* dlerr = g_ffi.lib ? nullptr : dlerror();
+    fprintf(stderr, "DEBUG: [addon] ensure_engine_loaded: try '%s' => %p%s%s\n", p.c_str(), g_ffi.lib, dlerr?" err=":"", dlerr?dlerr:""); fflush(stderr);
     if (g_ffi.lib) break;
-    last_err = dlerror(); last_path = p;
+    last_err = dlerr; last_path = p;
 #endif
   }
   if (!g_ffi.lib) {
@@ -484,6 +485,7 @@ struct SliceWork {
     bool transfer_process_customizations=true;
     bool transfer_project_overrides=true;
     bool center_on_bed=false;
+    bool auto_realign_if_needed=false;
   } p;
   // store options as strings and build C array for FFI
   std::vector<std::pair<std::string,std::string>> opts;
@@ -513,6 +515,8 @@ static void SliceExecute(napi_env env, void* data) {
   p.transfer_filament_customizations  = w->p.transfer_filament_customizations;
   p.transfer_process_customizations   = w->p.transfer_process_customizations;
   p.transfer_project_overrides        = w->p.transfer_project_overrides;
+  p.auto_realign_if_needed            = w->p.auto_realign_if_needed;
+
   p.center_on_bed                     = w->p.center_on_bed;
   // Build overrides array (pointers valid due to storage in w->opts)
   if (!w->opts.empty()) {
@@ -531,7 +535,9 @@ static void SliceExecute(napi_env env, void* data) {
   auto r = g_ffi.slice(g_ffi.inst, &p);
   if (w->p.verbose) { fprintf(stderr, "DEBUG: [addon] returned from g_ffi.slice (success=%d)\n", (int)r.success); fflush(stderr); }
   if (!r.success) {
-    w->err = r.message ? r.message : "slice failed";
+    if (r.error_details && r.error_details[0]) w->err = r.error_details;
+    else if (r.message && r.message[0]) w->err = r.message;
+    else w->err = "slice failed";
   } else {
     // capture JSON payload from engine (used/ignored overrides)
     if (r.message) { try { w->msg = r.message; } catch (...) {} }
@@ -639,6 +645,9 @@ static napi_value Slice(napi_env env, napi_callback_info info) {
   set_bool("transferPrinterCustomizations", work->p.transfer_printer_customizations);
   set_bool("transferFilamentCustomizations", work->p.transfer_filament_customizations);
   set_bool("transferProcessCustomizations", work->p.transfer_process_customizations);
+  set_bool("autoRealignIfNeeded", work->p.auto_realign_if_needed);
+  set_bool("auto_realign_if_needed", work->p.auto_realign_if_needed);
+
   set_bool("transferProjectOverrides", work->p.transfer_project_overrides);
   // Behavior flags
   set_bool("center", work->p.center_on_bed);

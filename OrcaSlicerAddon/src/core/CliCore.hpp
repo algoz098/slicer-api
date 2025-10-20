@@ -63,6 +63,7 @@ public:
         bool transfer_project_overrides = true;
         // Behavior flags
         bool center_on_bed = false;
+        bool auto_realign_if_needed = false; // Realinha automaticamente na mesa caso itens estejam fora da área
     };
 
     /**

@@ -162,6 +162,7 @@ orcacli_operation_result orcacli_slice(orcacli_handle h, const orcacli_slice_par
     p.transfer_project_overrides       = params->transfer_project_overrides;
     // Behavior flags
     p.center_on_bed = params->center_on_bed;
+    p.auto_realign_if_needed = params->auto_realign_if_needed;
     // Forward overrides into SlicingParams.custom_settings; validation will happen inside CliCore::slice()
     if (params->overrides && params->overrides_count > 0) {
         if (params->verbose) {

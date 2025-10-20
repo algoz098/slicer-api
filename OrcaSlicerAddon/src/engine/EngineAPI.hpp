@@ -55,6 +55,7 @@ typedef struct {
     bool        transfer_project_overrides;
     // Behavior flags
     bool        center_on_bed;
+    bool        auto_realign_if_needed; // realinha automaticamente na mesa se necess2rio
     // Optional config overrides (applied after profiles). The memory is owned by caller and must live through the call.
     const orcacli_kv* overrides;  // optional
     int32_t     overrides_count;  // number of entries in overrides
