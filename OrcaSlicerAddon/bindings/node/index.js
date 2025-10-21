@@ -4,7 +4,22 @@
 const path = require("path");
 const fs = require("fs");
 const tryRequire = (p) => { try { return require(p); } catch (_) { return null; } };
-const log = (...a) => { try { console.error("DEBUG: [addon-js]", ...a); } catch (_) {} };
+const isSilent = (String(process.env.ORCA_ADDON_LOG || '').toLowerCase() === 'off') || process.env.ORCACLI_SILENT === '1';
+const log = isSilent ? (...a) => {} : (...a) => { try { console.error("DEBUG: [addon-js]", ...a); } catch (_) {} };
+const withSilencedIO = (fn) => {
+  if (!isSilent) return fn();
+  const out = process.stdout.write, err = process.stderr.write;
+  // @ts-ignore
+  process.stdout.write = () => true; // no-op
+  // @ts-ignore
+  process.stderr.write = () => true; // no-op
+  try { return fn(); } finally {
+    // @ts-ignore
+    process.stdout.write = out;
+    // @ts-ignore
+    process.stderr.write = err;
+  }
+};
 
 // Wrap native addon into a Koa-compatible no-op middleware function and attach API
 function wrapAsMiddleware(native) {
@@ -39,7 +54,7 @@ const candidatePaths = preferLocal ? candidatesLocalFirst : candidatesDefault;
 for (const p of candidatePaths) {
   if (fs.existsSync(p)) {
     log("trying", p);
-    const m = tryRequire(p);
+    const m = withSilencedIO(() => tryRequire(p));
     if (m) { log("loaded", p); module.exports = wrapAsMiddleware(m); return; }
     log("failed to load", p);
   }
@@ -61,7 +76,7 @@ if (fs.existsSync(prebuildsDir)) {
 
 // Fall back to mod1 error for clearer message in dev
 log("falling back to require(mod1)", mod1);
-const addon = wrapAsMiddleware(require(mod1));
+const addon = wrapAsMiddleware(withSilencedIO(() => require(mod1)));
 
 // Attach Klipper client and high-level API
 try {

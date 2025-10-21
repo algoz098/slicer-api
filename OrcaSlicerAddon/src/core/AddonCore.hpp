@@ -23,7 +23,7 @@ namespace OrcaSlicerCli {
  * interface for CLI operations like slicing, configuration management, and
  * file operations.
  */
-class CliCore {
+class AddonCore {
 public:
     /**
      * @brief Result structure for operations
@@ -84,12 +84,12 @@ public:
     /**
      * @brief Constructor
      */
-    CliCore();
+    AddonCore();
 
     /**
      * @brief Destructor
      */
-    ~CliCore();
+    ~AddonCore();
 
     /**
      * @brief Initialize the CLI core with OrcaSlicer components
@@ -229,6 +229,9 @@ public:
      * @return Build information string
      */
     static std::string getBuildInfo();
+
+    // Global logging control: suppress or restore stdout/stderr without touching orcaslicer/ sources
+    static void setLoggingSilenced(bool silent);
 
 private:
     class Impl;

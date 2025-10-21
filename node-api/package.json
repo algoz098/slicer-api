@@ -38,7 +38,7 @@
     "compile": "shx rm -rf lib/ && tsc",
     "start": "node lib/",
     "prettier": "npx prettier \"**/*.ts\" --write",
-    "mocha": "cross-env NODE_ENV=test NODE_OPTIONS=--import=tsx mocha test/ --recursive --extension .ts --exit",
+    "mocha": "cross-env NODE_ENV=test NODE_OPTIONS=--import=tsx mocha --file test/setup.ts test/ --recursive --extension .ts --exit",
     "test": "npm run mocha",
     "smoke:slicer": "cross-env NODE_ENV=test ts-node scripts/smoke-slicer.ts",
     "bundle:client": "npm run compile && npm pack --pack-destination ./public"

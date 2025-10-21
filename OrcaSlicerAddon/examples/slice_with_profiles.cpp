@@ -1,11 +1,11 @@
 #include <iostream>
 #include <string>
 #include <vector>
-#include "../src/core/CliCore.hpp"
+#include "../src/core/AddonCore.hpp"
 
 using namespace OrcaSlicerCli;
 
-void printAvailableProfiles(const CliCore& core) {
+void printAvailableProfiles(const AddonCore& core) {
     std::cout << "\n=== Available Profiles ===" << std::endl;
     
     // Print available printer profiles
@@ -95,15 +95,15 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    // Initialize CLI Core
-    CliCore core;
+    // Initialize AddonCore
+    AddonCore core;
     auto init_result = core.initialize("../OrcaSlicer/resources");
     if (!init_result.success) {
-        std::cerr << "Failed to initialize CLI Core: " << init_result.message << std::endl;
+        std::cerr << "Failed to initialize AddonCore: " << init_result.message << std::endl;
         return 1;
     }
 
-    std::cout << "CLI Core initialized successfully!" << std::endl;
+    std::cout << "AddonCore initialized successfully!" << std::endl;
 
     if (list_profiles) {
         printAvailableProfiles(core);

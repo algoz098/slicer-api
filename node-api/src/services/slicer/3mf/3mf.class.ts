@@ -9,6 +9,7 @@ import type { Application } from '../../../declarations'
 import type { Slicer3Mf, Slicer3MfData, Slicer3MfPatch, Slicer3MfQuery } from './3mf.schema'
 import { BadRequest } from '@feathersjs/errors'
 
+
 export type { Slicer3Mf, Slicer3MfData, Slicer3MfPatch, Slicer3MfQuery }
 export interface Slicer3MfServiceOptions {
   app: Application
@@ -87,16 +88,16 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
         // Heurística mínima de vendor pelo prefixo do nome
         if (typeof orcaAny?.loadVendor === 'function') {
           if (p.startsWith('Creality ')) {
-            try { console.log('[3MF] loadVendor("Creality")'); orcaAny.loadVendor('Creality'); console.log('[3MF] loadVendor("Creality") OK') } catch (e) { console.warn('[3MF] loadVendor("Creality") FAILED:', e) }
+            try { console.log('[3MF] loadVendor("Creality")'); { orcaAny.setLoggingSilenced(true); try { orcaAny.loadVendor('Creality') } finally { orcaAny.setLoggingSilenced(false) } } console.log('[3MF] loadVendor("Creality") OK') } catch (e) { console.warn('[3MF] loadVendor("Creality") FAILED:', e) }
           } else if (p.startsWith('Bambu ')) {
-            try { console.log('[3MF] loadVendor("BBL")'); orcaAny.loadVendor('BBL'); console.log('[3MF] loadVendor("BBL") OK') } catch (e) { console.warn('[3MF] loadVendor("BBL") FAILED:', e) }
+            try { console.log('[3MF] loadVendor("BBL")'); { orcaAny.setLoggingSilenced(true); try { orcaAny.loadVendor('BBL') } finally { orcaAny.setLoggingSilenced(false) } } console.log('[3MF] loadVendor("BBL") OK') } catch (e) { console.warn('[3MF] loadVendor("BBL") FAILED:', e) }
           }
           // K2 Plus pode existir em pacotes CrealityPrint
           if (p.includes('K2 Plus')) {
-            try { console.log('[3MF] loadVendor("CrealityPrint")'); orcaAny.loadVendor('CrealityPrint'); console.log('[3MF] loadVendor("CrealityPrint") OK') } catch (e) { console.warn('[3MF] loadVendor("CrealityPrint") FAILED:', e) }
+            try { console.log('[3MF] loadVendor("CrealityPrint")'); { orcaAny.setLoggingSilenced(true); try { orcaAny.loadVendor('CrealityPrint') } finally { orcaAny.setLoggingSilenced(false) } } console.log('[3MF] loadVendor("CrealityPrint") OK') } catch (e) { console.warn('[3MF] loadVendor("CrealityPrint") FAILED:', e) }
           }
         }
-        try { console.log('[3MF] loadPrinterProfile("%s")', p); orcaAny.loadPrinterProfile(p); console.log('[3MF] loadPrinterProfile OK') } catch (e) { console.warn('[3MF] loadPrinterProfile FAILED:', e) }
+        try { console.log('[3MF] loadPrinterProfile("%s")', p); { orcaAny.setLoggingSilenced(true); try { orcaAny.loadPrinterProfile(p) } finally { orcaAny.setLoggingSilenced(false) } } console.log('[3MF] loadPrinterProfile OK') } catch (e) { console.warn('[3MF] loadPrinterProfile FAILED:', e) }
       }
     } catch (e) { console.warn('[3MF] Preload vendor/profile block FAILED:', e) }
 
@@ -130,21 +131,27 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
     // console.log(JSON.stringify(finalOptions, null, 2))
     // if (!false) throw new Error("lock")
     try {
-      const res = await orca.slice({
-        input: inputPath,
-        output: outPath,
-        plate: data.plate,
-        options: finalOptions,
-        center: true,
-        autoRealignIfNeeded: true,
-        printerProfile: pPrinter,
-        processProfile: pProcess,
-        filamentProfile: pFilament,
-        transferPrinterCustomizations: data.transferPrinterCustomizations ?? true,
-        transferFilamentCustomizations: data.transferFilamentCustomizations ?? true,
-        transferProcessCustomizations: true,
-        transferProjectOverrides: true
-      })
+      (orca as any).setLoggingSilenced(true)
+      let res: any
+      try {
+        res = await orca.slice({
+          input: inputPath,
+          output: outPath,
+          plate: data.plate,
+          options: finalOptions,
+          center: true,
+          autoRealignIfNeeded: true,
+          printerProfile: pPrinter,
+          processProfile: pProcess,
+          filamentProfile: pFilament,
+          transferPrinterCustomizations: data.transferPrinterCustomizations ?? true,
+          transferFilamentCustomizations: data.transferFilamentCustomizations ?? true,
+          transferProcessCustomizations: true,
+          transferProjectOverrides: true
+        })
+      } finally {
+        (orca as any).setLoggingSilenced(false)
+      }
       output = res.output
 
       usedOptions = (res as any)?.usedOptions

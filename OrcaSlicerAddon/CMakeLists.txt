@@ -54,6 +54,22 @@ set(ORCACLI_LIBSLIC3R_ROOT "" CACHE PATH "Override path to OrcaSlicer build dire
 if(ORCACLI_LIBSLIC3R_ROOT AND EXISTS "${ORCACLI_LIBSLIC3R_ROOT}")
     set(ORCASLICER_BUILD_DIR "${ORCACLI_LIBSLIC3R_ROOT}")
     message(STATUS "Using overridden OrcaSlicer build directory: ${ORCASLICER_BUILD_DIR}")
+    # Infer ORCASLICER_ARCH when an override build dir is provided but arch is not set
+    if(NOT DEFINED ORCASLICER_ARCH OR ORCASLICER_ARCH STREQUAL "")
+        if(ORCACLI_LIBSLIC3R_ROOT MATCHES "/arm64(/|$)")
+            set(ORCASLICER_ARCH "arm64")
+        elseif(ORCACLI_LIBSLIC3R_ROOT MATCHES "/(x64|x86_64)(/|$)")
+            set(ORCASLICER_ARCH "x64")
+        elseif(APPLE AND CMAKE_OSX_ARCHITECTURES MATCHES "arm64")
+            set(ORCASLICER_ARCH "arm64")
+        elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
+            set(ORCASLICER_ARCH "arm64")
+        else()
+            set(ORCASLICER_ARCH "x64")
+        endif()
+        message(STATUS "Detected ORCASLICER_ARCH='${ORCASLICER_ARCH}' from override path")
+    endif()
+
 else()
     set(ORCASLICER_BUILD_DIR "${ORCASLICER_ROOT_DIR}/build")
     # Detect architecture-specific build directory and set ORCASLICER_ARCH

@@ -2,6 +2,7 @@ import * as path from 'node:path'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 
+
 const addonDir = process.env.ORCACLI_ADDON_DIR || path.resolve(__dirname, '../../OrcaSlicerAddon/bindings/node')
 
 const orca = require(addonDir)
@@ -21,15 +22,20 @@ export default function(app: any) {
 
             }
 
-            orca.initialize({
-                resourcesPath,
-                verbose: false,
-                strict: true, // enforce API-only control: no env-driven autoloads
-                vendors: [], // nao varrer disco automaticamente; vamos injetar via bundle
-                printerProfiles: [],
-                filamentProfiles: [],
-                processProfiles: []
-            })
+            (orca as any).setLoggingSilenced(true)
+            try {
+                orca.initialize({
+                    resourcesPath,
+                    verbose: false,
+                    strict: true, // enforce API-only control: no env-driven autoloads
+                    vendors: [], // nao varrer disco automaticamente; vamos injetar via bundle
+                    printerProfiles: [],
+                    filamentProfiles: [],
+                    processProfiles: []
+                })
+            } finally {
+                (orca as any).setLoggingSilenced(false)
+            }
             console.log(`[Orca] Addon loaded. addonDir=${addonDir} resourcesPath=${resourcesPath}`)
 
             // Precarregar apenas a impressora BBL A1 0.4 via bundle em memoria (sem varrer disco no addon)
@@ -158,7 +164,7 @@ export default function(app: any) {
                     ]
                 }
 
-                // Helper para montar arquivos com toler e2ncia (n e3o abortar por itens opcionais)
+                // Helper para montar arquivos com toler
                 const files: Record<string, string> = {}
                 const addFile = (key: string, fullPath: string, required = true) => {
                     try {
@@ -185,7 +191,7 @@ export default function(app: any) {
                 addFile('BBL/process/fdm_process_single_common.json', path.join(processDir, 'fdm_process_single_common.json'), true)
                 addFile('BBL/process/fdm_process_single_0.20.json', path.join(processDir, 'fdm_process_single_0.20.json'), true)
                 addFile(`BBL/process/${defaultProcess}.json`, path.join(processDir, `${defaultProcess}.json`), true)
-                // A1 mini default process (requer heran e7a do P1P)
+                // A1 mini default process (requer heran
                 addFile(`BBL/process/${a1mDefaultProcess}.json`, path.join(processDir, `${a1mDefaultProcess}.json`), true)
                 addFile('BBL/process/0.20mm Standard @BBL P1P.json', path.join(processDir, '0.20mm Standard @BBL P1P.json'), true)
                 // filament (bases + defaults)
@@ -237,7 +243,8 @@ export default function(app: any) {
 
                 // Carrega sandbox interno do addon com apenas esses arquivos
                 if (typeof (orca as any).loadVendorBundle === 'function') {
-                    (orca as any).loadVendorBundle(bundle)
+                    (orca as any).setLoggingSilenced(true)
+                    try { (orca as any).loadVendorBundle(bundle) } finally { (orca as any).setLoggingSilenced(false) }
                     // DEBUG: verificar materializacao dos arquivos criticos no sandbox do addon
                     try {
                         const sandbox = path.join(os.tmpdir(), '.orcaslicercli', `bundle-${process.pid}`)
@@ -257,15 +264,15 @@ export default function(app: any) {
                     }
                     // Primeiro registre todos os vendors do sandbox atual
                     if (typeof (orca as any).loadVendor === 'function') {
-                        try { (orca as any).loadVendor('BBL') } catch {}
-                        try { (orca as any).loadVendor('Creality') } catch {}
+                        try { (orca as any).setLoggingSilenced(true); try { (orca as any).loadVendor('BBL') } finally { (orca as any).setLoggingSilenced(false) } } catch {}
+                        try { (orca as any).setLoggingSilenced(true); try { (orca as any).loadVendor('Creality') } finally { (orca as any).setLoggingSilenced(false) } } catch {}
                     }
                     // Pré-carregar filamentos A1M comuns para resolver substituições de projeto (ex.: PETG)
                     try {
                         const orcaAny = (orca as any)
                         if (typeof orcaAny.loadFilamentProfile === 'function') {
-                            try { orcaAny.loadFilamentProfile('Generic PLA @BBL A1M') } catch {}
-                            try { orcaAny.loadFilamentProfile('Generic PETG @BBL A1M') } catch {}
+                            try { orcaAny.setLoggingSilenced(true); try { orcaAny.loadFilamentProfile('Generic PLA @BBL A1M') } finally { orcaAny.setLoggingSilenced(false) } } catch {}
+                            try { orcaAny.setLoggingSilenced(true); try { orcaAny.loadFilamentProfile('Generic PETG @BBL A1M') } finally { orcaAny.setLoggingSilenced(false) } } catch {}
                         }
                     } catch {}
                     // Só depois materialize os perfis padrão (BBL A1 0.4)
@@ -322,8 +329,9 @@ export default function(app: any) {
 
                         try {
                             console.log(`[Orca] Loading vendor bundle: ${vendor}`)
-                            orcaAny.loadVendorBundle({ vendor, vendorJson, files })
-                            try { if (typeof orcaAny.loadVendor === 'function') orcaAny.loadVendor(vendor) } catch {}
+                            orcaAny.setLoggingSilenced(true);
+                            try { orcaAny.loadVendorBundle({ vendor, vendorJson, files }) } finally { orcaAny.setLoggingSilenced(false) }
+                            try { if (typeof orcaAny.loadVendor === 'function') { orcaAny.setLoggingSilenced(true); try { orcaAny.loadVendor(vendor) } finally { orcaAny.setLoggingSilenced(false) } } } catch {}
                             console.log(`[Orca] Loaded external vendor bundle from public/profiles: ${vendor}`)
                         } catch (err) {
                             console.error(`[Orca] Failed to load external vendor bundle ${vendor}:`, err)

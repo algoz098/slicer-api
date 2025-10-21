@@ -9,17 +9,17 @@
 #include <cctype>
 #include <cstring>
 
-#include "core/CliCore.hpp"
+#include "core/AddonCore.hpp"
 #ifdef HAVE_LIBSLIC3R
 namespace Slic3r { unsigned int level_string_to_boost(std::string level); void set_logging_level(unsigned int level); }
 #endif
 
 
-using OrcaSlicerCli::CliCore;
+using OrcaSlicerCli::AddonCore;
 
 namespace {
 struct Engine {
-    CliCore core;
+    AddonCore core;
 };
 
 static char* dup_cstr(const std::string& s) {
@@ -57,7 +57,7 @@ void orcacli_destroy(orcacli_handle h) {
     delete e;
 }
 
-static orcacli_operation_result make_result(const OrcaSlicerCli::CliCore::OperationResult& r) {
+static orcacli_operation_result make_result(const OrcaSlicerCli::AddonCore::OperationResult& r) {
     orcacli_operation_result o{};
     o.success = r.success;
     o.message = r.message.empty() ? nullptr : dup_cstr(r.message);
@@ -144,7 +144,7 @@ orcacli_operation_result orcacli_slice(orcacli_handle h, const orcacli_slice_par
         return orcacli_operation_result{false, dup_cstr("invalid args"), nullptr};
     }
     Engine* e = static_cast<Engine*>(h);
-    CliCore::SlicingParams p;
+    AddonCore::SlicingParams p;
     if (params->input_file)   p.input_file = params->input_file;
     if (params->output_file)  p.output_file = params->output_file;
     if (params->config_file)  p.config_file = params->config_file;
@@ -163,7 +163,7 @@ orcacli_operation_result orcacli_slice(orcacli_handle h, const orcacli_slice_par
     // Behavior flags
     p.center_on_bed = params->center_on_bed;
     p.auto_realign_if_needed = params->auto_realign_if_needed;
-    // Forward overrides into SlicingParams.custom_settings; validation will happen inside CliCore::slice()
+    // Forward overrides into SlicingParams.custom_settings; validation will happen inside AddonCore::slice()
     if (params->overrides && params->overrides_count > 0) {
         if (params->verbose) {
             try {
@@ -247,6 +247,16 @@ orcacli_operation_result orcacli_load_process_profile(orcacli_handle h, const ch
 #endif
 const char* orcacli_version() {
     return ORCACLI_VERSION_STRING;
+}
+
+void orcacli_set_logging_silenced(bool silent) {
+    try {
+        AddonCore::setLoggingSilenced(silent);
+    } catch (...) { /* ignore */ }
+#ifdef HAVE_LIBSLIC3R
+    // Also tone down libslic3r logger when silenced (errors only)
+    try { if (silent) Slic3r::set_logging_level(1); } catch (...) {}
+#endif
 }
 
 void orcacli_free_string(const char* s) {

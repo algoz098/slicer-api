@@ -76,6 +76,9 @@ orcacli_operation_result orcacli_load_vendor(orcacli_handle h, const char* vendo
 // Metadata
 const char* orcacli_version(); // static string, no free required
 
+// Global logging control (toggle stdout/stderr redirection without touching orcaslicer/ sources)
+void orcacli_set_logging_silenced(bool silent);
+
 // Profile loading (on-demand)
 orcacli_operation_result orcacli_load_printer_profile(orcacli_handle h, const char* printer_name);
 orcacli_operation_result orcacli_load_filament_profile(orcacli_handle h, const char* filament_name);

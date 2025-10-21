@@ -22,6 +22,22 @@
 #include <regex>
 
 
+
+// Global silent switch based on environment
+static bool addon_is_silent() {
+  static bool inited = false;
+  static bool silent = false;
+  if (!inited) {
+    const char* v = std::getenv("ORCA_ADDON_LOG");
+    const char* s = std::getenv("ORCACLI_SILENT");
+    silent = (v && std::string(v) == "off") || (s && std::string(s) == "1");
+    inited = true;
+  }
+  return silent;
+}
+
+#define ADDON_DEBUGF(...) do { if (!addon_is_silent()) { std::fprintf(stderr, __VA_ARGS__); std::fflush(stderr);} } while(0)
+
 // Thin addon will dlopen the engine library at runtime; no direct core linkage.
 static std::mutex g_mutex; // serialize heavy operations
 static std::string g_current_resources; // track current resourcesPath for persistent sandbox
@@ -68,6 +84,7 @@ typedef orcacli_operation_result (*PF_orcacli_load_model)(orcacli_handle, const 
 typedef orcacli_model_info   (*PF_orcacli_get_model_info)(orcacli_handle);
 typedef orcacli_operation_result (*PF_orcacli_slice)(orcacli_handle, const orcacli_slice_params*);
 typedef const char*          (*PF_orcacli_version)();
+typedef void                 (*PF_orcacli_set_logging_silenced)(bool);
 typedef void                 (*PF_orcacli_free_string)(const char*);
 typedef void                 (*PF_orcacli_free_model_info)(orcacli_model_info*);
 typedef void                 (*PF_orcacli_free_result)(orcacli_operation_result*);
@@ -86,6 +103,7 @@ struct FFI {
   PF_orcacli_get_model_info get_model_info = nullptr;
   PF_orcacli_slice slice = nullptr;
   PF_orcacli_version version = nullptr;
+  PF_orcacli_set_logging_silenced set_logging_silenced = nullptr;
   PF_orcacli_free_string free_string = nullptr;
   PF_orcacli_free_model_info free_model_info = nullptr;
   PF_orcacli_free_result free_result = nullptr;
@@ -124,7 +142,7 @@ static std::string module_dir_path() {
 
 static bool ensure_engine_loaded(std::string* err_out) {
   if (g_ffi.lib) return true;
-  fprintf(stderr, "DEBUG: [addon] ensure_engine_loaded: begin\n"); fflush(stderr);
+  ADDON_DEBUGF("DEBUG: [addon] ensure_engine_loaded: begin\n");
   const char* override = std::getenv("ORCACLI_ENGINE_PATH");
   std::vector<std::string> candidates;
   if (override && *override) candidates.emplace_back(override);
@@ -153,13 +171,13 @@ static bool ensure_engine_loaded(std::string* err_out) {
   for (const auto& p : candidates) {
 #if defined(_WIN32)
     g_ffi.lib = (void*)LoadLibraryA(p.c_str());
-    fprintf(stderr, "DEBUG: [addon] ensure_engine_loaded: try '%s' => %p (win)\n", p.c_str(), g_ffi.lib); fflush(stderr);
+    ADDON_DEBUGF("DEBUG: [addon] ensure_engine_loaded: try '%s' => %p (win)\n", p.c_str(), g_ffi.lib);
     if (g_ffi.lib) break;
     last_err = nullptr; last_path = p;
 #else
     g_ffi.lib = dlopen(p.c_str(), RTLD_NOW | RTLD_GLOBAL);
     const char* dlerr = g_ffi.lib ? nullptr : dlerror();
-    fprintf(stderr, "DEBUG: [addon] ensure_engine_loaded: try '%s' => %p%s%s\n", p.c_str(), g_ffi.lib, dlerr?" err=":"", dlerr?dlerr:""); fflush(stderr);
+    ADDON_DEBUGF("DEBUG: [addon] ensure_engine_loaded: try '%s' => %p%s%s\n", p.c_str(), g_ffi.lib, dlerr?" err=":"", dlerr?dlerr:"");
     if (g_ffi.lib) break;
     last_err = dlerr; last_path = p;
 #endif
@@ -171,7 +189,7 @@ static bool ensure_engine_loaded(std::string* err_out) {
       if (last_err) { msg += " — "; msg += last_err; }
       *err_out = msg;
     }
-    fprintf(stderr, "DEBUG: [addon] ensure_engine_loaded: failed: %s\n", err_out?err_out->c_str():"(no err_out)"); fflush(stderr);
+    ADDON_DEBUGF("DEBUG: [addon] ensure_engine_loaded: failed: %s\n", err_out?err_out->c_str():"(no err_out)");
     return false;
   }
 #if defined(_WIN32)
@@ -186,6 +204,7 @@ static bool ensure_engine_loaded(std::string* err_out) {
   g_ffi.get_model_info = reinterpret_cast<PF_orcacli_get_model_info>(load_sym(g_ffi.lib, "orcacli_get_model_info"));
   g_ffi.slice          = reinterpret_cast<PF_orcacli_slice>(load_sym(g_ffi.lib, "orcacli_slice"));
   g_ffi.version        = reinterpret_cast<PF_orcacli_version>(load_sym(g_ffi.lib, "orcacli_version"));
+  g_ffi.set_logging_silenced = reinterpret_cast<PF_orcacli_set_logging_silenced>(load_sym(g_ffi.lib, "orcacli_set_logging_silenced"));
   g_ffi.free_string    = reinterpret_cast<PF_orcacli_free_string>(load_sym(g_ffi.lib, "orcacli_free_string"));
   g_ffi.free_model_info= reinterpret_cast<PF_orcacli_free_model_info>(load_sym(g_ffi.lib, "orcacli_free_model_info"));
   g_ffi.free_result    = reinterpret_cast<PF_orcacli_free_result>(load_sym(g_ffi.lib, "orcacli_free_result"));
@@ -203,9 +222,9 @@ static bool ensure_engine_loaded(std::string* err_out) {
 #endif
     return false;
   }
-  fprintf(stderr, "DEBUG: [addon] ensure_engine_loaded: symbols loaded create=%p init=%p slice=%p version=%p free_result=%p\n", (void*)g_ffi.create, (void*)g_ffi.initialize, (void*)g_ffi.slice, (void*)g_ffi.version, (void*)g_ffi.free_result); fflush(stderr);
+  ADDON_DEBUGF("DEBUG: [addon] ensure_engine_loaded: symbols loaded create=%p init=%p slice=%p version=%p free_result=%p\n", (void*)g_ffi.create, (void*)g_ffi.initialize, (void*)g_ffi.slice, (void*)g_ffi.version, (void*)g_ffi.free_result);
   // Log optional missing symbols for diagnostics (do not fail)
-  auto log_missing = [&](const char* name, void* p){ if (!p) { fprintf(stderr, "DEBUG: [addon] engine missing optional symbol: %s\n", name); fflush(stderr); } };
+  auto log_missing = [&](const char* name, void* p){ if (!p) { ADDON_DEBUGF("DEBUG: [addon] engine missing optional symbol: %s\n", name); } };
   log_missing("orcacli_initialize", (void*)g_ffi.initialize);
   log_missing("orcacli_load_model", (void*)g_ffi.load_model);
   log_missing("orcacli_get_model_info", (void*)g_ffi.get_model_info);
@@ -218,9 +237,10 @@ static bool ensure_engine_loaded(std::string* err_out) {
   log_missing("orcacli_load_printer_profile", (void*)g_ffi.load_printer_profile);
   log_missing("orcacli_load_filament_profile", (void*)g_ffi.load_filament_profile);
   log_missing("orcacli_load_process_profile", (void*)g_ffi.load_process_profile);
-  fprintf(stderr, "DEBUG: [addon] ensure_engine_loaded: calling create()...\n"); fflush(stderr);
+  log_missing("orcacli_set_logging_silenced", (void*)g_ffi.set_logging_silenced);
+  ADDON_DEBUGF("DEBUG: [addon] ensure_engine_loaded: calling create()...\n");
   g_ffi.inst = g_ffi.create();
-  fprintf(stderr, "DEBUG: [addon] ensure_engine_loaded: create() => %p\n", g_ffi.inst); fflush(stderr);
+  ADDON_DEBUGF("DEBUG: [addon] ensure_engine_loaded: create() => %p\n", g_ffi.inst);
   if (!g_ffi.inst) {
     if (err_out) *err_out = "Failed to create engine instance";
 #if defined(_WIN32)
@@ -253,7 +273,7 @@ static bool get_bool(napi_env env, napi_value v, bool* out) {
 static napi_value Initialize(napi_env env, napi_callback_info info) {
 
   // log para debug
-  fprintf(stderr, "DEBUG: [addon] Initialize 4 ()\n"); fflush(stderr);
+  ADDON_DEBUGF("DEBUG: [addon] Initialize 4 ()\n");
   size_t argc = 1; napi_value args[1]; napi_value thisArg; void* data;
   NAPI_CALL(env, napi_get_cb_info(env, info, &argc, args, &thisArg, &data));
 
@@ -307,41 +327,41 @@ static napi_value Initialize(napi_env env, napi_callback_info info) {
   }
   // DEBUG: dump requested vendors and profiles
   if (!vendors_requested.empty()) {
-    fprintf(stderr, "DEBUG: [addon] requested vendors (%zu):\n", vendors_requested.size()); fflush(stderr);
-    for (const auto &s : vendors_requested) { fprintf(stderr, "  - %s\n", s.c_str()); fflush(stderr); }
+    ADDON_DEBUGF("DEBUG: [addon] requested vendors (%zu):\n", vendors_requested.size());
+    for (const auto &s : vendors_requested) { ADDON_DEBUGF("  - %s\n", s.c_str()); }
   }
   if (!printer_profiles_requested.empty()) {
-    fprintf(stderr, "DEBUG: [addon] requested printerProfiles (%zu):\n", printer_profiles_requested.size()); fflush(stderr);
-    for (const auto &s : printer_profiles_requested) { fprintf(stderr, "  - %s\n", s.c_str()); fflush(stderr); }
+    ADDON_DEBUGF("DEBUG: [addon] requested printerProfiles (%zu):\n", printer_profiles_requested.size());
+    for (const auto &s : printer_profiles_requested) { ADDON_DEBUGF("  - %s\n", s.c_str()); }
   }
   if (!filament_profiles_requested.empty()) {
-    fprintf(stderr, "DEBUG: [addon] requested filamentProfiles (%zu):\n", filament_profiles_requested.size()); fflush(stderr);
-    for (const auto &s : filament_profiles_requested) { fprintf(stderr, "  - %s\n", s.c_str()); fflush(stderr); }
+    ADDON_DEBUGF("DEBUG: [addon] requested filamentProfiles (%zu):\n", filament_profiles_requested.size());
+    for (const auto &s : filament_profiles_requested) { ADDON_DEBUGF("  - %s\n", s.c_str()); }
   }
   if (!process_profiles_requested.empty()) {
-    fprintf(stderr, "DEBUG: [addon] requested processProfiles (%zu):\n", process_profiles_requested.size()); fflush(stderr);
-    for (const auto &s : process_profiles_requested) { fprintf(stderr, "  - %s\n", s.c_str()); fflush(stderr); }
+    ADDON_DEBUGF("DEBUG: [addon] requested processProfiles (%zu):\n", process_profiles_requested.size());
+    for (const auto &s : process_profiles_requested) { ADDON_DEBUGF("  - %s\n", s.c_str()); }
   }
 
 
 
   // API-only control: do not read or modify environment for autoload behavior.
   // Respect the 'strict' flag from initialize() only. Currently, strict is enforced in core.
-  fprintf(stderr, "DEBUG: [addon] initialize options: strict=%d, vendors=%zu, printers=%zu, filaments=%zu, processes=%zu\n",
-          (int)strict, vendors_requested.size(), printer_profiles_requested.size(), filament_profiles_requested.size(), process_profiles_requested.size()); fflush(stderr);
+  ADDON_DEBUGF("DEBUG: [addon] initialize options: strict=%d, vendors=%zu, printers=%zu, filaments=%zu, processes=%zu\n",
+          (int)strict, vendors_requested.size(), printer_profiles_requested.size(), filament_profiles_requested.size(), process_profiles_requested.size());
 
-  fprintf(stderr, "DEBUG: [addon] before ensure_engine_loaded()\n"); fflush(stderr);
+  ADDON_DEBUGF("DEBUG: [addon] before ensure_engine_loaded()\n");
   std::lock_guard<std::mutex> lk(g_mutex);
   std::string err;
   if (!ensure_engine_loaded(&err)) { napi_throw_error(env, nullptr, err.c_str()); return nullptr; }
-  fprintf(stderr, "DEBUG: [addon] after ensure_engine_loaded()\n"); fflush(stderr);
+  ADDON_DEBUGF("DEBUG: [addon] after ensure_engine_loaded()\n");
   // Initialize the engine with the provided resourcesPath (if any)
 
   if (g_ffi.initialize) {
     const char* rp = resourcesPath.empty() ? nullptr : resourcesPath.c_str();
-    fprintf(stderr, "DEBUG: [addon] about to call g_ffi.initialize(rp=%s) init=%p free_result=%p\n", rp?rp:"(null)", (void*)g_ffi.initialize, (void*)g_ffi.free_result); fflush(stderr);
+    ADDON_DEBUGF("DEBUG: [addon] about to call g_ffi.initialize(rp=%s) init=%p free_result=%p\n", rp?rp:"(null)", (void*)g_ffi.initialize, (void*)g_ffi.free_result);
     auto r = g_ffi.initialize(g_ffi.inst, rp);
-    fprintf(stderr, "DEBUG: [addon] g_ffi.initialize returned success=%d msg_ptr=%p details_ptr=%p\n", (int)r.success, (void*)r.message, (void*)r.error_details); fflush(stderr);
+    ADDON_DEBUGF("DEBUG: [addon] g_ffi.initialize returned success=%d msg_ptr=%p details_ptr=%p\n", (int)r.success, (void*)r.message, (void*)r.error_details);
     if (!r.success) {
       std::string msg = r.message ? r.message : "initialize failed";
       if (r.error_details) { msg += " — "; msg += r.error_details; }
@@ -360,7 +380,7 @@ static napi_value Initialize(napi_env env, napi_callback_info info) {
   // Optionally load vendors passed (via 'vendors' or 'presets')
   if (!vendors_requested.empty()) {
     for (const auto& v : vendors_requested) {
-      fprintf(stderr, "DEBUG: [addon] calling load_vendor('%s')\n", v.c_str()); fflush(stderr);
+      ADDON_DEBUGF("DEBUG: [addon] calling load_vendor('%s')\n", v.c_str());
 
       auto lr = g_ffi.load_vendor(g_ffi.inst, v.c_str());
       if (!lr.success) {
@@ -377,7 +397,7 @@ static napi_value Initialize(napi_env env, napi_callback_info info) {
   // Optionally load specific profiles passed (only these will be loaded by the addon)
   if (!printer_profiles_requested.empty()) {
     for (const auto& name : printer_profiles_requested) {
-      fprintf(stderr, "DEBUG: [addon] calling load_printer_profile('%s')\n", name.c_str()); fflush(stderr);
+      ADDON_DEBUGF("DEBUG: [addon] calling load_printer_profile('%s')\n", name.c_str());
 
       auto r = g_ffi.load_printer_profile(g_ffi.inst, name.c_str());
 
@@ -388,7 +408,7 @@ static napi_value Initialize(napi_env env, napi_callback_info info) {
 
   if (!filament_profiles_requested.empty()) {
     for (const auto& name : filament_profiles_requested) {
-      fprintf(stderr, "DEBUG: [addon] calling load_filament_profile('%s')\n", name.c_str()); fflush(stderr);
+      ADDON_DEBUGF("DEBUG: [addon] calling load_filament_profile('%s')\n", name.c_str());
 
       auto r = g_ffi.load_filament_profile(g_ffi.inst, name.c_str());
 
@@ -400,7 +420,7 @@ static napi_value Initialize(napi_env env, napi_callback_info info) {
   if (!process_profiles_requested.empty()) {
 
     for (const auto& name : process_profiles_requested) {
-      fprintf(stderr, "DEBUG: [addon] calling load_process_profile('%s')\n", name.c_str()); fflush(stderr);
+      ADDON_DEBUGF("DEBUG: [addon] calling load_process_profile('%s')\n", name.c_str());
 
       auto r = g_ffi.load_process_profile(g_ffi.inst, name.c_str());
 
@@ -531,9 +551,9 @@ static void SliceExecute(napi_env env, void* data) {
     p.overrides = nullptr;
     p.overrides_count = 0;
   }
-  if (w->p.verbose) { fprintf(stderr, "DEBUG: [addon] calling g_ffi.slice input='%s' plate=%d overrides=%d\n", p.input_file ? p.input_file : "(null)", p.plate_index, p.overrides_count); fflush(stderr); }
+  if (w->p.verbose) { ADDON_DEBUGF("DEBUG: [addon] calling g_ffi.slice input='%s' plate=%d overrides=%d\n", p.input_file ? p.input_file : "(null)", p.plate_index, p.overrides_count); }
   auto r = g_ffi.slice(g_ffi.inst, &p);
-  if (w->p.verbose) { fprintf(stderr, "DEBUG: [addon] returned from g_ffi.slice (success=%d)\n", (int)r.success); fflush(stderr); }
+  if (w->p.verbose) { ADDON_DEBUGF("DEBUG: [addon] returned from g_ffi.slice (success=%d)\n", (int)r.success); }
   if (!r.success) {
     if (r.error_details && r.error_details[0]) w->err = r.error_details;
     else if (r.message && r.message[0]) w->err = r.message;
@@ -681,9 +701,8 @@ static napi_value Slice(napi_env env, napi_callback_info info) {
   napi_has_named_property(env, obj, "custom", &has);  if (has) { napi_get_named_property(env, obj, "custom",  &map); collect_kv(map); }
 
   if (work->p.verbose) {
-    fprintf(stderr, "DEBUG: [addon] Slice() scheduling: input='%s' output='%s' plate=%d opts=%zu\n",
+    ADDON_DEBUGF("DEBUG: [addon] Slice() scheduling: input='%s' output='%s' plate=%d opts=%zu\n",
             work->p.input_file.c_str(), work->p.output_file.c_str(), work->p.plate_index, work->opts.size());
-    fflush(stderr);
   }
 
   if (work->p.input_file.empty()) { delete work; napi_throw_type_error(env, nullptr, "params.input is required"); return nullptr; }
@@ -704,7 +723,7 @@ static napi_value LoadVendor(napi_env env, napi_callback_info info) {
   if (t != napi_string) { napi_throw_type_error(env, nullptr, "vendorId must be a string"); return nullptr; }
   std::string vendor = get_string(env, args[0]);
   // Marker to confirm when LoadVendor is invoked and which vendor is requested
-  fprintf(stderr, "DEBUG: [addon] LoadVendor('%s')\n", vendor.c_str()); fflush(stderr);
+  ADDON_DEBUGF("DEBUG: [addon] LoadVendor('%s')\n", vendor.c_str());
   std::lock_guard<std::mutex> lk(g_mutex);
   std::string err;
   if (!ensure_engine_loaded(&err)) { napi_throw_error(env, nullptr, err.c_str()); return nullptr; }
@@ -897,10 +916,23 @@ static napi_value LoadVendorBundle(napi_env env, napi_callback_info info) {
   napi_value undef; NAPI_CALL(env, napi_get_undefined(env, &undef)); return undef;
 }
 
+// setLoggingSilenced(silent: boolean)
+static napi_value SetLoggingSilenced(napi_env env, napi_callback_info info) {
+  size_t argc = 1; napi_value args[1]; napi_value thisArg; void* data;
+  NAPI_CALL(env, napi_get_cb_info(env, info, &argc, args, &thisArg, &data));
+  if (argc < 1) { napi_throw_type_error(env, nullptr, "silent boolean is required"); return nullptr; }
+  bool silent=false; if (!get_bool(env, args[0], &silent)) { napi_throw_type_error(env, nullptr, "silent must be boolean"); return nullptr; }
+  std::lock_guard<std::mutex> lk(g_mutex);
+  std::string err; if (!ensure_engine_loaded(&err)) { napi_throw_error(env, nullptr, err.c_str()); return nullptr; }
+  if (!g_ffi.set_logging_silenced) { napi_throw_error(env, nullptr, "engine missing orcacli_set_logging_silenced"); return nullptr; }
+  g_ffi.set_logging_silenced(silent);
+  napi_value undef; NAPI_CALL(env, napi_get_undefined(env, &undef)); return undef;
+}
+
 static napi_value Init(napi_env env, napi_value exports) {
   // Marker log to verify we're running the freshly built addon and where it lives
   std::string mdir = module_dir_path();
-  fprintf(stderr, "DEBUG: [addon] Init loaded (module_dir=%s, built=%s %s)\n", mdir.c_str(), __DATE__, __TIME__); fflush(stderr);
+  ADDON_DEBUGF("DEBUG: [addon] Init loaded (module_dir=%s, built=%s %s)\n", mdir.c_str(), __DATE__, __TIME__);
 
   napi_property_descriptor props[] = {
     {"initialize", 0, Initialize, 0, 0, 0, napi_default, 0},
@@ -913,6 +945,7 @@ static napi_value Init(napi_env env, napi_value exports) {
     {"loadPrinterProfile", 0, LoadPrinterProfile, 0, 0, 0, napi_default, 0},
     {"loadFilamentProfile", 0, LoadFilamentProfile, 0, 0, 0, napi_default, 0},
     {"loadProcessProfile", 0, LoadProcessProfile, 0, 0, 0, napi_default, 0},
+    {"setLoggingSilenced", 0, SetLoggingSilenced, 0, 0, 0, napi_default, 0},
   };
   NAPI_CALL(env, napi_define_properties(env, exports, sizeof(props)/sizeof(props[0]), props));
   return exports;

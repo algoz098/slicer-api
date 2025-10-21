@@ -59,5 +59,8 @@ export function loadPrinterProfile(name: string): void;
 export function loadFilamentProfile(name: string): void;
 export function loadProcessProfile(name: string): void;
 
+// Global logging control
+export function setLoggingSilenced(silent: boolean): void;
+
 // Klipper/Moonraker integration
 export { KlipperClient, SliceAndSend } from './klipper';

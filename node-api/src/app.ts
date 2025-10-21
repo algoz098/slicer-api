@@ -50,6 +50,13 @@ app.use(async (ctx, next) => {
   ctx.respond = true
 })
 
+// Static files (homepage)
+const publicDir = path.resolve(__dirname, '..', 'public')
+if (fs.existsSync(publicDir)) {
+  app.use(serveStatic(publicDir))
+}
+
+
 
 app.use(errorHandler())
 app.use(parseAuthentication())

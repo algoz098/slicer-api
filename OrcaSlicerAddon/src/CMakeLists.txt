@@ -1,9 +1,27 @@
+cmake_minimum_required(VERSION 3.20)
+project(OrcaSlicerAddonCore LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+find_package(Threads REQUIRED)
+
 # OrcaSlicerAddon source directory
 
 # Core library sources (only existing files)
 set(ORCACLI_CORE_SOURCES
-    core/CliCore.cpp
-    core/CliCore.hpp
+    core/AddonCore.cpp
+    core/AddonCore.hpp
+    core/plate/PlateCentering.cpp
+    core/plate/PlateCentering.hpp
+    core/init/Initialization.cpp
+    core/init/Initialization.hpp
+    core/model/ModelIO.cpp
+    core/model/ModelIO.hpp
+    core/config/ConfigManager.cpp
+    core/config/ConfigManager.hpp
+    core/slice/SliceEngine.cpp
+    core/slice/SliceEngine.hpp
+    core/util/Utilities.cpp
+    core/util/Utilities.hpp
 )
 
 # Command sources (placeholder - will be implemented later)
@@ -42,10 +60,10 @@ set_property(TARGET orcacli_core PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 
 # Reduce optimization level for heavy translation unit to lower RAM usage during build
-# GCC/Clang can OOM compiling CliCore.cpp at -O3 in constrained Docker builders.
+# GCC/Clang can OOM compiling AddonCore.cpp at -O3 in constrained Docker builders.
 # Compile this single file with -O1 to keep memory low without affecting the rest.
 # Also silence Eigen deprecated-copy warnings on this TU to avoid spurious build failures under -Werror on some toolchains.
-set_source_files_properties(core/CliCore.cpp PROPERTIES
+set_source_files_properties(core/AddonCore.cpp PROPERTIES
     COMPILE_OPTIONS "-O1;$<$<CXX_COMPILER_ID:GNU>:-Wno-deprecated-copy>;$<$<CXX_COMPILER_ID:Clang>:-Wno-deprecated-copy;-Wno-deprecated-copy-with-user-provided-copy>"
 )
 
@@ -58,6 +76,9 @@ set_source_files_properties(engine/EngineAPI.cpp PROPERTIES
 # This prevents build failures when HAVE_LIBSLIC3R=0 or before libs are detected.
 target_include_directories(orcacli_core PRIVATE
     ${ORCASLICER_ROOT_DIR}/deps_src/nanosvg
+
+    ${ORCASLICER_ROOT_DIR}/src
+    ${ORCASLICER_ROOT_DIR}/src/libslic3r
 )
 
 
