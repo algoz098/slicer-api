@@ -6,6 +6,10 @@ import * as os from 'node:os'
 const addonDir = process.env.ORCACLI_ADDON_DIR || path.resolve(__dirname, '../../OrcaSlicerAddon/bindings/node')
 
 const orca = require(addonDir)
+
+
+console.log('[Orca] Initializing addon...');
+(orca as any).setLoggingSilenced(true)
 const resourcesPath = process.env.ORCACLI_RESOURCES || path.resolve(__dirname, '../../OrcaSlicer/resources')
 
 export default function(app: any) {
@@ -18,11 +22,9 @@ export default function(app: any) {
         try {
             try {
                 process.chdir('/tmp')
-            } catch {
+            } catch (err) {
 
             }
-
-            (orca as any).setLoggingSilenced(true)
             try {
                 orca.initialize({
                     resourcesPath,
@@ -33,8 +35,9 @@ export default function(app: any) {
                     filamentProfiles: [],
                     processProfiles: []
                 })
+                console.log('[Orca] Initialized...')
             } finally {
-                (orca as any).setLoggingSilenced(false)
+                // (orca as any).setLoggingSilenced(false)
             }
             console.log(`[Orca] Addon loaded. addonDir=${addonDir} resourcesPath=${resourcesPath}`)
 
