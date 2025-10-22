@@ -675,7 +675,7 @@ jobs:
           perl -v || true
           # Optional: check nmake presence in PATH
           where.exe nmake 2>/dev/null || echo "[warn] where.exe did not find nmake in PATH"
-          cmake .. -G "Visual Studio 17 2022" -A x64 -DDESTDIR="${GITHUB_WORKSPACE}/OrcaSlicer/deps/build/OrcaSlicer_dep" -DCMAKE_BUILD_TYPE=Release -DDEP_DEBUG=OFF -DORCA_INCLUDE_DEBUG_INFO=OFF
+          cmake .. -G "Visual Studio 17 2022" -A x64 -DDESTDIR="${GITHUB_WORKSPACE}/OrcaSlicer/deps/build/x64/OrcaSlicer_dep" -DCMAKE_BUILD_TYPE=Release -DDEP_DEBUG=OFF -DORCA_INCLUDE_DEBUG_INFO=OFF
           cmake --build . --config Release --target deps -- -m
           echo "Dependencies built. Listing deps/build:"
           ls -la || dir
@@ -687,9 +687,9 @@ jobs:
         shell: bash
         run: |
           cd OrcaSlicer
-          mkdir -p build
-          cd build
-          cmake .. -G "Visual Studio 17 2022" -A x64 -DBBL_RELEASE_TO_PUBLIC=1 -DORCA_TOOLS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="${GITHUB_WORKSPACE}/OrcaSlicer/deps/build/OrcaSlicer_dep/usr/local"
+          mkdir -p build/x64
+          cd build/x64
+          cmake ../.. -G "Visual Studio 17 2022" -A x64 -DBBL_RELEASE_TO_PUBLIC=1 -DORCA_TOOLS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="${GITHUB_WORKSPACE}/OrcaSlicer/deps/build/x64/OrcaSlicer_dep/usr/local"
           cmake --build . --config Release --target libslic3r libslic3r_cgal semver -- -m
           echo "OrcaSlicer libs built. Listing build/src/libslic3r:"
           ls -laR src/libslic3r || dir src\libslic3r /s
