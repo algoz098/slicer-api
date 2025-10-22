@@ -14,11 +14,13 @@
 #else
   #include <dlfcn.h>
   #include <unistd.h>
+  #include <fcntl.h>
 #endif
 #include <cstdio>
 #include <chrono>
 
 #include <fstream>
+#include <iostream>
 #include <regex>
 
 
@@ -37,6 +39,55 @@ static bool addon_is_silent() {
 }
 
 #define ADDON_DEBUGF(...) do { if (!addon_is_silent()) { std::fprintf(stderr, __VA_ARGS__); std::fflush(stderr);} } while(0)
+
+// Early stdio silencer (works even before engine is loaded)
+namespace {
+  static bool s_stdio_silenced = false;
+  static std::streambuf* s_orig_cout = nullptr;
+  static std::streambuf* s_orig_cerr = nullptr;
+  static std::ofstream   s_devnull_stream;
+#if defined(_WIN32)
+  static const char* kDevNull = "NUL";
+#else
+  static int             s_saved_stdout = -1;
+  static int             s_saved_stderr = -1;
+  static int             s_devnull_fd   = -1;
+  static const char* kDevNull = "/dev/null";
+#endif
+
+  static void toggle_stdio_silenced(bool silent) {
+    if (silent == s_stdio_silenced) return;
+    if (silent) {
+      try {
+        if (!s_devnull_stream.is_open()) s_devnull_stream.open(kDevNull);
+      } catch (...) {}
+#if !defined(_WIN32)
+      if (s_devnull_fd < 0) { s_devnull_fd = ::open(kDevNull, O_WRONLY); }
+#endif
+      if (!s_orig_cout) s_orig_cout = std::cout.rdbuf();
+      if (!s_orig_cerr) s_orig_cerr = std::cerr.rdbuf();
+      try { std::cout.rdbuf(s_devnull_stream.rdbuf()); } catch (...) {}
+      try { std::cerr.rdbuf(s_devnull_stream.rdbuf()); } catch (...) {}
+#if !defined(_WIN32)
+      if (s_saved_stdout < 0) s_saved_stdout = ::dup(STDOUT_FILENO);
+      if (s_saved_stderr < 0) s_saved_stderr = ::dup(STDERR_FILENO);
+      if (s_devnull_fd >= 0) {
+        ::dup2(s_devnull_fd, STDOUT_FILENO);
+        ::dup2(s_devnull_fd, STDERR_FILENO);
+      }
+#endif
+      s_stdio_silenced = true;
+    } else {
+      if (s_orig_cout) { try { std::cout.rdbuf(s_orig_cout); } catch (...) {} }
+      if (s_orig_cerr) { try { std::cerr.rdbuf(s_orig_cerr); } catch (...) {} }
+#if !defined(_WIN32)
+      if (s_saved_stdout >= 0) { ::dup2(s_saved_stdout, STDOUT_FILENO); ::close(s_saved_stdout); s_saved_stdout = -1; }
+      if (s_saved_stderr >= 0) { ::dup2(s_saved_stderr, STDERR_FILENO); ::close(s_saved_stderr); s_saved_stderr = -1; }
+#endif
+      s_stdio_silenced = false;
+    }
+  }
+}
 
 // Thin addon will dlopen the engine library at runtime; no direct core linkage.
 static std::mutex g_mutex; // serialize heavy operations
@@ -923,9 +974,12 @@ static napi_value SetLoggingSilenced(napi_env env, napi_callback_info info) {
   if (argc < 1) { napi_throw_type_error(env, nullptr, "silent boolean is required"); return nullptr; }
   bool silent=false; if (!get_bool(env, args[0], &silent)) { napi_throw_type_error(env, nullptr, "silent must be boolean"); return nullptr; }
   std::lock_guard<std::mutex> lk(g_mutex);
-  std::string err; if (!ensure_engine_loaded(&err)) { napi_throw_error(env, nullptr, err.c_str()); return nullptr; }
-  if (!g_ffi.set_logging_silenced) { napi_throw_error(env, nullptr, "engine missing orcacli_set_logging_silenced"); return nullptr; }
-  g_ffi.set_logging_silenced(silent);
+  // Early: silence stdio at the addon layer before touching the engine
+  toggle_stdio_silenced(silent);
+  // If engine is already loaded, propagate to engine too (do not force-load it)
+  if (g_ffi.lib && g_ffi.set_logging_silenced) {
+    try { g_ffi.set_logging_silenced(silent); } catch (...) {}
+  }
   napi_value undef; NAPI_CALL(env, napi_get_undefined(env, &undef)); return undef;
 }
 
