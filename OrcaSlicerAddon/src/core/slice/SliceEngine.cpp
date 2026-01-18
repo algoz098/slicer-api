@@ -16,6 +16,11 @@
 
 namespace OrcaSlicerCli { namespace slice {
 
+#if HAVE_LIBSLIC3R
+// Use the safe_build_config from Utilities
+using OrcaSlicerCli::util::safe_build_config;
+#endif
+
 AddonCore::OperationResult slice_and_package(
     const std::function<bool(const std::string& output_path)>& perform_slicing,
     const std::string& output_file,
@@ -59,12 +64,33 @@ void reapply_project_overrides(
         std::cout << "DEBUG: No project override keys to apply (empty list)" << std::endl;
         return;
     }
-    try {
-        working_config.apply_only(project_cfg_after_3mf, keys_to_apply, /*ignore_nonexistent=*/true);
-        std::cout << "DEBUG: Re-applied " << keys_to_apply.size() << " 3MF project override(s) on top of selected profiles" << std::endl;
-    } catch (const std::exception& e) {
-        std::cout << "WARN: Failed to re-apply 3MF overrides: " << e.what() << std::endl;
+    // Log which keys will be applied
+    std::cout << "DEBUG: Project override keys to apply: ";
+    for (size_t i = 0; i < keys_to_apply.size(); ++i) {
+        if (i > 0) std::cout << ", ";
+        std::cout << keys_to_apply[i];
     }
+    std::cout << std::endl;
+
+    // Apply key by key to identify which key causes type mismatch
+    size_t applied = 0;
+    for (const auto& key : keys_to_apply) {
+        try {
+            std::vector<std::string> single_key = {key};
+            // Log before/after value for debugging
+            std::string before_val = "N/A", after_val = "N/A";
+            if (const auto* opt = working_config.optptr(key)) before_val = opt->serialize();
+            working_config.apply_only(project_cfg_after_3mf, single_key, /*ignore_nonexistent=*/true);
+            if (const auto* opt = working_config.optptr(key)) after_val = opt->serialize();
+            if (before_val != after_val) {
+                std::cout << "DEBUG: project_override[" << key << "]: " << before_val << " -> " << after_val << std::endl;
+            }
+            ++applied;
+        } catch (const std::exception& e) {
+            std::cout << "WARN: Skipping project override key '" << key << "': " << e.what() << std::endl;
+        }
+    }
+    std::cout << "DEBUG: Re-applied " << applied << "/" << keys_to_apply.size() << " 3MF project override(s) on top of selected profiles" << std::endl;
 #endif
 }
 
@@ -75,12 +101,18 @@ void reapply_print_overrides(
 {
 #if HAVE_LIBSLIC3R
     if (print_override_keys.empty()) return;
-    try {
-        working_config.apply_only(print_cfg_overrides, print_override_keys, /*ignore_nonexistent=*/true);
-        std::cout << "DEBUG: Re-applied " << print_override_keys.size() << " 3MF print override(s) on top of selected profiles" << std::endl;
-    } catch (const std::exception& e) {
-        std::cout << "WARN: Failed to re-apply 3MF print overrides: " << e.what() << std::endl;
+    // Apply key by key to identify which key causes type mismatch
+    size_t applied = 0;
+    for (const auto& key : print_override_keys) {
+        try {
+            std::vector<std::string> single_key = {key};
+            working_config.apply_only(print_cfg_overrides, single_key, /*ignore_nonexistent=*/true);
+            ++applied;
+        } catch (const std::exception& e) {
+            std::cout << "WARN: Skipping print override key '" << key << "': " << e.what() << std::endl;
+        }
     }
+    std::cout << "DEBUG: Re-applied " << applied << "/" << print_override_keys.size() << " 3MF print override(s) on top of selected profiles" << std::endl;
 #endif
 }
 
@@ -102,12 +134,18 @@ void reapply_print_overrides_excluding(
         std::cout << "DEBUG: Skipped re-applying print overrides because options already set those keys" << std::endl;
         return;
     }
-    try {
-        working_config.apply_only(print_cfg_overrides, keys, /*ignore_nonexistent=*/true);
-        std::cout << "DEBUG: Re-applied " << keys.size() << " print override(s) after project overrides to ensure precedence" << std::endl;
-    } catch (const std::exception& e) {
-        std::cout << "WARN: Failed to re-apply print overrides after project overrides: " << e.what() << std::endl;
+    // Apply key by key to identify which key causes type mismatch
+    size_t applied = 0;
+    for (const auto& key : keys) {
+        try {
+            std::vector<std::string> single_key = {key};
+            working_config.apply_only(print_cfg_overrides, single_key, /*ignore_nonexistent=*/true);
+            ++applied;
+        } catch (const std::exception& e) {
+            std::cout << "WARN: Skipping print override key (excluding) '" << key << "': " << e.what() << std::endl;
+        }
     }
+    std::cout << "DEBUG: Re-applied " << applied << "/" << keys.size() << " print override(s) after project overrides to ensure precedence" << std::endl;
 #endif
 }
 
@@ -123,7 +161,15 @@ void apply_custom_settings(
 #if HAVE_LIBSLIC3R
     using OrcaSlicerCli::util::dbg_log;
 
-    if (!working_config) return;
+    std::cout << "DEBUG [apply_custom_settings]: Received " << custom_settings.size() << " custom settings to apply" << std::endl;
+    for (const auto& kv : custom_settings) {
+        std::cout << "DEBUG [apply_custom_settings]: Input key=" << kv.first << " value=" << kv.second << std::endl;
+    }
+
+    if (!working_config) {
+        std::cout << "DEBUG [apply_custom_settings]: working_config is NULL, returning" << std::endl;
+        return;
+    }
 
     // Apply curr_bed_type first if provided
     auto it_bedtype = custom_settings.find("curr_bed_type");
@@ -180,9 +226,15 @@ void apply_custom_settings(
         }
 
         auto res = set_option(mapped_key, mapped_val);
-        if (res.success) used_override_keys.push_back(mapped_key);
-        else ignored_override_keys.push_back(mapped_key);
+        if (res.success) {
+            used_override_keys.push_back(mapped_key);
+            std::cout << "DEBUG [apply_custom_settings]: APPLIED " << mapped_key << "=" << mapped_val << std::endl;
+        } else {
+            ignored_override_keys.push_back(mapped_key);
+            std::cout << "DEBUG [apply_custom_settings]: FAILED to apply " << mapped_key << "=" << mapped_val << " reason: " << res.message << std::endl;
+        }
     }
+    std::cout << "DEBUG [apply_custom_settings]: Finished. Used=" << used_override_keys.size() << " Ignored=" << ignored_override_keys.size() << std::endl;
 #else
     (void)working_config; (void)custom_settings; (void)set_option;
     (void)used_override_keys; (void)ignored_override_keys;
@@ -233,7 +285,12 @@ void auto_select_presets_from_3mf(
                 if (!opf->values.empty()) fil = opf->values.front();
             }
             if (pro.empty() && config.has("default_print_profile")) pro = config.opt_string("default_print_profile");
-            if (fil.empty() && config.has("default_filament_profile")) fil = config.opt_string("default_filament_profile");
+            // default_filament_profile is coStrings (array), not coString
+            if (fil.empty()) {
+                if (auto *opdf = config.option<Slic3r::ConfigOptionStrings>("default_filament_profile", false)) {
+                    if (!opdf->values.empty()) fil = opdf->values.front();
+                }
+            }
         }
 
         const bool user_prn = !user_printer_profile_name.empty();
@@ -243,8 +300,24 @@ void auto_select_presets_from_3mf(
         if (user_proc) pro.clear();
         if (user_fil) fil.clear();
 
-        std::string cfg_model   = config.has("printer_model")   ? config.opt_string("printer_model")   : std::string();
-        std::string cfg_variant = config.has("printer_variant") ? config.opt_string("printer_variant") : std::string();
+        // CRITICAL: When transfer flags are false, do NOT use 3MF config values for heuristics
+        // This ensures the addon uses a clean slate when the caller explicitly disables transfer
+        std::string cfg_model   = (transfer_printer_customizations && config.has("printer_model"))   ? config.opt_string("printer_model")   : std::string();
+        std::string cfg_variant = (transfer_printer_customizations && config.has("printer_variant")) ? config.opt_string("printer_variant") : std::string();
+
+        // Clear 3MF preset hints when transfer is disabled
+        if (!transfer_printer_customizations) {
+            prn.clear();
+            std::cout << "DEBUG: transfer_printer_customizations=false -> clearing 3MF printer hints" << std::endl;
+        }
+        if (!transfer_process_customizations) {
+            pro.clear();
+            std::cout << "DEBUG: transfer_process_customizations=false -> clearing 3MF process hints" << std::endl;
+        }
+        if (!transfer_filament_customizations) {
+            fil.clear();
+            std::cout << "DEBUG: transfer_filament_customizations=false -> clearing 3MF filament hints" << std::endl;
+        }
 
         // STRICT: only if 3MF embeds explicit names (not defaults)
         const bool any_cli = user_prn || user_proc || user_fil;
@@ -265,7 +338,16 @@ void auto_select_presets_from_3mf(
                     return;
                 }
                 preset_bundle.update_compatible(Slic3r::PresetSelectCompatibleType::Always);
-                config = preset_bundle.full_config_secure();
+                // Build config manually to avoid potential hangs in full_config_secure()
+                try {
+                    Slic3r::DynamicPrintConfig out;
+                    out.apply(Slic3r::FullPrintConfig::defaults());
+                    try { out.apply(preset_bundle.prints.get_edited_preset().config); } catch (...) {}
+                    try { out.apply(preset_bundle.filaments.default_preset().config); } catch (...) {}
+                    try { out.apply(preset_bundle.printers.get_edited_preset().config); } catch (...) {}
+                    try { out.apply(preset_bundle.project_config, /*ignore_nonexistent=*/true); } catch (...) {}
+                    config = out;
+                } catch (...) {}
                 std::cout << "DEBUG: Strict 3MF preset names applied -> printer='"
                           << preset_bundle.printers.get_selected_preset_name()
                           << "', process='" << preset_bundle.prints.get_selected_preset_name()
@@ -295,15 +377,15 @@ void auto_select_presets_from_3mf(
 
         const bool project_has_embedded = has_project_embedded_presets;
 
-        // 1) Select printer
+        // 1) Select printer - only if transfer_printer_customizations is enabled
         std::string selected_printer_name;
-        if (!project_has_embedded && !user_prn) {
+        if (!project_has_embedded && !user_prn && transfer_printer_customizations) {
             if (selected_printer_name.empty() && !plate_printer_model_id.empty() && !plate_nozzle_variant.empty()) {
                 const Slic3r::Preset *sys = preset_bundle.printers.find_system_preset_by_model_and_variant(plate_printer_model_id, plate_nozzle_variant);
                 if (sys && preset_bundle.printers.select_preset_by_name(sys->name, /*force=*/true)) {
                     selected_printer_name = sys->name;
                     preset_bundle.update_compatible(Slic3r::PresetSelectCompatibleType::Always);
-                    config = preset_bundle.full_config_secure();
+                    safe_build_config(preset_bundle, config);
                     std::cout << "DEBUG: Selected printer from plate hints: '" << selected_printer_name << "'" << std::endl;
                 }
             }
@@ -340,7 +422,7 @@ void auto_select_presets_from_3mf(
                             if (preset_bundle.printers.select_preset_by_name(p.name, /*force=*/true)) {
                                 selected_printer_name = p.name;
                                 preset_bundle.update_compatible(Slic3r::PresetSelectCompatibleType::Always);
-                                config = preset_bundle.full_config_secure();
+                                safe_build_config(preset_bundle, config);
                                 std::string v = p.config.has("printer_variant") ? p.config.opt_string("printer_variant") : std::string();
                                 if (!v.empty()) { try { app_config.set_variant("BBL", m, v, true); preset_bundle.load_installed_printers(app_config); } catch (...) {} }
                                 break;
@@ -351,9 +433,9 @@ void auto_select_presets_from_3mf(
             }
         }
 
-        // 2) Filament
+        // 2) Filament - only if transfer_filament_customizations is enabled
         std::string selected_filament_name;
-        if (!project_has_embedded && !user_fil) {
+        if (!project_has_embedded && !user_fil && transfer_filament_customizations) {
             if (!fil.empty() && fil != "Default Filament") {
                 auto r = load_filament_by_name(fil); if (r.success) selected_filament_name = fil;
             }
@@ -367,9 +449,9 @@ void auto_select_presets_from_3mf(
             }
         }
 
-        // 3) Process
+        // 3) Process - only if transfer_process_customizations is enabled
         std::string selected_process_name;
-        if (!project_has_embedded && !user_proc) {
+        if (!project_has_embedded && !user_proc && transfer_process_customizations) {
             if (!pro.empty() && pro != "Default Setting") {
                 const std::string curr_pr = preset_bundle.printers.get_selected_preset_name();
                 if (curr_pr.empty() || curr_pr == "Default Printer") {
@@ -398,7 +480,7 @@ void auto_select_presets_from_3mf(
                 }
                 if (!selected_process_name.empty()) {
                     preset_bundle.update_compatible(Slic3r::PresetSelectCompatibleType::Always);
-                    config = preset_bundle.full_config_secure();
+                    safe_build_config(preset_bundle, config);
                 }
             }
         }
@@ -424,12 +506,12 @@ void auto_select_presets_from_3mf(
                         }
                         if (!selected_from_compat.empty()) {
                             preset_bundle.update_compatible(Slic3r::PresetSelectCompatibleType::Always);
-                            config = preset_bundle.full_config_secure();
+                            safe_build_config(preset_bundle, config);
                             // Re-select the process to keep it after compatibility update
                             if (!proc_for_compat.empty()) {
                                 preset_bundle.prints.select_preset_by_name(proc_for_compat, /*force=*/true);
                                 preset_bundle.update_compatible(Slic3r::PresetSelectCompatibleType::Always);
-                                config = preset_bundle.full_config_secure();
+                                safe_build_config(preset_bundle, config);
                             }
                         }
                     }
@@ -450,7 +532,7 @@ void auto_select_presets_from_3mf(
                 auto rr = load_printer_by_name(project_printer_preset);
                 if (rr.success) {
                     preset_bundle.update_compatible(Slic3r::PresetSelectCompatibleType::Always);
-                    config = preset_bundle.full_config_secure();
+                    safe_build_config(preset_bundle, config);
                     std::cout << "DEBUG: Final-guard selected printer from project preset: '" << project_printer_preset << "'" << std::endl;
                 }
             }
@@ -470,7 +552,7 @@ void auto_select_presets_from_3mf(
                 (void)r;
             }
             preset_bundle.update_compatible(Slic3r::PresetSelectCompatibleType::Always);
-            config = preset_bundle.full_config_secure();
+            safe_build_config(preset_bundle, config);
         }
 
     } catch (const std::exception& e) {

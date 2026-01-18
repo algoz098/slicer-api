@@ -60,6 +60,17 @@ export const slicer3Mf = (app: Application) => {
             }
           }
 
+          // Coerce multipart 'config' (string) to object
+          if (data?.config) {
+            if (typeof data.config === 'string') {
+              try {
+                data.config = JSON.parse(data.config)
+              } catch (err: any) {
+                throw new Error('Failed to parse "config" as JSON')
+              }
+            }
+          }
+
           // Coerce multipart 'plate' (string) to number
           if (data?.plate != null && typeof data?.plate === 'string') {
             const n = Number(data.plate)
@@ -72,13 +83,22 @@ export const slicer3Mf = (app: Application) => {
             data.center = v === 'true' || v === '1' || v === 'on' || v === 'yes'
           }
 
-          if (data?.transferFilamentCustomizations != null && typeof data?.transferFilamentCustomizations === 'string') {
-            data.transferFilamentCustomizations = data.transferFilamentCustomizations === 'false' ? false : true
+          // Coerce all transfer* fields from string to boolean
+          const transferFields = [
+            'transferPrinterCustomizations',
+            'transferFilamentCustomizations',
+            'transferProcessCustomizations',
+            'transferProjectOverrides'
+          ] as const
+          for (const field of transferFields) {
+            if (data?.[field] != null && typeof data?.[field] === 'string') {
+              const v = String(data[field]).trim().toLowerCase()
+              data[field] = v !== 'false' && v !== '0' && v !== 'no' && v !== 'off'
+            }
           }
 
           if (!data) ctx.data = {}
           else ctx.data = data
-
         },
         schemaHooks.validateData(slicer3MfDataValidator),
         schemaHooks.resolveData(slicer3MfDataResolver)

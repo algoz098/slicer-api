@@ -1,4 +1,5 @@
 #include "core/model/ModelIO.hpp"
+#include "core/util/Utilities.hpp"
 
 #if !HAVE_LIBSLIC3R
 #error "libslic3r is required. Placeholders are not allowed."
@@ -20,6 +21,8 @@
 #include <cctype>
 
 namespace OrcaSlicerCli { namespace model {
+
+using OrcaSlicerCli::util::safe_build_config;
 
 bool load_stl(const std::string& filename,
               Slic3r::Model& model,
@@ -78,6 +81,7 @@ bool load_3mf_project(
     int& total_plates_count,
     size_t& detected_extruders,
     std::vector<std::string>& saved_filament_colours,
+    std::string& saved_change_filament_gcode,
     Slic3r::DynamicPrintConfig& project_cfg_after_3mf,
     Slic3r::t_config_option_keys& project_overrides_keys,
     Slic3r::DynamicPrintConfig& print_cfg_overrides,
@@ -109,6 +113,17 @@ bool load_3mf_project(
         nullptr,
         nullptr,
         plate_id);
+
+    // CRITICAL: Capture the raw config from 3MF BEFORE any preset operations
+    // This is needed because when different_settings_to_system is empty,
+    // we need to preserve ALL values from project_settings.config as overrides
+    DynamicPrintConfig raw_3mf_config;
+    try {
+        raw_3mf_config.apply(config, /*ignore_nonexistent=*/true);
+        std::cout << "DEBUG: [ModelIO] Captured raw 3MF config with " << raw_3mf_config.keys().size() << " keys" << std::endl;
+    } catch (...) {
+        std::cout << "WARN: [ModelIO] Failed to capture raw 3MF config" << std::endl;
+    }
 
     // Capture project preset names
     project_printer_preset.clear();
@@ -155,6 +170,19 @@ bool load_3mf_project(
         detected_extruders = 0;
     }
 
+    // Save change_filament_gcode from 3MF (critical for Bambu AMS multi-color printing)
+    try {
+        if (auto* cfg_gcode = config.opt<ConfigOptionString>("change_filament_gcode")) {
+            saved_change_filament_gcode = cfg_gcode->value;
+            if (!saved_change_filament_gcode.empty()) {
+                std::cout << "DEBUG: [ModelIO] Saved change_filament_gcode from 3MF ("
+                          << saved_change_filament_gcode.size() << " chars)" << std::endl;
+            }
+        }
+    } catch (...) {
+        // Ignore errors - some 3MFs may not have this field
+    }
+
     // Snapshot overrides and import project config into bundle
     try {
         // Preserve wipe tower before bundle ops
@@ -163,8 +191,113 @@ bool load_3mf_project(
         if (auto *wt_x = config.opt<ConfigOptionFloats>("wipe_tower_x")) file_wipe_tower_x = *wt_x;
         if (auto *wt_y = config.opt<ConfigOptionFloats>("wipe_tower_y")) file_wipe_tower_y = *wt_y;
 
-        // Load project config into bundle
+        // Backup current preset selections BEFORE loading 3MF config, so we can restore them
+        // if transfer_*_customizations is false
+        std::string backup_printer_name;
+        std::string backup_print_name;
+        std::vector<std::string> backup_filament_names;
+        DynamicPrintConfig backup_printer_config;
+        DynamicPrintConfig backup_print_config;
+        DynamicPrintConfig backup_filament_config;
+
+        // Capture current preset names and configs if we need to restore them
+        if (!transfer_printer_customizations) {
+            backup_printer_name = preset_bundle.printers.get_selected_preset_name();
+            backup_printer_config = preset_bundle.printers.get_edited_preset().config;
+        }
+        if (!transfer_process_customizations) {
+            backup_print_name = preset_bundle.prints.get_selected_preset_name();
+            backup_print_config = preset_bundle.prints.get_edited_preset().config;
+        }
+        if (!transfer_filament_customizations) {
+            for (size_t i = 0; i < preset_bundle.filament_presets.size(); ++i) {
+                backup_filament_names.push_back(preset_bundle.filament_presets[i]);
+            }
+            backup_filament_config = preset_bundle.filaments.get_edited_preset().config;
+        }
+
+        // Load project config into bundle (this applies all 3MF configs)
         preset_bundle.load_config_model(filename, config, file_version);
+
+        // Restore backed-up configs when transfer is disabled
+        if (!transfer_printer_customizations && !backup_printer_name.empty()) {
+            try {
+                // Restore printer preset selection
+                preset_bundle.printers.select_preset_by_name(backup_printer_name, true);
+                // Restore printer config values that identify the printer
+                if (auto* opt = backup_printer_config.optptr("printer_model"))
+                    preset_bundle.printers.get_edited_preset().config.set_key_value("printer_model", opt->clone());
+                if (auto* opt = backup_printer_config.optptr("printer_variant"))
+                    preset_bundle.printers.get_edited_preset().config.set_key_value("printer_variant", opt->clone());
+                if (auto* opt = backup_printer_config.optptr("printer_settings_id"))
+                    preset_bundle.printers.get_edited_preset().config.set_key_value("printer_settings_id", opt->clone());
+            } catch (...) {}
+        }
+        if (!transfer_process_customizations && !backup_print_name.empty()) {
+            try {
+                preset_bundle.prints.select_preset_by_name(backup_print_name, true);
+            } catch (...) {}
+        }
+        if (!transfer_filament_customizations && !backup_filament_names.empty()) {
+            try {
+                preset_bundle.filament_presets = backup_filament_names;
+            } catch (...) {}
+        }
+
+        // Clear printer-identifying keys from the config when transfer is disabled
+        // These keys are set by Model::read_from_file and need to be cleared so they don't
+        // appear in the final G-code output. Use the backup values (from before load_config_model)
+        // or empty strings if no backup exists.
+        if (!transfer_printer_customizations) {
+            try {
+                // Use backup config values, or empty strings if no backup
+                if (!backup_printer_config.empty()) {
+                    if (auto* opt = backup_printer_config.optptr("printer_model"))
+                        config.set_key_value("printer_model", opt->clone());
+                    else
+                        config.set_key_value("printer_model", new ConfigOptionString(""));
+                    if (auto* opt = backup_printer_config.optptr("printer_variant"))
+                        config.set_key_value("printer_variant", opt->clone());
+                    else
+                        config.set_key_value("printer_variant", new ConfigOptionString(""));
+                    if (auto* opt = backup_printer_config.optptr("printer_settings_id"))
+                        config.set_key_value("printer_settings_id", opt->clone());
+                    else
+                        config.set_key_value("printer_settings_id", new ConfigOptionString(""));
+                    if (auto* opt = backup_printer_config.optptr("printer_notes"))
+                        config.set_key_value("printer_notes", opt->clone());
+                } else {
+                    // No backup - clear the 3MF values with empty strings
+                    config.set_key_value("printer_model", new ConfigOptionString(""));
+                    config.set_key_value("printer_variant", new ConfigOptionString(""));
+                    config.set_key_value("printer_settings_id", new ConfigOptionString(""));
+                }
+            } catch (...) {}
+        }
+        if (!transfer_process_customizations) {
+            try {
+                if (!backup_print_config.empty()) {
+                    if (auto* opt = backup_print_config.optptr("print_settings_id"))
+                        config.set_key_value("print_settings_id", opt->clone());
+                    else
+                        config.set_key_value("print_settings_id", new ConfigOptionString(""));
+                } else {
+                    config.set_key_value("print_settings_id", new ConfigOptionString(""));
+                }
+            } catch (...) {}
+        }
+        if (!transfer_filament_customizations) {
+            try {
+                if (!backup_filament_config.empty()) {
+                    if (auto* opt = backup_filament_config.optptr("filament_settings_id"))
+                        config.set_key_value("filament_settings_id", opt->clone());
+                    else
+                        config.set_key_value("filament_settings_id", new ConfigOptionStrings({""}));
+                } else {
+                    config.set_key_value("filament_settings_id", new ConfigOptionStrings({""}));
+                }
+            } catch (...) {}
+        }
 
         // Snapshot project-level overrides into project_cfg_after_3mf (robust per-key copy)
         project_cfg_after_3mf = DynamicPrintConfig();
@@ -180,7 +313,7 @@ bool load_3mf_project(
         }
         project_overrides_keys = project_cfg_after_3mf.keys();
 
-        // Capture print-level overrides (prefer different_settings_to_system; fallback to parent diff)
+        // Capture print-level overrides (prefer different_settings_to_system; fallback to raw 3MF config)
         print_overrides_keys.clear();
         try {
             bool found = false;
@@ -190,18 +323,34 @@ bool load_3mf_project(
                     std::string key;
                     while (std::getline(ss, key, ';')) if (!key.empty()) print_overrides_keys.push_back(key);
                     found = true;
+                    std::cout << "DEBUG: [ModelIO] Using different_settings_to_system with " << print_overrides_keys.size() << " keys" << std::endl;
                 }
             }
             if (!found) {
-                auto dirty = preset_bundle.prints.current_different_from_parent_options(true);
-                print_overrides_keys.assign(dirty.begin(), dirty.end());
+                // CRITICAL FIX: When different_settings_to_system is empty, use ALL keys from raw 3MF config
+                // This ensures values like skirt_loops=0 from project_settings.config are preserved
+                // even when the 3MF was saved without marking them as "different from system"
+                if (!raw_3mf_config.keys().empty()) {
+                    print_overrides_keys = raw_3mf_config.keys();
+                    std::cout << "DEBUG: [ModelIO] Using ALL raw 3MF config keys as overrides (" << print_overrides_keys.size() << " keys)" << std::endl;
+                } else {
+                    auto dirty = preset_bundle.prints.current_different_from_parent_options(true);
+                    print_overrides_keys.assign(dirty.begin(), dirty.end());
+                    std::cout << "DEBUG: [ModelIO] Using parent diff with " << print_overrides_keys.size() << " keys" << std::endl;
+                }
             }
         } catch (...) {}
 
-        // Build print_cfg_overrides from current config values
+        // Build print_cfg_overrides from raw 3MF config values (not current config which may have been modified)
         print_cfg_overrides = DynamicPrintConfig();
-        for (const auto& k : print_overrides_keys)
-            if (const auto* opt = config.optptr(k)) print_cfg_overrides.set_key_value(k, opt->clone());
+        for (const auto& k : print_overrides_keys) {
+            // Prefer raw 3MF config value, fallback to current config
+            if (const auto* opt = raw_3mf_config.optptr(k)) {
+                print_cfg_overrides.set_key_value(k, opt->clone());
+            } else if (const auto* opt = config.optptr(k)) {
+                print_cfg_overrides.set_key_value(k, opt->clone());
+            }
+        }
 
         // Restore wipe tower into project_config
         try {
@@ -230,17 +379,8 @@ bool load_3mf_project(
         // Use sanitized project snapshot as project_config
         preset_bundle.project_config = project_cfg_after_3mf;
 
-        // Build working config robustly
-        try {
-            config = preset_bundle.full_config_secure();
-        } catch (...) {
-            DynamicPrintConfig out;
-            try { out.apply(preset_bundle.prints.get_edited_preset().config); } catch (...) {}
-            try { out.apply(preset_bundle.filaments.default_preset().config); } catch (...) {}
-            try { out.apply(preset_bundle.printers.get_edited_preset().config); } catch (...) {}
-            try { out.apply(project_cfg_after_3mf, /*ignore_nonexistent=*/true); } catch (...) {}
-            config = out;
-        }
+        // Build working config robustly using safe_build_config to avoid hangs
+        safe_build_config(preset_bundle, config);
     } catch (const std::exception& e) {
         // Non-fatal: continue; slice() may enforce policies later
         (void)e;
@@ -294,9 +434,14 @@ bool load_3mf_project(
             project_presets.swap(filtered);
         }
         has_project_embedded_presets = !project_presets.empty();
+        std::cout << "DEBUG: [ModelIO] About to call load_project_embedded_presets..." << std::endl;
         (void)preset_bundle.load_project_embedded_presets(project_presets, ForwardCompatibilitySubstitutionRule::Enable);
-        // Refresh config and mirror wipe tower positions
-        config = preset_bundle.full_config_secure();
+        std::cout << "DEBUG: [ModelIO] load_project_embedded_presets completed, building config..." << std::endl;
+        std::cout.flush();
+        // Refresh config using safe_build_config to avoid potential hangs
+        safe_build_config(preset_bundle, config);
+        std::cout << "DEBUG: [ModelIO] config build completed" << std::endl;
+        std::cout.flush();
         try {
             if (const ConfigOption *opt = preset_bundle.project_config.optptr("wipe_tower_x"))
                 config.set_key_value("wipe_tower_x", opt->clone());
@@ -310,8 +455,10 @@ bool load_3mf_project(
                 config.set_key_value(k, opt->clone());
     } catch (...) {}
 
+    std::cout << "DEBUG: [ModelIO] About to move loaded model to out_model..." << std::endl;
     // Replace current model with loaded one
     out_model = std::move(loaded);
+    std::cout << "DEBUG: [ModelIO] load_3mf_project returning true" << std::endl;
     return true;
 }
 

@@ -48,6 +48,7 @@ bool load_3mf_project(
     // Multi-material & 3MF color snapshot
     size_t& detected_extruders,
     std::vector<std::string>& saved_filament_colours,
+    std::string& saved_change_filament_gcode,  // Preserve change_filament_gcode for Bambu AMS
     // Overrides snapshots
     Slic3r::DynamicPrintConfig& project_cfg_after_3mf,
     Slic3r::t_config_option_keys& project_overrides_keys,

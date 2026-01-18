@@ -39,10 +39,10 @@ export const slicer3MfDataSchema = Type.Object(
     field: Type.Optional(Type.String()),
     // Opcional: plate quando input tiver múltiplas placas
     plate: Type.Optional(Type.Number({ minimum: 1 })),
-    // Opcional: nomes de perfis do Orca (impressora/filamento/processo)
-    printerProfile: Type.Optional(Type.String()),
-    filamentProfile: Type.Optional(Type.String()),
-    processProfile: Type.Optional(Type.String()),
+    // Opcional: nomes de exibicao para os perfis no 3MF de saida (metadata apenas, nao carrega perfis)
+    printerProfileName: Type.Optional(Type.String()),
+    filamentProfileName: Type.Optional(Type.String()),
+    processProfileName: Type.Optional(Type.String()),
     // Novo: centralizar e habilitar suporte (booleanos, default false quando omitido)
     center: Type.Optional(Type.Boolean()),
     support: Type.Optional(Type.Boolean()),
@@ -55,9 +55,20 @@ export const slicer3MfDataSchema = Type.Object(
     transferProjectOverrides: Type.Optional(Type.Boolean()),
     // Opcional: overrides de configuração
     options: Type.Optional(
+      Type.Record(Type.String(), Type.Union([Type.String(), Type.Number(), Type.Boolean()]))
+    ),
+    // Opcional: configuracao completa via JSON (tem precedencia sobre options e profiles)
+    // Permite enviar todas as configuracoes de impressora/filamento/processo como JSON
+    // Aceita strings, numeros, booleans e arrays (muitas configs do OrcaSlicer usam arrays)
+    config: Type.Optional(
       Type.Record(
         Type.String(),
-        Type.Union([Type.String(), Type.Number(), Type.Boolean()])
+        Type.Union([
+          Type.String(),
+          Type.Number(),
+          Type.Boolean(),
+          Type.Array(Type.Union([Type.String(), Type.Number(), Type.Boolean()]))
+        ])
       )
     ),
     // Opcional: caminho de saída; recomenda-se terminar com .gcode.3mf

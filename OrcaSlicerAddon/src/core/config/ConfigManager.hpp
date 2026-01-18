@@ -58,5 +58,11 @@ std::vector<std::string> list_printer_profiles(const std::string& resources_path
 std::vector<std::string> list_filament_profiles(const std::string& resources_path);
 std::vector<std::string> list_process_profiles(const std::string& resources_path);
 
+// Apply generic fallback configuration when no specific profiles are loaded.
+// This sets up minimal defaults required for slicing to work.
+// The config can then be overridden with custom_settings from the API.
+bool apply_generic_fallback_config(Slic3r::DynamicPrintConfig& config,
+                                   const std::string& resources_path);
+
 }} // namespace OrcaSlicerCli::config
 

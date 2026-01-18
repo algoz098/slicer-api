@@ -25,4 +25,3 @@ if (!process.env.ORCACLI_ADDON_DIR) {
 // Small debug to confirm early setup
 // eslint-disable-next-line no-console
 console.log('[test-setup] ORCACLI_ENGINE_PATH=', process.env.ORCACLI_ENGINE_PATH)
-

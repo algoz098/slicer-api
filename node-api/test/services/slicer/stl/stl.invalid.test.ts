@@ -31,11 +31,23 @@ describe('slicer/stl service (invalid overrides)', () => {
     const stlPath = path.resolve(__dirname, '../../../../../example_files/3DBenchy.stl')
     assert.ok(fs.existsSync(stlPath), 'Arquivo de exemplo 3DBenchy.stl não encontrado')
 
+    // Config JSON on-the-fly com parametros minimos para slicing
+    const config = {
+      printer_model: 'Bambu Lab X1 Carbon',
+      nozzle_diameter: 0.4,
+      printable_area: '0x0,256x0,256x256,0x256',
+      printable_height: 256,
+      layer_height: 0.2,
+      wall_loops: 2,
+      sparse_infill_density: 15,
+      filament_type: 'PLA',
+      nozzle_temperature: 220,
+      bed_temperature: 60
+    }
+
     const body = {
       filePath: stlPath,
-      printerProfile: 'Bambu Lab X1 Carbon 0.4 nozzle',
-      filamentProfile: 'Bambu PLA Basic @BBL X1C',
-      processProfile: '0.20mm Standard @BBL X1C',
+      config,
       options: {
         nonexistent_config_foo: 1
       }
@@ -44,7 +56,9 @@ describe('slicer/stl service (invalid overrides)', () => {
     const resp = await axios.post(`${baseURL}/slicer/stl`, body, { validateStatus: () => true })
     assert.strictEqual(resp.status, 400, `Status inesperado: ${resp.status} - ${JSON.stringify(resp.data)}`)
     const msg = JSON.stringify(resp.data)
-    assert.ok(/Invalid override option/i.test(msg) || /unknown|invalid|unrecognized/i.test(msg), 'Mensagem de erro inesperada')
+    assert.ok(
+      /Invalid override option/i.test(msg) || /unknown|invalid|unrecognized/i.test(msg),
+      'Mensagem de erro inesperada'
+    )
   })
 })
-

@@ -1,0 +1,6 @@
+/Users/maosone/Documents/slicer-api/OrcaSlicerAddon/build-ninja/CMakeFiles/edit_cache.dir
+/Users/maosone/Documents/slicer-api/OrcaSlicerAddon/build-ninja/CMakeFiles/rebuild_cache.dir
+/Users/maosone/Documents/slicer-api/OrcaSlicerAddon/build-ninja/src/CMakeFiles/orcacli_core.dir
+/Users/maosone/Documents/slicer-api/OrcaSlicerAddon/build-ninja/src/CMakeFiles/orcacli_engine.dir
+/Users/maosone/Documents/slicer-api/OrcaSlicerAddon/build-ninja/src/CMakeFiles/edit_cache.dir
+/Users/maosone/Documents/slicer-api/OrcaSlicerAddon/build-ninja/src/CMakeFiles/rebuild_cache.dir

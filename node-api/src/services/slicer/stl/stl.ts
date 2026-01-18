@@ -1,6 +1,7 @@
 // For more information about this file see https://dove.feathersjs.com/guides/cli/service.html
 
 import { hooks as schemaHooks } from '@feathersjs/schema'
+import type { HookContext } from '@feathersjs/feathers'
 
 import {
   slicerStlDataValidator,
@@ -19,6 +20,26 @@ import { slicerStlPath, slicerStlMethods } from './stl.shared'
 
 export * from './stl.class'
 export * from './stl.schema'
+
+// Hook para parsear campos JSON que vem como string via multipart form-data
+const parseJsonFields = async (context: HookContext) => {
+  const data = context.data
+  if (data && typeof data.config === 'string') {
+    try {
+      data.config = JSON.parse(data.config)
+    } catch {
+      // Se nao for JSON valido, deixa como esta para a validacao rejeitar
+    }
+  }
+  if (data && typeof data.options === 'string') {
+    try {
+      data.options = JSON.parse(data.options)
+    } catch {
+      // Se nao for JSON valido, deixa como esta para a validacao rejeitar
+    }
+  }
+  return context
+}
 
 // A configure function that registers the service and its hooks via `app.configure`
 export const slicerStl = (app: Application) => {
@@ -45,10 +66,12 @@ export const slicerStl = (app: Application) => {
       find: [],
       get: [],
       create: [
+        parseJsonFields,
         schemaHooks.validateData(slicerStlDataValidator),
         schemaHooks.resolveData(slicerStlDataResolver)
       ],
       patch: [
+        parseJsonFields,
         schemaHooks.validateData(slicerStlPatchValidator),
         schemaHooks.resolveData(slicerStlPatchResolver)
       ],

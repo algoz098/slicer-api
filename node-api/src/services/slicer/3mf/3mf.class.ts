@@ -9,7 +9,6 @@ import type { Application } from '../../../declarations'
 import type { Slicer3Mf, Slicer3MfData, Slicer3MfPatch, Slicer3MfQuery } from './3mf.schema'
 import { BadRequest } from '@feathersjs/errors'
 
-
 export type { Slicer3Mf, Slicer3MfData, Slicer3MfPatch, Slicer3MfQuery }
 export interface Slicer3MfServiceOptions {
   app: Application
@@ -40,18 +39,21 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
     data: Slicer3MfData | Slicer3MfData[],
     params?: ServiceParams
   ): Promise<Slicer3Mf | Slicer3Mf[]> {
-
     if (Array.isArray(data)) {
       return Promise.all(data.map(current => this.create(current, params)))
     }
 
     const orca = await this.options.app.get('orca')
 
-    const { options, printerProfile, filamentProfile, processProfile, center, bedType } = data ?? {options: {}}
+    const { options, printerProfileName, filamentProfileName, processProfileName, center, bedType } =
+      data ?? {
+        options: {}
+      }
     const reqField = data.field ?? 'file'
     const anyParams: any = params ?? {}
 
-    const filesContainer = anyParams?.koa?.request?.files ?? anyParams?.files ?? anyParams?.koa?.ctx?.request?.files
+    const filesContainer =
+      anyParams?.koa?.request?.files ?? anyParams?.files ?? anyParams?.koa?.ctx?.request?.files
 
     let fileObj: any | undefined
     if (filesContainer) {
@@ -79,27 +81,11 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
     const defaultOut = path.join(os.tmpdir(), `orca-${randomUUID()}.gcode.3mf`)
     const outPath = data.output ?? defaultOut
 
-    // Pré-carrega vendor/perfil de impressora quando explicitado para evitar fallbacks do engine
-    try {
-      const orcaAny = orca as any
-      if (printerProfile && typeof orcaAny?.loadPrinterProfile === 'function') {
-        const p = String(printerProfile).trim()
-        console.log('[3MF] Preload request for printerProfile =', p)
-        // Heurística mínima de vendor pelo prefixo do nome
-        if (typeof orcaAny?.loadVendor === 'function') {
-          if (p.startsWith('Creality ')) {
-            try { console.log('[3MF] loadVendor("Creality")'); { orcaAny.setLoggingSilenced(true); try { orcaAny.loadVendor('Creality') } finally { orcaAny.setLoggingSilenced(false) } } console.log('[3MF] loadVendor("Creality") OK') } catch (e) { console.warn('[3MF] loadVendor("Creality") FAILED:', e) }
-          } else if (p.startsWith('Bambu ')) {
-            try { console.log('[3MF] loadVendor("BBL")'); { orcaAny.setLoggingSilenced(true); try { orcaAny.loadVendor('BBL') } finally { orcaAny.setLoggingSilenced(false) } } console.log('[3MF] loadVendor("BBL") OK') } catch (e) { console.warn('[3MF] loadVendor("BBL") FAILED:', e) }
-          }
-          // K2 Plus pode existir em pacotes CrealityPrint
-          if (p.includes('K2 Plus')) {
-            try { console.log('[3MF] loadVendor("CrealityPrint")'); { orcaAny.setLoggingSilenced(true); try { orcaAny.loadVendor('CrealityPrint') } finally { orcaAny.setLoggingSilenced(false) } } console.log('[3MF] loadVendor("CrealityPrint") OK') } catch (e) { console.warn('[3MF] loadVendor("CrealityPrint") FAILED:', e) }
-          }
-        }
-        try { console.log('[3MF] loadPrinterProfile("%s")', p); { orcaAny.setLoggingSilenced(true); try { orcaAny.loadPrinterProfile(p) } finally { orcaAny.setLoggingSilenced(false) } } console.log('[3MF] loadPrinterProfile OK') } catch (e) { console.warn('[3MF] loadPrinterProfile FAILED:', e) }
-      }
-    } catch (e) { console.warn('[3MF] Preload vendor/profile block FAILED:', e) }
+    // NOTE: Nao carregamos vendors/profiles aqui.
+    // O addon funciona em modo on-the-fly puro:
+    // - A configuracao completa e passada via `options` em cada chamada de slice
+    // - O addon usa FullPrintConfig::defaults() como fallback
+    console.log('[3MF] On-the-fly mode - configuration passed via options')
 
     let output: string
     let usedOptions: string[] | undefined
@@ -107,31 +93,40 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
     let estimatedTimeSec: number | undefined
     let filamentUsedGrams: number | undefined
 
-    // Normalize profiles for BBL A1 vs A1 mini when caller only passes generic filament
-    const pPrinter = printerProfile
-    let pProcess = processProfile
-    let pFilament = filamentProfile
-    if (pPrinter?.includes('A1 mini')) {
-      if (!pProcess || /@BBL A1\b/.test(pProcess || '')) pProcess = '0.20mm Standard @BBL A1M'
-      if (pFilament && /@BBL A1\b/.test(pFilament)) pFilament = pFilament.replace('@BBL A1', '@BBL A1M')
-    } else if (pPrinter?.includes('A1 0.4')) {
-      if (!pProcess) pProcess = '0.20mm Standard @BBL A1'
-      if (pFilament && /@BBL A1M\b/.test(pFilament)) pFilament = pFilament.replace('@BBL A1M', '@BBL A1')
-    }
-
-    console.log(`-------`)
-    console.log(center)
-    console.log(`-------`)
-    // if (!false) throw new  Error("1");
-
-    // Prepare options with bedType override if provided
-    const finalOptions = { ...options }
+    // Mescla options e config, onde config tem precedencia
+    // Precedencia: config > options > profiles
+    const configOverrides = (data as any).config ?? {}
+    const finalOptions = { ...options, ...configOverrides }
     finalOptions.curr_bed_type = bedType ?? 'High Temp Plate'
 
-    // console.log(JSON.stringify(finalOptions, null, 2))
-    // if (!false) throw new Error("lock")
+    // Remove flush_volumes_matrix from overrides if it doesn't match the filament count
+    // This prevents "Flush volumes matrix do not match to the correct size" errors
+    // The addon will automatically synchronize the matrix based on filament_colour
+    if (finalOptions.flush_volumes_matrix) {
+      const filamentCount = Array.isArray(finalOptions.filament_colour)
+        ? finalOptions.filament_colour.length
+        : 1
+      const headsCount = Array.isArray(finalOptions.flush_multiplier)
+        ? finalOptions.flush_multiplier.length
+        : 1
+      const expectedSize = filamentCount * filamentCount * headsCount
+      const actualSize = Array.isArray(finalOptions.flush_volumes_matrix)
+        ? finalOptions.flush_volumes_matrix.length
+        : 0
+      if (actualSize !== expectedSize) {
+        console.log(
+          `[3MF] Removing inconsistent flush_volumes_matrix: expected=${expectedSize}, actual=${actualSize}`
+        )
+        delete finalOptions.flush_volumes_matrix
+      }
+    }
+
+    // Guarda as chaves de options para validacao posterior
+    const optionsKeys = new Set(Object.keys(options ?? {}))
+
     try {
-      (orca as any).setLoggingSilenced(true)
+      // TEMPORARILY DISABLE SILENCING TO DEBUG "Comparing incompatible types" error
+      ;(orca as any).setLoggingSilenced(false)
       let res: any
       try {
         res = await orca.slice({
@@ -141,16 +136,17 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
           options: finalOptions,
           center: true,
           autoRealignIfNeeded: true,
-          printerProfile: pPrinter,
-          processProfile: pProcess,
-          filamentProfile: pFilament,
+          // Display names for profiles in output 3MF (metadata only, does not load any preset)
+          printerProfileName: printerProfileName,
+          filamentProfileName: filamentProfileName,
+          processProfileName: processProfileName,
           transferPrinterCustomizations: data.transferPrinterCustomizations ?? true,
           transferFilamentCustomizations: data.transferFilamentCustomizations ?? true,
-          transferProcessCustomizations: true,
-          transferProjectOverrides: true
+          transferProcessCustomizations: data.transferProcessCustomizations ?? true,
+          transferProjectOverrides: data.transferProjectOverrides ?? true
         })
       } finally {
-        (orca as any).setLoggingSilenced(false)
+        ;(orca as any).setLoggingSilenced(false)
       }
       output = res.output
 
@@ -161,11 +157,35 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
     } catch (err: any) {
       const msg = String(err?.message ?? err ?? '')
       const lower = msg.toLowerCase()
-      if (lower.includes('unknown') || lower.includes('invalid') || lower.includes('unrecognized') || lower.includes('failed to set')) {
+
+      // Erro de elementos fora da area de impressao
+      if (
+        lower.includes('fora da área') ||
+        lower.includes('fora da area') ||
+        lower.includes('outside') ||
+        lower.includes('out of bounds') ||
+        lower.includes('does not fit')
+      ) {
+        throw new BadRequest(msg, { code: 'OBJECTS_OUT_OF_BOUNDS' })
+      }
+
+      if (
+        lower.includes('unknown') ||
+        lower.includes('invalid') ||
+        lower.includes('unrecognized') ||
+        lower.includes('failed to set')
+      ) {
         throw new BadRequest(`Invalid override option(s): ${msg}`)
       }
       // Always throw a proper Error instance to avoid "error: undefined" logs
       throw new Error(msg || 'Slice failed')
+    }
+
+    // Verifica se alguma opcao de 'options' foi ignorada (erro 400)
+    // Opcoes de 'config' sao ignoradas silenciosamente
+    const ignoredFromOptions = (ignoredOptions ?? []).filter((k: string) => optionsKeys.has(k))
+    if (ignoredFromOptions.length > 0) {
+      throw new BadRequest(`Invalid override option(s): unknown keys: ${ignoredFromOptions.join(', ')}`)
     }
 
     // Garante existência do arquivo antes de responder.

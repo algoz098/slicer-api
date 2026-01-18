@@ -49,11 +49,13 @@ public:
         std::string output_file;
         std::string config_file;
         std::string preset_name;
-        std::string printer_profile;
-        std::string filament_profile;
-        std::string process_profile;
+        // Display names for profiles in output 3MF (metadata only, does not load any preset)
+        // These are shown in OrcaSlicer GUI when opening the generated file
+        std::string printer_profile_name;   // e.g. "My Custom Printer" - sets printer_settings_id
+        std::string filament_profile_name;  // e.g. "Generic PLA" - sets filament_settings_id[0]
+        std::string process_profile_name;   // e.g. "High Quality" - sets print_settings_id
         int plate_index = 1; // 1-based plate index for .3mf projects (defaults to 1)
-        std::map<std::string, std::string> custom_settings;
+        std::map<std::string, std::string> custom_settings; // JSON on-the-fly config
         bool verbose = false;
         bool dry_run = false;
         // Control how 3MF-embedded customizations are transferred (defaults: true)
@@ -63,7 +65,7 @@ public:
         bool transfer_project_overrides = true;
         // Behavior flags
         bool center_on_bed = false;
-        bool auto_realign_if_needed = false; // Realinha automaticamente na mesa caso itens estejam fora da área
+        bool auto_realign_if_needed = false; // Realinha automaticamente na mesa caso itens estejam fora da area
     };
 
     /**
@@ -142,35 +144,6 @@ public:
      * @return Operation result
      */
     OperationResult loadPreset(const std::string& preset_name);
-
-    /**
-     * @brief Load printer profile
-     * @param printer_name Name of the printer profile (e.g., "Bambu Lab X1 Carbon")
-     * @return Operation result
-     */
-    OperationResult loadPrinterProfile(const std::string& printer_name);
-
-    /**
-     * @brief Load filament profile
-     * @param filament_name Name of the filament profile (e.g., "Bambu PLA Basic @BBL X1C")
-     * @return Operation result
-     */
-    OperationResult loadFilamentProfile(const std::string& filament_name);
-
-    /**
-     * @brief Load process profile
-     * @param process_name Name of the process profile (e.g., "0.20mm Standard @BBL X1C")
-     * @return Operation result
-     */
-    OperationResult loadProcessProfile(const std::string& process_name);
-
-	    /**
-	     * @brief Load a vendor's presets into the bundle (lazy, on-demand)
-	     * @param vendor_id Vendor identifier as used in resources/profiles (e.g., "BBL", "Flashforge")
-	     * @return Operation result
-	     */
-	    OperationResult loadVendor(const std::string& vendor_id);
-
 
     /**
      * @brief Set a configuration option

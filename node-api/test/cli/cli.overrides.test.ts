@@ -33,19 +33,28 @@ describe.skip('CLI slice --set overrides (legacy, skipped)', () => {
 
     const outGcode = path.join(os.tmpdir(), `cli_overrides_${Date.now()}.gcode`)
 
+    // NOTA: --filament omitido pois perfis com heranca nao carregam corretamente
     const args = [
       'slice',
       '-q',
-      '--input', inputSTL,
-      '--output', outGcode,
-      '--printer', 'Bambu Lab X1 Carbon 0.4 nozzle',
-      '--filament', 'Bambu PLA Basic @BBL X1C',
-      '--process', '0.20mm Standard @BBL X1C',
-      '--set', 'sparse_infill_density=30,layer_height=0.24'
+      '--input',
+      inputSTL,
+      '--output',
+      outGcode,
+      '--printer',
+      'Bambu Lab X1 Carbon 0.4 nozzle',
+      '--process',
+      '0.20mm Standard @BBL X1C',
+      '--set',
+      'sparse_infill_density=30,layer_height=0.24'
     ]
 
     const cwd = path.resolve(process.cwd(), '..')
-    const { status, stdout, stderr, signal, error } = cp.spawnSync(cli, args, { encoding: 'utf8', cwd, maxBuffer: 64 * 1024 * 1024 })
+    const { status, stdout, stderr, signal, error } = cp.spawnSync(cli, args, {
+      encoding: 'utf8',
+      cwd,
+      maxBuffer: 64 * 1024 * 1024
+    })
     if (status !== 0) {
       console.error('CLI stdout:\n', stdout)
       console.error('CLI stderr:\n', stderr)
@@ -56,8 +65,10 @@ describe.skip('CLI slice --set overrides (legacy, skipped)', () => {
     assert.ok(fs.existsSync(outGcode), 'G-code nao foi gerado')
     const gcode = fs.readFileSync(outGcode, 'utf8')
 
-    assert.ok(/sparse_infill_density\s*=\s*30%?\b/.test(gcode), 'sparse_infill_density override ausente no G-code')
+    assert.ok(
+      /sparse_infill_density\s*=\s*30%?\b/.test(gcode),
+      'sparse_infill_density override ausente no G-code'
+    )
     assert.ok(/layer_height\s*=\s*0\.24\b/.test(gcode), 'layer_height override ausente no G-code')
   })
 })
-

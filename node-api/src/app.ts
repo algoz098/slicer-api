@@ -9,7 +9,7 @@ import type { Application } from './declarations'
 import { logError } from './hooks/log-error'
 import { services } from './services/index'
 import loadOrca from './orca'
-import  {mediasPath} from './services/medias/medias.shared'
+import { mediasPath } from './services/medias/medias.shared'
 
 import fs from 'node:fs'
 import * as path from 'node:path'
@@ -26,11 +26,10 @@ app.use(koaBody({ multipart: true, formidable: { keepExtensions: true } }))
 // Mapear arquivos do koa-body para params (ctx.feathers)
 app.use(async (ctx, next) => {
   if (ctx.request && (ctx.request as any).files) {
-    (ctx.feathers as any).files = (ctx.request as any).files
+    ;(ctx.feathers as any).files = (ctx.request as any).files
   }
   return next()
 })
-
 
 // add koa middleware for medias service
 app.use(async (ctx, next) => {
@@ -55,8 +54,6 @@ const publicDir = path.resolve(__dirname, '..', 'public')
 if (fs.existsSync(publicDir)) {
   app.use(serveStatic(publicDir))
 }
-
-
 
 app.use(errorHandler())
 app.use(parseAuthentication())

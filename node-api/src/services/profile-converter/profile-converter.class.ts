@@ -92,15 +92,18 @@ function tryRequireJsZip(): any {
   }
 }
 
-
-async function loadJsonFromZipBuffer(buf: Uint8Array, kind: 'printer' | 'filament' | 'process'): Promise<any> {
+async function loadJsonFromZipBuffer(
+  buf: Uint8Array,
+  kind: 'printer' | 'filament' | 'process'
+): Promise<any> {
   const JSZip = tryRequireJsZip()
   if (JSZip) {
     const zip = await JSZip.loadAsync(buf)
     const jsonFiles = Object.values(zip.files).filter((f: any) => !f.dir && /\.json$/i.test(f.name))
     let firstObj: any | undefined
     const desiredType = kind === 'printer' ? 'machine' : kind
-    const refKey = kind === 'printer' ? 'printer_config' : kind === 'filament' ? 'filament_config' : 'process_config'
+    const refKey =
+      kind === 'printer' ? 'printer_config' : kind === 'filament' ? 'filament_config' : 'process_config'
     for (const f of jsonFiles as any[]) {
       try {
         const txt = await f.async('string')
@@ -132,11 +135,16 @@ async function loadJsonFromZipBuffer(buf: Uint8Array, kind: 'printer' | 'filamen
     throw new BadRequest('Could not find a JSON preset inside the provided ZIP/.orca file.')
   }
   // JSZip not available: fail fast with clear guidance (we no longer call system unzip/7z)
-  throw new BadRequest('ZIP parsing requires the jszip package in the runtime. Please ensure jszip is installed in the container (npm install jszip).')
+  throw new BadRequest(
+    'ZIP parsing requires the jszip package in the runtime. Please ensure jszip is installed in the container (npm install jszip).'
+  )
 }
 
 // Try to resolve a filename against example_files folders so user can pass just a basename
-function resolveExamplePresetPath(kind: 'printer' | 'filament' | 'process', name: string): string | undefined {
+function resolveExamplePresetPath(
+  kind: 'printer' | 'filament' | 'process',
+  name: string
+): string | undefined {
   try {
     if (!name || typeof name !== 'string') return undefined
     const baseDir = path.resolve(fssync.realpathSync('.'), 'example_files')
@@ -173,7 +181,8 @@ async function loadPresetFromInputs(
 ): Promise<any> {
   // 1) Multipart file support (koa-body)
   const anyParams: any = params ?? {}
-  const filesContainer = anyParams?.koa?.request?.files ?? anyParams?.files ?? anyParams?.koa?.ctx?.request?.files
+  const filesContainer =
+    anyParams?.koa?.request?.files ?? anyParams?.files ?? anyParams?.koa?.ctx?.request?.files
   let fileObj: any | undefined
   if (filesContainer) {
     fileObj = filesContainer['file'] ?? filesContainer.file
@@ -192,7 +201,13 @@ async function loadPresetFromInputs(
       const content = await fs.readFile(filePath, 'utf8')
       return JSON.parse(content)
     }
-    if (ext === '.zip' || ext === '.orca' || ext === '.orca_profile' || ext === '.orca_printer' || ext === '.orca_filament') {
+    if (
+      ext === '.zip' ||
+      ext === '.orca' ||
+      ext === '.orca_profile' ||
+      ext === '.orca_printer' ||
+      ext === '.orca_filament'
+    ) {
       const buf = await fs.readFile(filePath)
       return loadJsonFromZipBuffer(buf, kind)
     }
@@ -217,7 +232,13 @@ async function loadPresetFromInputs(
         const content = await fs.readFile(candidatePath, 'utf8')
         return JSON.parse(content)
       }
-      if (ext === '.zip' || ext === '.orca' || ext === '.orca_profile' || ext === '.orca_printer' || ext === '.orca_filament') {
+      if (
+        ext === '.zip' ||
+        ext === '.orca' ||
+        ext === '.orca_profile' ||
+        ext === '.orca_printer' ||
+        ext === '.orca_filament'
+      ) {
         const buf = await fs.readFile(candidatePath)
         return loadJsonFromZipBuffer(buf, kind)
       }
@@ -272,11 +293,19 @@ export class ProfileConverterService<ServiceParams extends ProfileConverterParam
   }
 
   // Not exposed/used; keep minimal stubs in case Feathers calls them internally
-  async update(_id: NullableId, _data: ProfileConverterData, _params?: ServiceParams): Promise<ProfileConverter> {
+  async update(
+    _id: NullableId,
+    _data: ProfileConverterData,
+    _params?: ServiceParams
+  ): Promise<ProfileConverter> {
     throw new BadRequest('UPDATE is not supported on this service')
   }
 
-  async patch(_id: NullableId, _data: ProfileConverterPatch, _params?: ServiceParams): Promise<ProfileConverter> {
+  async patch(
+    _id: NullableId,
+    _data: ProfileConverterPatch,
+    _params?: ServiceParams
+  ): Promise<ProfileConverter> {
     throw new BadRequest('PATCH is not supported on this service')
   }
 

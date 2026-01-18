@@ -50,6 +50,21 @@ std::string bed_temp_key_for(Slic3r::BedType type, bool first_layer)
         }
     }
 }
+
+void safe_build_config(Slic3r::PresetBundle& preset_bundle, Slic3r::DynamicPrintConfig& config)
+{
+    try {
+        Slic3r::DynamicPrintConfig out;
+        out.apply(Slic3r::FullPrintConfig::defaults());
+        try { out.apply(preset_bundle.prints.get_edited_preset().config); } catch (...) {}
+        try { out.apply(preset_bundle.filaments.default_preset().config); } catch (...) {}
+        try { out.apply(preset_bundle.printers.get_edited_preset().config); } catch (...) {}
+        try { out.apply(preset_bundle.project_config, /*ignore_nonexistent=*/true); } catch (...) {}
+        config = out;
+    } catch (...) {
+        // Keep existing config on failure
+    }
+}
 #endif
 
 }} // namespace OrcaSlicerCli::util

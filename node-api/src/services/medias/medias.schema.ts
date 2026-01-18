@@ -8,11 +8,7 @@ import { dataValidator, queryValidator } from '../../validators'
 import type { MediasService } from './medias.class'
 
 // Main data model schema
-export const mediasSchema = Type.Object(
-  {
-  },
-  { $id: 'Medias', additionalProperties: false }
-)
+export const mediasSchema = Type.Object({}, { $id: 'Medias', additionalProperties: false })
 export type Medias = Static<typeof mediasSchema>
 export const mediasValidator = getValidator(mediasSchema, dataValidator)
 export const mediasResolver = resolve<Medias, HookContext<MediasService>>({})
@@ -41,9 +37,12 @@ export const mediasQuerySchema = Type.Intersect(
   [
     querySyntax(mediasQueryProperties),
     // Add additional query properties here
-    Type.Object({
-      path: Type.Optional(Type.Any())
-    }, { additionalProperties: false })
+    Type.Object(
+      {
+        path: Type.Optional(Type.Any())
+      },
+      { additionalProperties: false }
+    )
   ],
   { additionalProperties: false }
 )

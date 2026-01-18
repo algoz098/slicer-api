@@ -1,10 +1,12 @@
 #include "AddonCore.hpp"
+#include "core/util/Utilities.hpp"
 
 #include <iostream>
 #include <fstream>
 #include <filesystem>
 #include <exception>
 #include <cmath>
+#include <chrono>
 
 #include <algorithm>
 #include <cctype>
@@ -116,6 +118,7 @@ void OrcaSlicerCli::AddonCore::setLoggingSilenced(bool silent) {
 #include "libslic3r/Preset.hpp"
 #include "libslic3r/GCode/ThumbnailData.hpp"
 #include "libslic3r/ProjectTask.hpp"
+#include "libslic3r/Layer.hpp"
 
 #endif
 #if HAVE_LIBSLIC3R
@@ -140,6 +143,65 @@ using OrcaSlicerCli::util::bed_temp_key_for;
 
 
 // dbg_log centralized in core/util/Utilities
+
+// Helper: Sanitize a DynamicPrintConfig to ensure all options have compatible types.
+// This prevents "Comparing incompatible types" errors when print->apply() compares configs.
+// For each key, we check if the type matches what's expected by the print_config_def.
+// If not, we try to convert by serializing/deserializing, or we remove the problematic key.
+static void sanitize_config_types(Slic3r::DynamicPrintConfig& cfg) {
+    const Slic3r::ConfigDef& def = Slic3r::print_config_def;
+
+    std::vector<std::string> keys_to_fix;
+
+    for (const auto& key : cfg.keys()) {
+        const Slic3r::ConfigOption* opt = cfg.optptr(key);
+        if (!opt) continue;
+
+        const Slic3r::ConfigOptionDef* opt_def = def.get(key);
+        if (!opt_def) {
+            // Key not in definition - may be custom, skip
+            continue;
+        }
+
+        if (opt->type() != opt_def->type) {
+            keys_to_fix.push_back(key);
+        }
+    }
+
+    for (const auto& key : keys_to_fix) {
+        try {
+            const Slic3r::ConfigOption* opt = cfg.optptr(key);
+            const Slic3r::ConfigOptionDef* opt_def = def.get(key);
+            if (!opt || !opt_def) continue;
+
+            // Serialize and deserialize to convert type
+            std::string serialized = opt->serialize();
+            std::cout << "DEBUG: sanitize_config_types: fixing type for '" << key
+                      << "' (type " << (int)opt->type() << " -> " << (int)opt_def->type
+                      << ") value='" << serialized << "'" << std::endl;
+
+            // Create new option with correct type and deserialize
+            Slic3r::ConfigOption* new_opt = opt_def->create_default_option();
+            if (new_opt) {
+                try {
+                    new_opt->deserialize(serialized, Slic3r::ForwardCompatibilitySubstitutionRule::Enable);
+                    cfg.set_key_value(key, new_opt);
+                } catch (...) {
+                    delete new_opt;
+                    // If conversion fails, erase the key
+                    cfg.erase(key);
+                    std::cout << "DEBUG: sanitize_config_types: removed key '" << key << "' (conversion failed)" << std::endl;
+                }
+            }
+        } catch (...) {
+            try { cfg.erase(key); } catch (...) {}
+        }
+    }
+
+    if (!keys_to_fix.empty()) {
+        std::cout << "DEBUG: sanitize_config_types: fixed " << keys_to_fix.size() << " type mismatches" << std::endl;
+    }
+}
 
 
 namespace OrcaSlicerCli {
@@ -167,6 +229,7 @@ public:
     // Multi-material detection
     size_t detected_extruders = 0;
     std::vector<std::string> saved_filament_colours;  // Preserve 3MF colors from preset overwrites
+    std::string saved_change_filament_gcode;  // Preserve 3MF change_filament_gcode (critical for Bambu AMS)
 
     std::string last_error;
     // Last computed native statistics (reset each slice attempt)
@@ -188,6 +251,11 @@ public:
     std::string project_printer_preset;
     std::string project_print_preset;
     std::string project_filament_preset;
+    // Custom display names for profiles in output 3MF (set via SlicingParams)
+    // These override the default/project names for metadata display only
+    std::string custom_printer_profile_name;
+    std::string custom_filament_profile_name;
+    std::string custom_process_profile_name;
         // Snapshot of 3MF project-level parameter overrides and their keys (detected during load)
         Slic3r::DynamicPrintConfig      project_cfg_after_3mf;
         Slic3r::t_config_option_keys    project_overrides_keys;
@@ -305,6 +373,7 @@ public:
                         total_plates_count,
                         this->detected_extruders,
                         this->saved_filament_colours,
+                        this->saved_change_filament_gcode,
                         project_cfg_after_3mf,
                         project_overrides_keys,
                         print_cfg_overrides,
@@ -407,6 +476,17 @@ public:
             // CRITICAL: Check multi-material config at the start of performSlicing
             std::cout << "🔍 [TRACE 33] Config check inside performSlicing:" << std::endl;
             if (config) {
+                // DEBUG: Check printable_area at start of performSlicing
+                auto* pa_start = config->opt<Slic3r::ConfigOptionPoints>("printable_area", false);
+                if (pa_start) {
+                    std::cout << "  [START performSlicing] printable_area has " << pa_start->values.size() << " points: ";
+                    for (const auto& pt : pa_start->values) {
+                        std::cout << "(" << pt(0) << "," << pt(1) << ") ";
+                    }
+                    std::cout << std::endl;
+                } else {
+                    std::cout << "  [START performSlicing] printable_area is NULL!" << std::endl;
+                }
                 std::cout << "  single_extruder_multi_material = " << config->opt_bool("single_extruder_multi_material") << std::endl;
                 std::cout << "  enable_prime_tower = " << config->opt_bool("enable_prime_tower") << std::endl;
                 if (auto* fil_colour = config->opt<Slic3r::ConfigOptionStrings>("filament_colour", false)) {
@@ -503,22 +583,29 @@ public:
             // See: OrcaSlicer/src/slic3r/GUI/PartPlate.cpp line 2893
             // This ensures plate-specific overrides are applied
             if (!this->plate_data_src.empty()) {
-                try {
-                    int idx_i = plate_id;
-                    if (idx_i < 0) idx_i = 0;
-                    int max_i = (int)this->plate_data_src.size() - 1;
-                    if (idx_i > max_i) idx_i = max_i;
-                    size_t idx = (size_t)idx_i;
-                    Slic3r::PlateData* pd = this->plate_data_src[idx];
-                    if (pd != nullptr && !pd->config.empty()) {
-                        std::cout << "DEBUG: Applying plate config over full_config (GUI parity)" << std::endl;
-                        config->apply(pd->config, true);
-                        std::cout << "DEBUG: Plate config applied successfully" << std::endl;
-                    } else {
-                        std::cout << "DEBUG: No plate config to apply (plate_data is empty or null)" << std::endl;
+                int idx_i = plate_id;
+                if (idx_i < 0) idx_i = 0;
+                int max_i = (int)this->plate_data_src.size() - 1;
+                if (idx_i > max_i) idx_i = max_i;
+                size_t idx = (size_t)idx_i;
+                Slic3r::PlateData* pd = this->plate_data_src[idx];
+                if (pd != nullptr && !pd->config.empty()) {
+                    std::cout << "DEBUG: Applying plate config over full_config (GUI parity)" << std::endl;
+                    // Apply key by key to handle type mismatches gracefully
+                    auto plate_keys = pd->config.keys();
+                    size_t applied = 0;
+                    for (const auto& key : plate_keys) {
+                        try {
+                            std::vector<std::string> single_key = {key};
+                            config->apply_only(pd->config, single_key, /*ignore_nonexistent=*/true);
+                            ++applied;
+                        } catch (const std::exception& e) {
+                            std::cout << "WARN: Skipping plate config key '" << key << "': " << e.what() << std::endl;
+                        }
                     }
-                } catch (const std::exception& e) {
-                    std::cout << "WARN: Failed to apply plate config: " << e.what() << std::endl;
+                    std::cout << "DEBUG: Plate config applied successfully (" << applied << "/" << plate_keys.size() << " keys)" << std::endl;
+                } else {
+                    std::cout << "DEBUG: No plate config to apply (plate_data is empty or null)" << std::endl;
                 }
             }
 
@@ -543,8 +630,22 @@ public:
                             if (center_on_bed) {
                                 bool is_bbl = false; try { is_bbl = preset_bundle.is_bbl_vendor(); } catch (...) {}
                                 if (!is_bbl) {
+                                    // Log instance offsets BEFORE centering
+                                    for (const auto* obj : model->objects) {
+                                        for (const auto* inst : obj->instances) {
+                                            Slic3r::Vec3d off = inst->get_offset();
+                                            std::cout << "DEBUG: [BEFORE center_instances] obj='" << obj->name << "' inst_offset=(" << off(0) << "," << off(1) << "," << off(2) << ")" << std::endl;
+                                        }
+                                    }
                                     (void)center_instances_on_bed_center();
                                     print->set_plate_origin(Slic3r::Vec3d(0.0, 0.0, 0.0));
+                                    // Log instance offsets after centering
+                                    for (const auto* obj : model->objects) {
+                                        for (const auto* inst : obj->instances) {
+                                            Slic3r::Vec3d off = inst->get_offset();
+                                            std::cout << "DEBUG: [AFTER center_instances] obj='" << obj->name << "' inst_offset=(" << off(0) << "," << off(1) << "," << off(2) << ")" << std::endl;
+                                        }
+                                    }
                                     std::cout << "DEBUG: center_on_bed (NON-BBL, BEFORE process) => instances centered; plate_origin=(0,0)" << std::endl;
                                 } else {
                                     (void)center_plate_origin_to_bed_center();
@@ -601,7 +702,16 @@ public:
                 const auto& pd = plate_data_src[plate_id - 1];
                 if (pd && !pd->config.empty()) {
                     std::cout << "DEBUG: Applying plate config overrides from plate " << plate_id << std::endl;
-                    apply_config.apply(pd->config, true);
+                    // Apply key by key to handle type mismatches gracefully
+                    auto plate_keys = pd->config.keys();
+                    for (const auto& key : plate_keys) {
+                        try {
+                            std::vector<std::string> single_key = {key};
+                            apply_config.apply_only(pd->config, single_key, /*ignore_nonexistent=*/true);
+                        } catch (const std::exception& e) {
+                            std::cout << "WARN: Skipping plate config key '" << key << "': " << e.what() << std::endl;
+                        }
+                    }
                 }
             }
 
@@ -687,7 +797,26 @@ public:
 
             std::cout << "========================================" << std::endl;
 
-            std::cout << "DEBUG: Applying model and config to print (GUI parity: single apply with plate config)..." << std::endl;
+            // CRITICAL: Sanitize config types before apply() to prevent "Comparing incompatible types" errors
+            // This can happen when 3MF was created with a different OrcaSlicer version that had different types
+            std::cout << "DEBUG: Sanitizing config types before apply()..." << std::endl;
+            sanitize_config_types(apply_config);
+
+            // DEBUG: Log printable_area in apply_config before print->apply()
+            try {
+                auto* pa_cfg = apply_config.opt<Slic3r::ConfigOptionPoints>("printable_area", false);
+                if (pa_cfg) {
+                    std::cout << "DEBUG: [before print->apply] apply_config.printable_area has " << pa_cfg->values.size() << " points: ";
+                    for (const auto& pt : pa_cfg->values) {
+                        std::cout << "(" << pt(0) << "," << pt(1) << ") ";
+                    }
+                    std::cout << std::endl;
+                } else {
+                    std::cout << "DEBUG: [before print->apply] apply_config.printable_area is NULL!" << std::endl;
+                }
+            } catch (...) {}
+
+            std::cout << "DEBUG: Applying model and config to print..." << std::endl;
 
             try {
                 print->apply(*model, apply_config);
@@ -829,18 +958,24 @@ public:
             // Re-assert plate_origin AFTER apply, BEFORE process (apply may reset internal state)
 
 	            // Sync wipe tower positions from project_config into Model (GUI parity)
-	            try {
-	                const Slic3r::DynamicConfig &proj_cfg = preset_bundle.project_config;
-	                const auto *tx = proj_cfg.option<Slic3r::ConfigOptionFloats>("wipe_tower_x");
-	                const auto *ty = proj_cfg.option<Slic3r::ConfigOptionFloats>("wipe_tower_y");
-	                if (tx && ty && tx->values.size() == ty->values.size()) {
-	                    model->wipe_tower.positions.clear();
-	                    model->wipe_tower.positions.resize(tx->values.size());
-	                    for (size_t i = 0; i < tx->values.size(); ++i) {
-	                        model->wipe_tower.positions[i] = Slic3r::Vec2d(tx->get_at(i), ty->get_at(i));
+	            // BUT: if center_on_bed is true, the wipe tower position was recalculated during rearrange,
+	            // so we should NOT restore the original 3MF position here
+	            if (!center_on_bed) {
+	                try {
+	                    const Slic3r::DynamicConfig &proj_cfg = preset_bundle.project_config;
+	                    const auto *tx = proj_cfg.option<Slic3r::ConfigOptionFloats>("wipe_tower_x");
+	                    const auto *ty = proj_cfg.option<Slic3r::ConfigOptionFloats>("wipe_tower_y");
+	                    if (tx && ty && tx->values.size() == ty->values.size()) {
+	                        model->wipe_tower.positions.clear();
+	                        model->wipe_tower.positions.resize(tx->values.size());
+	                        for (size_t i = 0; i < tx->values.size(); ++i) {
+	                            model->wipe_tower.positions[i] = Slic3r::Vec2d(tx->get_at(i), ty->get_at(i));
+	                        }
 	                    }
-	                }
-	            } catch (...) {}
+	                } catch (...) {}
+	            } else {
+	                std::cout << "DEBUG: center_on_bed=true, skipping wipe tower position sync from 3MF (position was recalculated)" << std::endl;
+	            }
 
             {
                 try {
@@ -928,18 +1063,33 @@ public:
             // VALIDATION + OPTIONAL AUTO-REALIGN: ensure all elements fit the printable area, or auto-realign if enabled
             try {
                 const auto &pc = print->config();
-                Slic3r::BuildVolume build_volume(pc.printable_area.values, pc.printable_height);
+
+                // DEBUG: Log printable_area being used for validation
+                std::cout << "DEBUG: [check_outside] Using printable_area from print->config(): ";
+                for (const auto& pt : pc.printable_area.values) {
+                    std::cout << "(" << pt(0) << "," << pt(1) << ") ";
+                }
+                std::cout << std::endl;
+                std::cout << "DEBUG: [check_outside] printable_height=" << pc.printable_height << std::endl;
+
+                Slic3r::BuildVolume build_volume(pc.printable_area.values, pc.printable_height, {}, {});
+                std::cout << "DEBUG: [check_outside] BuildVolume valid=" << (build_volume.valid() ? "true" : "false") << std::endl;
                 if (build_volume.valid()) {
                     auto check_outside = [&](std::string &msg)->bool{
                         const Slic3r::Vec3d po = print->get_plate_origin();
                         const Slic3r::Vec3d shift_xy(-po(0), -po(1), 0.0);
+                        std::cout << "DEBUG: [check_outside] plate_origin=(" << po(0) << "," << po(1) << "," << po(2) << ")" << std::endl;
                         // Check model instances
                         for (const auto *obj : model->objects) {
                             if (!obj) continue;
                             for (const auto *inst : obj->instances) {
                                 if (!inst) continue;
+                                // Log instance offset for debugging
+                                Slic3r::Vec3d inst_offset = inst->get_offset();
+                                std::cout << "DEBUG: [check_outside] obj='" << obj->name << "' inst_offset=(" << inst_offset(0) << "," << inst_offset(1) << "," << inst_offset(2) << ")" << std::endl;
                                 Slic3r::BoundingBoxf3 bb = obj->instance_bounding_box(*inst);
                                 Slic3r::BoundingBoxf3 bb_local(bb.min + shift_xy, bb.max + shift_xy);
+                                std::cout << "DEBUG: [check_outside] obj='" << obj->name << "' bb_local min=(" << bb_local.min(0) << "," << bb_local.min(1) << ") max=(" << bb_local.max(0) << "," << bb_local.max(1) << ")" << std::endl;
                                 auto state = build_volume.volume_state_bbox(bb_local, /*ignore_bottom=*/true);
                                 if (state != Slic3r::BuildVolume::ObjectState::Inside) {
                                     std::string name = obj->name.empty() ? std::string("objeto") : obj->name;
@@ -968,10 +1118,165 @@ public:
                     };
 
                     std::string oob_msg;
-                    if (check_outside(oob_msg)) {
+                    bool is_outside = check_outside(oob_msg);
+                    std::cout << "DEBUG: [check_outside] is_outside=" << (is_outside ? "true" : "false") << ", msg='" << oob_msg << "'" << std::endl;
+                    if (is_outside) {
                         if (auto_realign_if_needed) {
                             bool is_bbl = false; try { is_bbl = preset_bundle.is_bbl_vendor(); } catch (...) {}
                             bool fixed = false;
+
+                            // Simple direct repositioning: place instances in a grid on the bed
+                            // This is more reliable than the arrange algorithm for on-the-fly mode
+                            try {
+                                Slic3r::Points bed_pts_for_center = Slic3r::get_bed_shape(*config);
+                                Slic3r::BoundingBox bed_bb(bed_pts_for_center);
+                                double bed_width = Slic3r::unscale<double>(bed_bb.size().x());
+                                double bed_height = Slic3r::unscale<double>(bed_bb.size().y());
+                                double bed_min_x = Slic3r::unscale<double>(bed_bb.min.x());
+                                double bed_min_y = Slic3r::unscale<double>(bed_bb.min.y());
+                                double bed_center_x = Slic3r::unscale<double>(bed_bb.center().x());
+                                double bed_center_y = Slic3r::unscale<double>(bed_bb.center().y());
+
+                                std::cout << "DEBUG: [simple_reposition] bed_size=(" << bed_width << "x" << bed_height
+                                          << ") bed_min=(" << bed_min_x << "," << bed_min_y
+                                          << ") bed_center=(" << bed_center_x << "," << bed_center_y << ")" << std::endl;
+
+                                // Collect all instances and their bounding boxes
+                                std::vector<std::pair<Slic3r::ModelInstance*, Slic3r::BoundingBoxf3>> instances_with_bb;
+                                for (auto* obj : model->objects) {
+                                    for (auto* inst : obj->instances) {
+                                        auto bb = inst->transform_bounding_box(obj->bounding_box_exact());
+                                        instances_with_bb.push_back({inst, bb});
+                                    }
+                                }
+
+                                // Calculate total width needed for all instances in a row
+                                double total_width = 0;
+                                double max_height = 0;
+                                const double spacing = 5.0; // 5mm spacing between objects
+                                for (const auto& [inst, bb] : instances_with_bb) {
+                                    total_width += bb.size().x() + spacing;
+                                    max_height = std::max(max_height, bb.size().y());
+                                }
+                                total_width -= spacing; // Remove last spacing
+
+                                std::cout << "DEBUG: [simple_reposition] total_width=" << total_width << ", max_height=" << max_height << std::endl;
+
+                                // Check if all instances fit in a single row
+                                bool fits_in_row = (total_width <= bed_width - 10) && (max_height <= bed_height - 10);
+
+                                if (fits_in_row) {
+                                    // Place all instances in a centered row
+                                    // We need to calculate positions based on the object's mesh bounding box
+                                    // (not the transformed bounding box which includes the current offset)
+
+                                    // First, get the mesh bounding boxes (without instance transform)
+                                    // Note: For the same object with multiple instances, the mesh_bb is the same
+                                    // The mesh_bb is the bounding box of the raw mesh, centered at origin
+                                    std::vector<Slic3r::BoundingBoxf3> mesh_bbs;
+                                    for (const auto& [inst, bb] : instances_with_bb) {
+                                        // Get the object's raw mesh bounding box (without any transforms)
+                                        auto* obj = inst->get_object();
+                                        Slic3r::BoundingBoxf3 mesh_bb = obj->raw_bounding_box();
+                                        mesh_bbs.push_back(mesh_bb);
+                                        std::cout << "DEBUG: [simple_reposition] raw_mesh_bb center=(" << mesh_bb.center().x() << "," << mesh_bb.center().y()
+                                                  << ") size=(" << mesh_bb.size().x() << "," << mesh_bb.size().y() << ")" << std::endl;
+                                    }
+
+                                    double start_x = bed_center_x - total_width / 2.0;
+                                    double current_x = start_x;
+
+                                    for (size_t i = 0; i < instances_with_bb.size(); ++i) {
+                                        auto& [inst, bb] = instances_with_bb[i];
+                                        const auto& mesh_bb = mesh_bbs[i];
+                                        double obj_width = mesh_bb.size().x();
+
+                                        // Calculate new position for the object center
+                                        double new_center_x = current_x + obj_width / 2.0;
+                                        double new_center_y = bed_center_y;
+
+                                        // The offset should place the mesh center at new_center
+                                        // new_center = offset + mesh_center
+                                        // offset = new_center - mesh_center
+                                        Slic3r::Vec3d old_offset = inst->get_offset();
+                                        Slic3r::Vec3d mesh_center = mesh_bb.center();
+
+                                        double new_offset_x = new_center_x - mesh_center.x();
+                                        double new_offset_y = new_center_y - mesh_center.y();
+
+                                        Slic3r::Vec3d new_offset(new_offset_x, new_offset_y, old_offset.z());
+                                        inst->set_offset(new_offset);
+
+                                        std::cout << "DEBUG: [simple_reposition] moved instance from (" << old_offset.x() << "," << old_offset.y()
+                                                  << ") to (" << new_offset.x() << "," << new_offset.y()
+                                                  << ") new_center=(" << new_center_x << "," << new_center_y << ")" << std::endl;
+
+                                        current_x += obj_width + spacing;
+                                    }
+                                    fixed = true;
+                                } else {
+                                    // Try to fit each instance individually at bed center
+                                    // This is a fallback for when objects don't fit in a row
+                                    for (auto& [inst, bb] : instances_with_bb) {
+                                        double obj_width = bb.size().x();
+                                        double obj_height = bb.size().y();
+
+                                        // Check if this single object fits on the bed
+                                        if (obj_width <= bed_width - 10 && obj_height <= bed_height - 10) {
+                                            Slic3r::Vec3d old_offset = inst->get_offset();
+                                            Slic3r::Vec3d bb_center = bb.center();
+
+                                            // Calculate local center (center relative to offset)
+                                            double local_center_x = bb_center.x() - old_offset.x();
+                                            double local_center_y = bb_center.y() - old_offset.y();
+
+                                            // New offset to place center at bed center
+                                            double new_offset_x = bed_center_x - local_center_x;
+                                            double new_offset_y = bed_center_y - local_center_y;
+
+                                            Slic3r::Vec3d new_offset(new_offset_x, new_offset_y, old_offset.z());
+                                            inst->set_offset(new_offset);
+
+                                            std::cout << "DEBUG: [simple_reposition] centered instance from (" << old_offset.x() << "," << old_offset.y()
+                                                      << ") to (" << new_offset.x() << "," << new_offset.y() << ")" << std::endl;
+                                            fixed = true;
+                                        } else {
+                                            std::cout << "WARN: [simple_reposition] object too large for bed: " << obj_width << "x" << obj_height << std::endl;
+                                        }
+                                    }
+                                }
+
+                                // Invalidate bounding boxes after repositioning
+                                for (auto* obj : model->objects) {
+                                    obj->invalidate_bounding_box();
+                                }
+
+                                // Reset plate_origin to (0,0,0) since objects are now in absolute bed coordinates
+                                // This is critical: after simple_reposition, objects are placed at absolute bed coords
+                                // (e.g., (57.5, 90)), so plate_origin must be zero for check_outside to work correctly
+                                if (fixed) {
+                                    print->set_plate_origin(Slic3r::Vec3d(0.0, 0.0, 0.0));
+                                    std::cout << "DEBUG: [simple_reposition] reset plate_origin to (0,0,0) after repositioning" << std::endl;
+                                }
+
+                                // Re-apply print with updated model transforms
+                                if (fixed) {
+                                    try {
+                                        Slic3r::DynamicPrintConfig apply_cfg = *config;
+                                        print->apply(*model, apply_cfg);
+                                    } catch (const std::exception &e) {
+                                        std::cout << "WARN: apply() after simple_reposition failed: " << e.what() << std::endl;
+                                    }
+                                }
+
+                            } catch (const std::exception &e) {
+                                std::cout << "WARN: simple_reposition failed: " << e.what() << std::endl;
+                                fixed = false;
+                            }
+
+                            // Skip the complex arrange algorithm - use simple repositioning above
+                            // The arrange algorithm was returning bed_idx=-1 for all items
+                            if (false) {
                             // Use the same arrangement algorithm as the GUI (libnest2d-based)
                             // Build bed shape from current config and run arrange_objects
                             try {
@@ -979,10 +1284,44 @@ public:
                                 Slic3r::ModelInstancePtrs instances;
                                 auto selected = Slic3r::get_arrange_polys(*model, instances);
 
+                                // Reset translations to bed center so arrange can reposition from scratch
+                                // This is necessary because the current positions may be outside the bed
+                                // Get bed center from config
+                                Slic3r::Points bed_pts_for_center = Slic3r::get_bed_shape(*config);
+                                Slic3r::BoundingBox bed_bb(bed_pts_for_center);
+                                Slic3r::Point bed_center = bed_bb.center();
+                                std::cout << "DEBUG: [arrange] bed_center=(" << Slic3r::unscale<double>(bed_center.x()) << "," << Slic3r::unscale<double>(bed_center.y()) << ")" << std::endl;
+
+                                for (auto& ap : selected) {
+                                    // Get the bounding box of the polygon
+                                    Slic3r::BoundingBox poly_bb(ap.poly.contour.points);
+                                    std::cout << "DEBUG: [arrange] item poly bb min=(" << Slic3r::unscale<double>(poly_bb.min.x()) << "," << Slic3r::unscale<double>(poly_bb.min.y())
+                                              << ") max=(" << Slic3r::unscale<double>(poly_bb.max.x()) << "," << Slic3r::unscale<double>(poly_bb.max.y()) << ")" << std::endl;
+                                    std::cout << "DEBUG: [arrange] resetting item translation from ("
+                                              << Slic3r::unscale<double>(ap.translation.x()) << ","
+                                              << Slic3r::unscale<double>(ap.translation.y()) << ") to bed_center" << std::endl;
+                                    // Set translation to bed center so the item starts inside the bed
+                                    ap.translation = bed_center;
+                                    ap.bed_idx = Slic3r::arrangement::UNARRANGED;
+                                }
+
                                 Slic3r::arrangement::ArrangeParams params;
                                 params.min_obj_distance = 0;
                                 params.allow_rotations  = false;
                                 params.do_final_align   = true;
+
+                                // Add a timeout-based stop condition to prevent infinite loops
+                                // Timeout: 30 seconds max for the arrange operation
+                                auto arrange_start_time = std::chrono::steady_clock::now();
+                                const auto arrange_timeout = std::chrono::seconds(30);
+                                params.stopcondition = [arrange_start_time, arrange_timeout]() -> bool {
+                                    auto elapsed = std::chrono::steady_clock::now() - arrange_start_time;
+                                    bool should_stop = elapsed > arrange_timeout;
+                                    if (should_stop) {
+                                        std::cout << "WARN: Arrange operation timed out after 30 seconds" << std::endl;
+                                    }
+                                    return should_stop;
+                                };
                                 // Align to Y axis for i3 style printers if available
                                 try {
                                     if (const auto *ps = config->option<Slic3r::ConfigOptionEnum<Slic3r::PrinterStructure>>("printer_structure"))
@@ -1032,17 +1371,23 @@ public:
                                         double ty_mm = maxy_mm - (2.0 * half_w + tower_margin);
 
                                         // If config already has tower position, prefer keeping it if inside bed
+                                        // BUT: if center_on_bed is true, objects were repositioned so we should
+                                        // recalculate tower position to avoid collision with moved objects
                                         float conf_wtx = 0.f, conf_wty = 0.f;
                                         bool has_conf_pos = false;
-                                        try { if (auto *wx = config->opt<Slic3r::ConfigOptionFloats>("wipe_tower_x", false)) { if (!wx->values.empty()) { conf_wtx = wx->values[0]; has_conf_pos = true; } } } catch (...) {}
-                                        try { if (auto *wy = config->opt<Slic3r::ConfigOptionFloats>("wipe_tower_y", false)) { if (!wy->values.empty()) { conf_wty = wy->values[0]; has_conf_pos = has_conf_pos && true; } } } catch (...) {}
+                                        if (!center_on_bed) {
+                                            try { if (auto *wx = config->opt<Slic3r::ConfigOptionFloats>("wipe_tower_x", false)) { if (!wx->values.empty()) { conf_wtx = wx->values[0]; has_conf_pos = true; } } } catch (...) {}
+                                            try { if (auto *wy = config->opt<Slic3r::ConfigOptionFloats>("wipe_tower_y", false)) { if (!wy->values.empty()) { conf_wty = wy->values[0]; has_conf_pos = has_conf_pos && true; } } } catch (...) {}
+                                        } else {
+                                            std::cout << "DEBUG: center_on_bed=true, ignoring existing wipe_tower position to recalculate" << std::endl;
+                                        }
 
                                         // Check if existing conf position is inside shrunk bed; if so, use it
                                         if (has_conf_pos) {
                                             // existing config is already in local bed coords (mm)
                                             Slic3r::Vec3d pt_local(double(conf_wtx), double(conf_wty), 0.0);
                                             Slic3r::BoundingBoxf3 wtbb_local(pt_local, pt_local);
-                                            Slic3r::BuildVolume bv(pc.printable_area.values, double(pc.printable_height));
+                                            Slic3r::BuildVolume bv(pc.printable_area.values, double(pc.printable_height), {}, {});
                                             auto st = bv.volume_state_bbox(wtbb_local, /*ignore_bottom=*/true);
                                             if (st == Slic3r::BuildVolume::ObjectState::Inside) {
                                                 tx_mm = pt_local(0); ty_mm = pt_local(1);
@@ -1091,6 +1436,10 @@ public:
 
 
                                 std::cout << "DEBUG: arrange: selected=" << selected.size() << ", excludes=" << params.excluded_regions.size() << ", bedpts=" << bed_pts.size() << std::endl;
+                                std::cout << "DEBUG: arrange params: bed_shrink_x=" << params.bed_shrink_x << ", bed_shrink_y=" << params.bed_shrink_y << std::endl;
+                                for (size_t i = 0; i < bed_pts.size(); ++i) {
+                                    std::cout << "DEBUG: bed_pts[" << i << "]=(" << Slic3r::unscale<double>(bed_pts[i].x()) << "," << Slic3r::unscale<double>(bed_pts[i].y()) << ")" << std::endl;
+                                }
                                 size_t dbg_n = std::min<size_t>(selected.size(), 3);
                                 for (size_t i = 0; i < dbg_n; ++i) {
                                     Slic3r::BoundingBox bb(selected[i].poly.contour.points);
@@ -1101,6 +1450,14 @@ public:
                                 // Build bed and arrange
                                 // Excluded regions already sized (wipe tower includes brim); no inflation on excluded regions here.
                                 Slic3r::arrangement::arrange(selected, params.excluded_regions, bed_pts, params);
+
+                                // Log arrange results
+                                for (size_t i = 0; i < selected.size(); ++i) {
+                                    const auto& ap = selected[i];
+                                    std::cout << "DEBUG: [arrange result] item[" << i << "] bed_idx=" << ap.bed_idx
+                                              << " translation=(" << Slic3r::unscale<double>(ap.translation.x()) << "," << Slic3r::unscale<double>(ap.translation.y()) << ")"
+                                              << " rotation=" << ap.rotation << std::endl;
+                                }
 
                                 // Apply transforms back to instances
                                 (void)Slic3r::apply_arrange_polys(selected, instances, nullptr);
@@ -1114,15 +1471,61 @@ public:
                                     std::cout << "WARN: apply() after arrange failed: " << e.what() << std::endl;
                                 }
 
+                                // After apply(), the wipe tower position may have been reset from project_config.
+                                // If center_on_bed is true, we need to re-force the calculated wipe tower position.
+                                if (center_on_bed) {
+                                    // Read the wipe tower position we saved in config earlier (before apply)
+                                    float saved_wtx = 0.f, saved_wty = 0.f;
+                                    bool has_saved_pos = false;
+                                    try {
+                                        if (auto* wtxopt = config->opt<Slic3r::ConfigOptionFloats>("wipe_tower_x", false)) {
+                                            if (!wtxopt->values.empty()) { saved_wtx = wtxopt->values[0]; has_saved_pos = true; }
+                                        }
+                                        if (auto* wtyopt = config->opt<Slic3r::ConfigOptionFloats>("wipe_tower_y", false)) {
+                                            if (!wtyopt->values.empty()) { saved_wty = wtyopt->values[0]; }
+                                        }
+                                    } catch (...) {}
+
+                                    if (has_saved_pos) {
+                                        std::cout << "DEBUG: Re-applying wipe tower position after apply(): [" << saved_wtx << "," << saved_wty << "]" << std::endl;
+                                        // Update model->wipe_tower.positions to reflect the calculated position
+                                        if (!model->wipe_tower.positions.empty()) {
+                                            model->wipe_tower.positions[0] = Slic3r::Vec2d(saved_wtx, saved_wty);
+                                        } else {
+                                            model->wipe_tower.positions.push_back(Slic3r::Vec2d(saved_wtx, saved_wty));
+                                        }
+                                        // Also update project_config to be consistent
+                                        try {
+                                            Slic3r::ConfigOptionFloats wtx_new, wty_new;
+                                            wtx_new.values = { saved_wtx };
+                                            wty_new.values = { saved_wty };
+                                            preset_bundle.project_config.set_key_value("wipe_tower_x", new Slic3r::ConfigOptionFloats(wtx_new));
+                                            preset_bundle.project_config.set_key_value("wipe_tower_y", new Slic3r::ConfigOptionFloats(wty_new));
+                                        } catch (...) {}
+                                    }
+                                }
+
                             } catch (...) {
                                 fixed = false;
                             }
+                            } // end if (false) - skip arrange algorithm
+                            std::cout << "DEBUG: [simple_reposition] fixed=" << (fixed ? "true" : "false") << std::endl;
+                            // Log instance offsets after arrange
+                            for (const auto* obj : model->objects) {
+                                for (const auto* inst : obj->instances) {
+                                    Slic3r::Vec3d off = inst->get_offset();
+                                    std::cout << "DEBUG: [AFTER arrange] obj='" << obj->name << "' inst_offset=(" << off(0) << "," << off(1) << "," << off(2) << ")" << std::endl;
+                                }
+                            }
                             if (fixed) {
                                 oob_msg.clear();
-                                if (!check_outside(oob_msg)) {
+                                bool still_outside = check_outside(oob_msg);
+                                std::cout << "DEBUG: [arrange] after arrange, still_outside=" << (still_outside ? "true" : "false") << ", msg='" << oob_msg << "'" << std::endl;
+                                if (!still_outside) {
                                     std::cout << "INFO: Realinhamento automático aplicado com sucesso para caber na mesa." << std::endl;
                                 } else {
-                                    // Ainda fora: se for Prime Tower, tentar reposicionar automaticamente para o centro da mesa
+                                    // Ainda fora: se for Prime Tower, tentar reposicionar automaticamente
+                                    // Evitar o centro se os objetos estao centralizados - usar canto superior direito
                                     bool tried_repos = false;
                                     if (oob_msg.find("Prime Tower") != std::string::npos) {
                                         tried_repos = true;
@@ -1137,10 +1540,61 @@ public:
                                                 maxx = std::max(maxx, (double)pt(0));
                                                 maxy = std::max(maxy, (double)pt(1));
                                             }
-                                            const double cx_local = 0.5 * (minx + maxx);
-                                            const double cy_local = 0.5 * (miny + maxy);
-                                            const float new_wtx = float(cx_local);
-                                            const float new_wty = float(cy_local);
+
+                                            // Get wipe tower size from config
+                                            double tower_w = 35.0;
+                                            try { if (auto *pw = config->opt<Slic3r::ConfigOptionFloat>("prime_tower_width", false)) tower_w = pw->value; } catch (...) {}
+
+                                            // Try to find a collision-free position for the wipe tower
+                                            // Priority: top-right corner, then bottom-right, top-left, bottom-left
+                                            std::vector<std::pair<double, double>> candidate_positions = {
+                                                { maxx - tower_w - 5.0, maxy - tower_w - 5.0 },  // Top-right
+                                                { maxx - tower_w - 5.0, miny + 5.0 },            // Bottom-right
+                                                { minx + 5.0, maxy - tower_w - 5.0 },            // Top-left
+                                                { minx + 5.0, miny + 5.0 }                       // Bottom-left
+                                            };
+
+                                            // Calculate objects bounding boxes for collision check
+                                            std::vector<Slic3r::BoundingBoxf3> obj_bboxes;
+                                            for (const auto* obj : model->objects) {
+                                                for (size_t i = 0; i < obj->instances.size(); ++i) {
+                                                    obj_bboxes.push_back(obj->instance_bounding_box(i));
+                                                }
+                                            }
+
+                                            double best_wtx = candidate_positions[0].first;
+                                            double best_wty = candidate_positions[0].second;
+                                            bool found_free = false;
+
+                                            for (const auto& pos : candidate_positions) {
+                                                double wt_x = pos.first;
+                                                double wt_y = pos.second;
+
+                                                // Check if this position collides with any object
+                                                bool collides = false;
+                                                for (const auto& bb : obj_bboxes) {
+                                                    if (wt_x < bb.max.x() && wt_x + tower_w > bb.min.x() &&
+                                                        wt_y < bb.max.y() && wt_y + tower_w > bb.min.y()) {
+                                                        collides = true;
+                                                        break;
+                                                    }
+                                                }
+
+                                                if (!collides) {
+                                                    best_wtx = wt_x;
+                                                    best_wty = wt_y;
+                                                    found_free = true;
+                                                    std::cout << "DEBUG: Found collision-free wipe tower position: [" << best_wtx << "," << best_wty << "]" << std::endl;
+                                                    break;
+                                                }
+                                            }
+
+                                            if (!found_free) {
+                                                std::cout << "WARN: All candidate positions collide with objects, using top-right corner" << std::endl;
+                                            }
+
+                                            const float new_wtx = float(best_wtx);
+                                            const float new_wty = float(best_wty);
 
                                             Slic3r::ConfigOptionFloats wtx, wty;
                                             wtx.values = { new_wtx };
@@ -1189,10 +1643,49 @@ public:
                                             maxx = std::max(maxx, (double)pt(0));
                                             maxy = std::max(maxy, (double)pt(1));
                                         }
-                                        const double cx_local = 0.5 * (minx + maxx);
-                                        const double cy_local = 0.5 * (miny + maxy);
-                                        const float new_wtx = float(cx_local);
-                                        const float new_wty = float(cy_local);
+
+                                        // Get wipe tower size from config
+                                        double tower_w = 35.0;
+                                        try { if (auto *pw = config->opt<Slic3r::ConfigOptionFloat>("prime_tower_width", false)) tower_w = pw->value; } catch (...) {}
+
+                                        // Find collision-free position for wipe tower
+                                        std::vector<std::pair<double, double>> candidate_positions = {
+                                            { maxx - tower_w - 5.0, maxy - tower_w - 5.0 },
+                                            { maxx - tower_w - 5.0, miny + 5.0 },
+                                            { minx + 5.0, maxy - tower_w - 5.0 },
+                                            { minx + 5.0, miny + 5.0 }
+                                        };
+
+                                        std::vector<Slic3r::BoundingBoxf3> obj_bboxes;
+                                        for (const auto* obj : model->objects) {
+                                            for (size_t i = 0; i < obj->instances.size(); ++i) {
+                                                obj_bboxes.push_back(obj->instance_bounding_box(i));
+                                            }
+                                        }
+
+                                        double best_wtx = candidate_positions[0].first;
+                                        double best_wty = candidate_positions[0].second;
+
+                                        for (const auto& pos : candidate_positions) {
+                                            double wt_x = pos.first;
+                                            double wt_y = pos.second;
+                                            bool collides = false;
+                                            for (const auto& bb : obj_bboxes) {
+                                                if (wt_x < bb.max.x() && wt_x + tower_w > bb.min.x() &&
+                                                    wt_y < bb.max.y() && wt_y + tower_w > bb.min.y()) {
+                                                    collides = true;
+                                                    break;
+                                                }
+                                            }
+                                            if (!collides) {
+                                                best_wtx = wt_x;
+                                                best_wty = wt_y;
+                                                break;
+                                            }
+                                        }
+
+                                        const float new_wtx = float(best_wtx);
+                                        const float new_wty = float(best_wty);
 
                                         Slic3r::ConfigOptionFloats wtx, wty;
                                         wtx.values = { new_wtx };
@@ -1211,7 +1704,7 @@ public:
 
                                         oob_msg.clear();
                                         if (!check_outside(oob_msg)) {
-                                            std::cout << "INFO: Prime Tower reposicionada automaticamente para o centro da mesa (após falha no realinhamento)." << std::endl;
+                                            std::cout << "INFO: Prime Tower reposicionada automaticamente para posicao livre." << std::endl;
                                         } else {
                                             last_error = oob_msg + " Mesmo após tentar reposicionar automaticamente a Prime Tower.";
                                             return false;
@@ -1388,6 +1881,185 @@ public:
                 std::cout << "DEBUG: ========================================" << std::endl;
                 std::cout.flush();
 
+                // ============================================================
+                // PRE-SLICE VALIDATION: Check object positioning and collisions
+                // ============================================================
+                std::cout << "DEBUG: ========================================" << std::endl;
+                std::cout << "DEBUG: PRE-SLICE VALIDATION CHECK" << std::endl;
+                std::cout << "DEBUG: ========================================" << std::endl;
+
+                try {
+                    // Build the BuildVolume from printable_area
+                    std::vector<Slic3r::Vec2d> printable_area;
+                    double printable_height = 256.0; // default
+
+                    try {
+                        if (auto* pa = config->opt<Slic3r::ConfigOptionPoints>("printable_area", false)) {
+                            for (const auto& pt : pa->values) {
+                                printable_area.push_back(Slic3r::Vec2d(pt.x(), pt.y()));
+                            }
+                        }
+                        if (auto* ph = config->opt<Slic3r::ConfigOptionFloat>("printable_height", false)) {
+                            printable_height = ph->value;
+                        }
+                    } catch (...) {}
+
+                    if (printable_area.size() >= 3) {
+                        Slic3r::BuildVolume build_volume(printable_area, printable_height, {}, {});
+                        Slic3r::BoundingBoxf3 bed_bb = build_volume.bounding_volume();
+
+                        std::cout << "DEBUG: Build volume: [" << bed_bb.min.x() << ", " << bed_bb.min.y() << "] to ["
+                                  << bed_bb.max.x() << ", " << bed_bb.max.y() << "] height=" << printable_height << std::endl;
+
+                        std::vector<std::string> validation_errors;
+                        std::vector<std::string> validation_warnings;
+
+                        // Check each object instance position
+                        for (const auto* obj : model->objects) {
+                            for (size_t inst_idx = 0; inst_idx < obj->instances.size(); ++inst_idx) {
+                                const auto* inst = obj->instances[inst_idx];
+
+                                // Get instance bounding box in world coordinates
+                                Slic3r::BoundingBoxf3 inst_bb = obj->instance_bounding_box(inst_idx);
+
+                                // Check against build volume
+                                auto state = build_volume.volume_state_bbox(inst_bb, /*ignore_bottom=*/true);
+
+                                std::string obj_name = obj->name.empty() ? ("Object_" + std::to_string(inst_idx)) : obj->name;
+                                std::string inst_name = obj_name + " (instance " + std::to_string(inst_idx) + ")";
+
+                                std::cout << "DEBUG: Checking " << inst_name << ": bb=[" << inst_bb.min.x() << "," << inst_bb.min.y()
+                                          << " to " << inst_bb.max.x() << "," << inst_bb.max.y() << "]";
+
+                                switch (state) {
+                                    case Slic3r::BuildVolume::ObjectState::Inside:
+                                        std::cout << " -> INSIDE (OK)" << std::endl;
+                                        break;
+                                    case Slic3r::BuildVolume::ObjectState::Colliding:
+                                        std::cout << " -> COLLIDING (ERROR)" << std::endl;
+                                        validation_errors.push_back(inst_name + " is colliding with the build volume boundary");
+                                        break;
+                                    case Slic3r::BuildVolume::ObjectState::Outside:
+                                        std::cout << " -> OUTSIDE (ERROR)" << std::endl;
+                                        validation_errors.push_back(inst_name + " is completely outside the print bed");
+                                        break;
+                                    case Slic3r::BuildVolume::ObjectState::Below:
+                                        std::cout << " -> BELOW (WARNING)" << std::endl;
+                                        validation_warnings.push_back(inst_name + " is below the print bed");
+                                        break;
+                                    case Slic3r::BuildVolume::ObjectState::Limited:
+                                        std::cout << " -> LIMITED (WARNING)" << std::endl;
+                                        validation_warnings.push_back(inst_name + " is in a limited area");
+                                        break;
+                                }
+
+                                // Additional check: explicit coordinate bounds
+                                if (inst_bb.min.x() < bed_bb.min.x() - 1.0 || inst_bb.max.x() > bed_bb.max.x() + 1.0 ||
+                                    inst_bb.min.y() < bed_bb.min.y() - 1.0 || inst_bb.max.y() > bed_bb.max.y() + 1.0) {
+                                    std::string coord_error = inst_name + " extends outside print area: object=[" +
+                                        std::to_string(inst_bb.min.x()) + "," + std::to_string(inst_bb.min.y()) + " to " +
+                                        std::to_string(inst_bb.max.x()) + "," + std::to_string(inst_bb.max.y()) + "], bed=[" +
+                                        std::to_string(bed_bb.min.x()) + "," + std::to_string(bed_bb.min.y()) + " to " +
+                                        std::to_string(bed_bb.max.x()) + "," + std::to_string(bed_bb.max.y()) + "]";
+                                    std::cout << "DEBUG: " << coord_error << std::endl;
+                                    // Only add if not already detected
+                                    if (state == Slic3r::BuildVolume::ObjectState::Inside) {
+                                        validation_errors.push_back(coord_error);
+                                    }
+                                }
+                            }
+                        }
+
+                        // Check wipe tower position if enabled
+                        if (print->has_wipe_tower()) {
+                            double wt_x = 0, wt_y = 0;
+                            try {
+                                if (auto* wtx = config->opt<Slic3r::ConfigOptionFloats>("wipe_tower_x", false)) {
+                                    if (!wtx->values.empty()) wt_x = wtx->values[0];
+                                }
+                                if (auto* wty = config->opt<Slic3r::ConfigOptionFloats>("wipe_tower_y", false)) {
+                                    if (!wty->values.empty()) wt_y = wty->values[0];
+                                }
+                            } catch (...) {}
+
+                            double wt_width = 60.0; // default
+                            try {
+                                if (auto* pw = config->opt<Slic3r::ConfigOptionFloat>("prime_tower_width", false)) {
+                                    wt_width = pw->value;
+                                }
+                            } catch (...) {}
+
+                            // Wipe tower bounding box (assuming square-ish shape)
+                            Slic3r::BoundingBoxf3 wt_bb(
+                                Slic3r::Vec3d(wt_x, wt_y, 0),
+                                Slic3r::Vec3d(wt_x + wt_width, wt_y + wt_width, printable_height)
+                            );
+
+                            std::cout << "DEBUG: Wipe tower position: [" << wt_x << "," << wt_y << "] width=" << wt_width << std::endl;
+
+                            auto wt_state = build_volume.volume_state_bbox(wt_bb, /*ignore_bottom=*/true);
+                            if (wt_state != Slic3r::BuildVolume::ObjectState::Inside) {
+                                std::string wt_error = "Wipe/Prime tower is outside print area at position (" +
+                                    std::to_string(wt_x) + ", " + std::to_string(wt_y) + ")";
+                                std::cout << "DEBUG: " << wt_error << std::endl;
+                                validation_errors.push_back(wt_error);
+                            }
+
+                            // Check wipe tower collision with objects
+                            for (const auto* obj : model->objects) {
+                                for (size_t inst_idx = 0; inst_idx < obj->instances.size(); ++inst_idx) {
+                                    Slic3r::BoundingBoxf3 inst_bb = obj->instance_bounding_box(inst_idx);
+                                    // Check XY overlap (ignore Z for tower collision)
+                                    if (wt_bb.min.x() < inst_bb.max.x() && wt_bb.max.x() > inst_bb.min.x() &&
+                                        wt_bb.min.y() < inst_bb.max.y() && wt_bb.max.y() > inst_bb.min.y()) {
+                                        std::string obj_name = obj->name.empty() ? ("Object_" + std::to_string(inst_idx)) : obj->name;
+                                        std::string collision_error = "Wipe tower collides with " + obj_name + " (instance " +
+                                            std::to_string(inst_idx) + ")";
+                                        std::cout << "DEBUG: " << collision_error << std::endl;
+                                        validation_errors.push_back(collision_error);
+                                    }
+                                }
+                            }
+                        }
+
+                        // Report validation results
+                        std::cout << "DEBUG: ========================================" << std::endl;
+                        std::cout << "DEBUG: VALIDATION RESULTS:" << std::endl;
+                        std::cout << "DEBUG:   Errors: " << validation_errors.size() << std::endl;
+                        std::cout << "DEBUG:   Warnings: " << validation_warnings.size() << std::endl;
+
+                        for (const auto& warn : validation_warnings) {
+                            std::cout << "DEBUG: WARNING: " << warn << std::endl;
+                        }
+                        for (const auto& err : validation_errors) {
+                            std::cout << "DEBUG: ERROR: " << err << std::endl;
+                        }
+                        std::cout << "DEBUG: ========================================" << std::endl;
+
+                        // If there are errors, throw exception to prevent slicing
+                        if (!validation_errors.empty()) {
+                            std::string error_msg = "Pre-slice validation failed with " + std::to_string(validation_errors.size()) + " error(s):\n";
+                            for (const auto& err : validation_errors) {
+                                error_msg += "  - " + err + "\n";
+                            }
+                            throw std::runtime_error(error_msg);
+                        }
+
+                        std::cout << "DEBUG: Pre-slice validation PASSED" << std::endl;
+                    } else {
+                        std::cout << "DEBUG: Skipping validation - no valid printable_area defined" << std::endl;
+                    }
+                } catch (const std::runtime_error& ve) {
+                    // Re-throw validation errors
+                    throw;
+                } catch (const std::exception& e) {
+                    std::cout << "DEBUG: Validation check failed with exception: " << e.what() << std::endl;
+                    // Continue with slicing - don't block on validation failures
+                }
+
+                std::cout << "DEBUG: ========================================" << std::endl;
+                std::cout.flush();
+
                 print->process();
 
                 std::cout << "DEBUG: ========================================" << std::endl;
@@ -1489,7 +2161,7 @@ public:
             // Final safety validation: block G-code export if any element is outside the printable area
             try {
                 const auto &pc_final = print->config();
-                Slic3r::BuildVolume build_volume_final(pc_final.printable_area.values, pc_final.printable_height);
+                Slic3r::BuildVolume build_volume_final(pc_final.printable_area.values, pc_final.printable_height, {}, {});
                 if (build_volume_final.valid()) {
                     std::string oob_msg_final;
                     bool outside_final = false;
@@ -1568,6 +2240,123 @@ public:
 
 
 
+                // CRITICAL: Synchronize flush_volumes_matrix in full_print_config() BEFORE export
+                // This prevents the "Flush volumes matrix do not match to the correct size" error
+                std::cout << "DEBUG: [PRE-SYNC] About to synchronize flush_volumes in full_print_config()" << std::endl;
+                std::cout.flush();
+                try {
+                    auto& fpc = const_cast<Slic3r::DynamicPrintConfig&>(print->full_print_config());
+                    auto* fil_colour = fpc.opt<Slic3r::ConfigOptionStrings>("filament_colour", false);
+                    auto* flush_matrix = fpc.opt<Slic3r::ConfigOptionFloats>("flush_volumes_matrix", false);
+                    auto* flush_vector = fpc.opt<Slic3r::ConfigOptionFloats>("flush_volumes_vector", false);
+                    auto* flush_multiplier = fpc.opt<Slic3r::ConfigOptionFloats>("flush_multiplier", false);
+
+                    size_t filament_count = fil_colour ? fil_colour->values.size() : 1;
+                    size_t heads_count = flush_multiplier ? flush_multiplier->values.size() : 1;
+                    size_t expected_matrix_size = filament_count * filament_count * heads_count;
+
+                    std::cout << "DEBUG: [BEFORE EXPORT] Synchronizing flush_volumes_matrix - filament_count=" << filament_count
+                              << ", heads_count=" << heads_count
+                              << ", expected_matrix_size=" << expected_matrix_size << std::endl;
+                    std::cout.flush();
+
+                    if (flush_matrix) {
+                        size_t current_size = flush_matrix->values.size();
+                        if (current_size != expected_matrix_size) {
+                            std::cout << "DEBUG: [BEFORE EXPORT] Resizing flush_volumes_matrix from " << current_size
+                                      << " to " << expected_matrix_size << std::endl;
+                            // Create a proper matrix: diagonal = 0 (same filament), off-diagonal = 280 (default purge)
+                            std::vector<double> new_matrix(expected_matrix_size, 280.0);
+                            for (size_t h = 0; h < heads_count; ++h) {
+                                for (size_t i = 0; i < filament_count; ++i) {
+                                    // Set diagonal elements to 0 (no purge needed for same filament)
+                                    size_t idx = h * (filament_count * filament_count) + i * filament_count + i;
+                                    new_matrix[idx] = 0.0;
+                                }
+                            }
+                            flush_matrix->values = new_matrix;
+                        }
+                    } else if (filament_count > 0) {
+                        // flush_matrix doesn't exist, create it
+                        std::cout << "DEBUG: [BEFORE EXPORT] Creating flush_volumes_matrix with size " << expected_matrix_size << std::endl;
+                        std::vector<double> new_matrix(expected_matrix_size, 280.0);
+                        for (size_t h = 0; h < heads_count; ++h) {
+                            for (size_t i = 0; i < filament_count; ++i) {
+                                size_t idx = h * (filament_count * filament_count) + i * filament_count + i;
+                                new_matrix[idx] = 0.0;
+                            }
+                        }
+                        fpc.set_key_value("flush_volumes_matrix", new Slic3r::ConfigOptionFloats(new_matrix));
+                    }
+
+                    // Also synchronize flush_volumes_vector (2 values per filament)
+                    size_t expected_vector_size = 2 * filament_count;
+                    if (flush_vector) {
+                        size_t current_size = flush_vector->values.size();
+                        if (current_size != expected_vector_size) {
+                            std::cout << "DEBUG: [BEFORE EXPORT] Resizing flush_volumes_vector from " << current_size
+                                      << " to " << expected_vector_size << std::endl;
+                            std::vector<double> new_vector(expected_vector_size, 140.0);
+                            flush_vector->values = new_vector;
+                        }
+                    } else if (filament_count > 0) {
+                        std::cout << "DEBUG: [BEFORE EXPORT] Creating flush_volumes_vector with size " << expected_vector_size << std::endl;
+                        std::vector<double> new_vector(expected_vector_size, 140.0);
+                        fpc.set_key_value("flush_volumes_vector", new Slic3r::ConfigOptionFloats(new_vector));
+                    }
+
+                    // Ensure flush_multiplier has correct size
+                    if (flush_multiplier && flush_multiplier->values.empty()) {
+                        flush_multiplier->values.push_back(1.0);
+                    } else if (!flush_multiplier) {
+                        fpc.set_key_value("flush_multiplier", new Slic3r::ConfigOptionFloats({1.0}));
+                    }
+
+                    // FIX: Clear bed_exclude_area to prevent crash in OrcaSlicer GUI when opening the 3MF
+                    // The default value of ["0x0"] is malformed (not a multiple of 4 points for rectangles)
+                    // This causes a crash in Model::setPrintSpeedTable() when diff() returns an empty polygon list
+                    auto* bed_exclude = fpc.opt<Slic3r::ConfigOptionPoints>("bed_exclude_area", false);
+                    if (bed_exclude && !bed_exclude->values.empty()) {
+                        // Only clear if it's the default malformed value (single point at 0,0)
+                        if (bed_exclude->values.size() == 1 &&
+                            bed_exclude->values[0].x() == 0.0 && bed_exclude->values[0].y() == 0.0) {
+                            std::cout << "DEBUG: Clearing malformed bed_exclude_area (default [0x0]) to prevent OrcaSlicer crash" << std::endl;
+                            bed_exclude->values.clear();
+                        } else if (bed_exclude->values.size() % 4 != 0) {
+                            // If not a multiple of 4 points, clear it (malformed)
+                            std::cout << "DEBUG: Clearing malformed bed_exclude_area (size " << bed_exclude->values.size()
+                                      << " is not a multiple of 4) to prevent OrcaSlicer crash" << std::endl;
+                            bed_exclude->values.clear();
+                        }
+                    }
+                } catch (const std::exception& e) {
+                    std::cout << "WARN: Failed to synchronize flush_volumes_matrix: " << e.what() << std::endl;
+                }
+
+                // Verify synchronization was successful
+                try {
+                    const auto& fpc = print->full_print_config();
+                    auto* fil_colour = fpc.option<Slic3r::ConfigOptionStrings>("filament_colour");
+                    auto* flush_matrix = fpc.option<Slic3r::ConfigOptionFloats>("flush_volumes_matrix");
+                    auto* flush_multiplier = fpc.option<Slic3r::ConfigOptionFloats>("flush_multiplier");
+
+                    size_t filament_count = fil_colour ? fil_colour->values.size() : 1;
+                    size_t heads_count = flush_multiplier ? flush_multiplier->values.size() : 1;
+                    size_t expected_matrix_size = filament_count * filament_count * heads_count;
+                    size_t actual_matrix_size = flush_matrix ? flush_matrix->values.size() : 0;
+
+                    std::cout << "DEBUG: [VERIFICATION] filament_count=" << filament_count
+                              << ", heads_count=" << heads_count
+                              << ", expected_matrix=" << expected_matrix_size
+                              << ", actual_matrix=" << actual_matrix_size << std::endl;
+
+                    if (actual_matrix_size != expected_matrix_size && filament_count > 1) {
+                        std::cout << "ERROR: flush_volumes_matrix size mismatch! Will cause error in append_full_config" << std::endl;
+                    }
+                } catch (const std::exception& e) {
+                    std::cout << "WARN: Failed to verify flush_volumes_matrix: " << e.what() << std::endl;
+                }
+
                 // Export raw G-code first
                 Slic3r::GCodeProcessorResult proc_result;
                 std::cout << "DEBUG: Exporting intermediate G-code to: " << tmp_gcode.string() << std::endl;
@@ -1594,42 +2383,31 @@ public:
                 // Note: This works for 99% of models, but may segfault on some multi-object models
 
 #if 1  // 3MF EXPORT ENABLED
-                std::cout << "🔍 [3MF-1] Starting 3MF export preparation" << std::endl;
-
                 // Prepare PlateData for store_bbs_3mf
                 Slic3r::PlateData plate;
                 // FIX: Always use plate_index = 0 for single-plate export
                 // OrcaSlicer uses (plate_index + 1) for file naming, so:
-                // - plate_index = 0 → generates plate_1.gcode ✅
-                // - plate_index = 1 → generates plate_2.gcode ❌
+                // - plate_index = 0 → generates plate_1.gcode
+                // - plate_index = 1 → generates plate_2.gcode
                 // Since we're exporting only ONE plate (the current one), it should always be index 0
                 plate.plate_index = 0;
                 plate.is_sliced_valid = true;
 
-                std::cout << "🔍 [3MF-2] PlateData created, plate_index=" << plate.plate_index << " (input plate_id=" << plate_id << ")" << std::endl;
-
                 // Set gcode_file so it gets embedded in the 3MF
                 plate.gcode_file = tmp_gcode.string();
-                std::cout << "🔍 [3MF-3] gcode_file set to: " << plate.gcode_file << std::endl;
 
                 plate.parse_filament_info(&proc_result);
-                std::cout << "🔍 [3MF-4] parse_filament_info completed, slice_filaments_info.size=" << plate.slice_filaments_info.size() << std::endl;
 
                 // CRITICAL: Populate objects_and_instances to match OrcaSlicer GUI behavior
                 // This tells the 3MF which objects belong to this plate
-                std::cout << "🔍 [3MF-4a] Populating objects_and_instances for " << model->objects.size() << " objects" << std::endl;
                 for (size_t obj_idx = 0; obj_idx < model->objects.size(); ++obj_idx) {
                     const auto* obj = model->objects[obj_idx];
                     if (obj) {
                         for (size_t inst_idx = 0; inst_idx < obj->instances.size(); ++inst_idx) {
                             plate.objects_and_instances.emplace_back(static_cast<int>(obj_idx), static_cast<int>(inst_idx));
-                            std::cout << "🔍 [3MF-4b] Added object " << obj_idx << ", instance " << inst_idx << std::endl;
                         }
                     }
                 }
-                std::cout << "🔍 [3MF-4c] Total objects_and_instances: " << plate.objects_and_instances.size() << std::endl;
-
-                std::cout << "🔍 [3MF-5] Starting plate.config population" << std::endl;
 
                 // Populate plate.config with print-level overrides so that OrcaSlicer GUI can display them
                 // This ensures that when the exported 3MF is opened in OrcaSlicer, the modified parameters
@@ -1637,7 +2415,6 @@ public:
                 try {
                     // Copy the override keys and values into plate.config
                     if (!print_overrides_keys.empty()) {
-                        std::cout << "🔍 [3MF-6] Copying " << print_overrides_keys.size() << " override keys to plate.config" << std::endl;
                         for (const auto& key : print_overrides_keys) {
                             if (const Slic3r::ConfigOption* opt = print_cfg_overrides.optptr(key)) {
                                 plate.config.set_key_value(key, opt->clone());
@@ -1653,9 +2430,6 @@ public:
                         auto* diff_opt = new Slic3r::ConfigOptionStrings();
                         diff_opt->values.push_back(diff_str);
                         plate.config.set_key_value("different_settings_to_system", diff_opt);
-                        std::cout << "DEBUG: Populated plate.config with " << print_overrides_keys.size()
-                                  << " override keys for 3MF metadata" << std::endl;
-                        std::cout << "DEBUG: different_settings_to_system = " << diff_str << std::endl;
                     }
 
                     // Also include curr_bed_type in plate.config if it's set in the working config
@@ -1663,7 +2437,6 @@ public:
                     if (config && config->has("curr_bed_type")) {
                         if (const Slic3r::ConfigOption* bed_opt = config->optptr("curr_bed_type")) {
                             plate.config.set_key_value("curr_bed_type", bed_opt->clone());
-                            std::cout << "DEBUG: Included curr_bed_type in plate.config = " << bed_opt->serialize() << std::endl;
                         }
                     }
 
@@ -1687,7 +2460,6 @@ public:
                                 auto* diff_opt_cfg = new Slic3r::ConfigOptionStrings();
                                 diff_opt_cfg->values.push_back(diff_str_cfg);
                                 config->set_key_value("different_settings_to_system", diff_opt_cfg);
-                                std::cout << "DEBUG: Set different_settings_to_system on main config: " << diff_str_cfg << std::endl;
                             }
                         } catch (const std::exception& e) {
                             std::cout << "WARN: Failed to copy overrides into main config: " << e.what() << std::endl;
@@ -1701,8 +2473,6 @@ public:
                     std::cout << "WARN: Failed to populate plate.config with overrides (unknown error)" << std::endl;
                 }
 
-                std::cout << "🔍 [3MF-9] Starting plate metadata population" << std::endl;
-
                 // Fill additional plate metadata required by Bambu slice_info.config
                 try {
                     // prediction (seconds as string)
@@ -1712,21 +2482,35 @@ public:
                     // Record in impl for API propagation
                     last_estimated_time_sec = static_cast<double>(pred_secs);
                 } catch (...) { /* best-effort */ }
+
                 try {
                     // filament info: type, color, filament_id; and total weight
                     double total_g = 0.0;
+
+                    // Get the arrays safely first (these are coStrings, not coString)
+                    const Slic3r::ConfigOptionStrings* filament_types = nullptr;
+                    const Slic3r::ConfigOptionStrings* filament_colours = nullptr;
+                    const Slic3r::ConfigOptionStrings* filament_ids_opt = nullptr;
+                    if (config) {
+                        filament_types = dynamic_cast<const Slic3r::ConfigOptionStrings*>(config->option("filament_type", false));
+                        filament_colours = dynamic_cast<const Slic3r::ConfigOptionStrings*>(config->option("filament_colour", false));
+                        filament_ids_opt = dynamic_cast<const Slic3r::ConfigOptionStrings*>(config->option("filament_ids", false));
+                    }
+
                     for (auto &fi : plate.slice_filaments_info) {
-                        const unsigned int e = static_cast<unsigned int>(fi.id);
-                        if (config && config->option("filament_type", false)) {
-                            const std::string &t = config->opt_string("filament_type", e);
+                        const size_t e = static_cast<size_t>(fi.id);
+
+                        // Safe access with bounds checking
+                        if (filament_types && e < filament_types->values.size()) {
+                            const std::string &t = filament_types->values[e];
                             if (!t.empty()) fi.type = t;
                         }
-                        if (config && config->option("filament_colour", false)) {
-                            const std::string &c = config->opt_string("filament_colour", e);
+                        if (filament_colours && e < filament_colours->values.size()) {
+                            const std::string &c = filament_colours->values[e];
                             if (!c.empty()) fi.color = c;
                         }
-                        if (config && config->option("filament_ids", false)) {
-                            const std::string &fid = config->opt_string("filament_ids", e);
+                        if (filament_ids_opt && e < filament_ids_opt->values.size()) {
+                            const std::string &fid = filament_ids_opt->values[e];
                             if (!fid.empty()) fi.filament_id = fid;
                         }
                         total_g += static_cast<double>(fi.used_g);
@@ -1751,27 +2535,181 @@ public:
                     plate.printer_model_id = plate_printer_model_id;
                 }
 
-                std::cout << "🔍 [3MF-10] Plate metadata populated, building StoreParams" << std::endl;
-
                 // Build StoreParams
                 Slic3r::StoreParams sp;
                 sp.path = output_file.c_str();
                 sp.model = model.get();
                 sp.config = config.get();
 
-                std::cout << "🔍 [3MF-11] StoreParams created, model objects count=" << model->objects.size() << std::endl;
+                // FIX: Also clear bed_exclude_area in the config that will be serialized to project_settings.config
+                // The previous fix only cleared it in full_print_config (fpc), but sp.config is a different object
+                try {
+                    auto* bed_exclude_cfg = config->opt<Slic3r::ConfigOptionPoints>("bed_exclude_area", false);
+                    if (bed_exclude_cfg && !bed_exclude_cfg->values.empty()) {
+                        if (bed_exclude_cfg->values.size() == 1 &&
+                            bed_exclude_cfg->values[0].x() == 0.0 && bed_exclude_cfg->values[0].y() == 0.0) {
+                            std::cout << "DEBUG: Clearing malformed bed_exclude_area in sp.config (default [0x0])" << std::endl;
+                            bed_exclude_cfg->values.clear();
+                        } else if (bed_exclude_cfg->values.size() % 4 != 0) {
+                            std::cout << "DEBUG: Clearing malformed bed_exclude_area in sp.config (size "
+                                      << bed_exclude_cfg->values.size() << " is not a multiple of 4)" << std::endl;
+                            bed_exclude_cfg->values.clear();
+                        }
+                    }
+                } catch (...) {
+                    // best-effort
+                }
+
+                // FIX: Ensure printable_area has valid 4 points (rectangle) instead of malformed ['0x0']
+                try {
+                    auto* printable_area_cfg = config->opt<Slic3r::ConfigOptionPoints>("printable_area", false);
+                    if (printable_area_cfg) {
+                        bool needs_fix = false;
+                        if (printable_area_cfg->values.size() == 1 &&
+                            printable_area_cfg->values[0].x() == 0.0 && printable_area_cfg->values[0].y() == 0.0) {
+                            needs_fix = true;
+                        } else if (printable_area_cfg->values.size() < 4) {
+                            needs_fix = true;
+                        }
+                        if (needs_fix) {
+                            std::cout << "DEBUG: Fixing malformed printable_area (was size "
+                                      << printable_area_cfg->values.size() << ") to default 256x256" << std::endl;
+                            printable_area_cfg->values.clear();
+                            printable_area_cfg->values.push_back(Slic3r::Vec2d(0, 0));
+                            printable_area_cfg->values.push_back(Slic3r::Vec2d(256, 0));
+                            printable_area_cfg->values.push_back(Slic3r::Vec2d(256, 256));
+                            printable_area_cfg->values.push_back(Slic3r::Vec2d(0, 256));
+                        }
+                    }
+                } catch (...) {
+                    // best-effort
+                }
+
+                // FIX: Ensure extruder_offset has valid values instead of malformed ['0x0']
+                try {
+                    auto* extruder_offset_cfg = config->opt<Slic3r::ConfigOptionPoints>("extruder_offset", false);
+                    if (extruder_offset_cfg && !extruder_offset_cfg->values.empty()) {
+                        // extruder_offset should have one point per extruder, but a single [0x0] is valid
+                        // The issue is when the format is wrong. For now, ensure at least one valid point exists.
+                        if (extruder_offset_cfg->values.size() == 1 &&
+                            extruder_offset_cfg->values[0].x() == 0.0 && extruder_offset_cfg->values[0].y() == 0.0) {
+                            // This is actually valid (no offset for single extruder), leave it
+                            std::cout << "DEBUG: extruder_offset is [0x0] - valid for single extruder" << std::endl;
+                        }
+                    }
+                } catch (...) {
+                    // best-effort
+                }
+
+                // FIX: Propagate preset IDs for display in OrcaSlicer GUI
+                // Priority: 1) Custom names from SlicingParams, 2) Project presets from 3MF, 3) Preset bundle
+                try {
+                    std::string printer_id;
+                    std::string print_id;
+                    std::vector<std::string> filament_ids;
+
+                    // Determine how many filaments are actually used
+                    // Use saved_filament_colours (original 3MF colors) if available, as config may have been trimmed
+                    size_t used_filament_count = 1;
+                    if (!saved_filament_colours.empty()) {
+                        used_filament_count = saved_filament_colours.size();
+                        std::cout << "DEBUG: Used filament count from saved_filament_colours: " << used_filament_count << std::endl;
+                    } else if (detected_extruders > 0) {
+                        used_filament_count = detected_extruders;
+                        std::cout << "DEBUG: Used filament count from detected_extruders: " << used_filament_count << std::endl;
+                    } else if (auto* fil_colour = config->opt<Slic3r::ConfigOptionStrings>("filament_colour", false)) {
+                        used_filament_count = std::max(size_t(1), fil_colour->values.size());
+                        std::cout << "DEBUG: Used filament count from config filament_colour: " << used_filament_count << std::endl;
+                    }
+                    std::cout << "DEBUG: Final used filament count for profile IDs: " << used_filament_count << std::endl;
+
+                    // Priority 1: Custom display names from SlicingParams (highest priority)
+                    if (!custom_printer_profile_name.empty()) {
+                        printer_id = custom_printer_profile_name;
+                    }
+                    if (!custom_process_profile_name.empty()) {
+                        print_id = custom_process_profile_name;
+                    }
+                    // If custom filament profile name is provided, apply to ALL used filaments
+                    if (!custom_filament_profile_name.empty()) {
+                        for (size_t i = 0; i < used_filament_count; ++i) {
+                            filament_ids.push_back(custom_filament_profile_name);
+                        }
+                        std::cout << "DEBUG: Applied custom filament profile '" << custom_filament_profile_name
+                                  << "' to " << used_filament_count << " filament slots" << std::endl;
+                    }
+
+                    // Priority 2: Project presets from loaded 3MF
+                    if (printer_id.empty() && !project_printer_preset.empty()) {
+                        printer_id = project_printer_preset;
+                    }
+                    if (print_id.empty() && !project_print_preset.empty()) {
+                        print_id = project_print_preset;
+                    }
+                    // If no custom filament and project has one, apply to all used filaments
+                    if (filament_ids.empty() && !project_filament_preset.empty()) {
+                        for (size_t i = 0; i < used_filament_count; ++i) {
+                            filament_ids.push_back(project_filament_preset);
+                        }
+                    }
+
+                    // Priority 3: Currently selected presets from preset_bundle (fallback)
+                    if (printer_id.empty()) {
+                        std::string sel = preset_bundle.printers.get_selected_preset_name();
+                        if (!sel.empty() && sel != "- default -" && sel != "Default Printer") {
+                            printer_id = sel;
+                        }
+                    }
+                    if (print_id.empty()) {
+                        std::string sel = preset_bundle.prints.get_selected_preset_name();
+                        if (!sel.empty() && sel != "- default -" && sel != "Default Setting") {
+                            print_id = sel;
+                        }
+                    }
+                    if (filament_ids.empty()) {
+                        for (const auto& fp : preset_bundle.filament_presets) {
+                            if (!fp.empty() && fp != "- default -" && fp != "Default Filament") {
+                                filament_ids.push_back(fp);
+                            }
+                        }
+                        // Trim to used_filament_count if we got more from preset_bundle
+                        if (filament_ids.size() > used_filament_count) {
+                            filament_ids.resize(used_filament_count);
+                        }
+                        // Or expand if needed (use first filament ID for all)
+                        while (filament_ids.size() < used_filament_count && !filament_ids.empty()) {
+                            filament_ids.push_back(filament_ids[0]);
+                        }
+                    }
+
+                    // Set the IDs in config for serialization
+                    if (!printer_id.empty()) {
+                        config->set_key_value("printer_settings_id", new Slic3r::ConfigOptionString(printer_id));
+                        std::cout << "DEBUG: Set printer_settings_id=" << printer_id << std::endl;
+                    }
+                    if (!print_id.empty()) {
+                        config->set_key_value("print_settings_id", new Slic3r::ConfigOptionString(print_id));
+                        std::cout << "DEBUG: Set print_settings_id=" << print_id << std::endl;
+                    }
+                    if (!filament_ids.empty()) {
+                        config->set_key_value("filament_settings_id", new Slic3r::ConfigOptionStrings(filament_ids));
+                        std::cout << "DEBUG: Set filament_settings_id with " << filament_ids.size() << " entries: ";
+                        for (const auto& fid : filament_ids) std::cout << "'" << fid << "' ";
+                        std::cout << std::endl;
+                    }
+                } catch (const std::exception& e) {
+                    std::cout << "WARN: Failed to propagate preset IDs: " << e.what() << std::endl;
+                } catch (...) {
+                    // best-effort
+                }
 
                 // SIMPLIFIED: Export only the current plate without dummy plates
                 // This avoids potential issues with empty PlateData structures
                 Slic3r::PlateDataPtrs pd_list;
                 pd_list.push_back(&plate);
 
-                std::cout << "🔍 [3MF-12] Plate list created, total plates=" << pd_list.size() << std::endl;
-
                 sp.plate_data_list = pd_list;
                 sp.export_plate_idx = 0; // Always 0 since we only have one plate in the list
-
-                std::cout << "🔍 [3MF-13] Setting strategy flags" << std::endl;
 
                 // Strategy: Generate 3MF with G-code only (no 3D model)
                 // SkipModel: Skip embedding the 3D model mesh in the 3MF (only include G-code, thumbnails, metadata)
@@ -1786,10 +2724,6 @@ public:
                               Slic3r::SaveStrategy::SplitModel |
                               Slic3r::SaveStrategy::UseLoadedId |
                               Slic3r::SaveStrategy::ShareMesh;
-
-                std::cout << "🔍 [3MF-14] Strategy set to: " << (int)sp.strategy << std::endl;
-
-                std::cout << "🔍 [3MF-15] Embedding project presets" << std::endl;
 
                 // Embed project presets (print, filament, printer) for Bambu compatibility
                 try {
@@ -1808,19 +2742,15 @@ public:
                     // printer
                     presets.push_back(&preset_bundle.printers.get_edited_preset());
                     sp.project_presets = std::move(presets);
-                    std::cout << "🔍 [3MF-16] Project presets embedded, count=" << sp.project_presets.size() << std::endl;
                 } catch (...) {
-                    std::cout << "🔍 [3MF-16-ERR] Failed to embed project presets" << std::endl;
+                    // best-effort
                 }
-
-                std::cout << "🔍 [3MF-17] Starting thumbnail generation from GCode" << std::endl;
 
                 // Generate headless thumbnail from G-code (plate view)
                 try {
                     auto hex_rgba = [](const std::string &hex){ std::array<unsigned char,4> c{200,200,200,255}; if(hex.size()>=7 && hex[0]=='#'){ auto h=[&](char ch){ if(ch>='0'&&ch<='9')return ch-'0'; ch=(char)std::tolower(ch); if(ch>='a'&&ch<='f')return 10+ch-'a'; return 0;}; c[0]=(unsigned char)(h(hex[1])<<4|h(hex[2])); c[1]=(unsigned char)(h(hex[3])<<4|h(hex[4])); c[2]=(unsigned char)(h(hex[5])<<4|h(hex[6])); } return c; };
                     // Build color map per extruder id
                     std::map<int,std::array<unsigned char,4>> id2color; for(const auto &fi: plate.slice_filaments_info){ id2color[fi.id]=hex_rgba(fi.color); }
-                    std::cout << "🔍 [3MF-18] Parsing GCode for thumbnail, filament colors=" << id2color.size() << std::endl;
                     // Parse G-code quickly
                     std::ifstream ifs(tmp_gcode, std::ios::in); if(ifs){
                         double x=0,y=0,z=0,e=0,last_e=0; bool abs_e=true; // default absolute; will switch on M83
@@ -1857,48 +2787,31 @@ public:
                             // SIMPLIFIED: Add only the real thumbnail without empty placeholders
                             sp.thumbnail_data.clear();
                             sp.thumbnail_data.push_back(tn);
-                            std::cout << "🔍 [3MF-19] Thumbnail generated successfully" << std::endl;
                         }
                     }
                 } catch (...) {
-                    std::cout << "🔍 [3MF-19-ERR] Thumbnail generation failed" << std::endl;
+                    // best-effort thumbnail generation
                 }
-
-                std::cout << "🔍 [3MF-20] Setting project metadata" << std::endl;
 
                 // Provide project-level metadata (model_id) so exporter writes BBL model tag
                 Slic3r::BBLProject project_meta;
                 project_meta.project_model_id = plate.printer_model_id;
                 sp.project = &project_meta;
 
-                std::cout << "🔍 [3MF-21] Starting bbox data generation" << std::endl;
-
                 // Provide plate bbox/json data (ids, colors, nozzle), used by AMS UI and previews
 #if 1
                 try {
                     auto bbox_data = std::make_unique<Slic3r::PlateBBoxData>();
-                    std::cout << "🔍 [3MF-21a] BBox data object created" << std::endl;
 
                     // Collect per-object 2D bboxes from world-space exact bounding boxes
                     Slic3r::BoundingBoxf3 all_bb;
                     bool all_bb_init = false;
 
-                    std::cout << "🔍 [3MF-21b] Starting loop over " << model->objects.size() << " model objects" << std::endl;
-
                     for (size_t oi = 0; oi < model->objects.size(); ++oi) {
-                        std::cout << "🔍 [3MF-21c] Processing object " << oi << "/" << model->objects.size() << std::endl;
-
                         const Slic3r::ModelObject *obj = model->objects[oi];
-                        if (!obj) {
-                            std::cout << "🔍 [3MF-21d] Object " << oi << " is NULL, skipping" << std::endl;
-                            continue;
-                        }
-
-                        std::cout << "🔍 [3MF-21e] Object " << oi << " name='" << obj->name << "', calling bounding_box_exact()..." << std::endl;
+                        if (!obj) continue;
 
                         const auto &bb = obj->bounding_box_exact();
-
-                        std::cout << "🔍 [3MF-21f] Object " << oi << " bounding_box_exact() returned, defined=" << bb.defined << std::endl;
 
                         if (bb.defined) {
                             if (!all_bb_init) { all_bb = bb; all_bb_init = true; } else { all_bb.merge(bb); }
@@ -1910,12 +2823,8 @@ public:
                             jbx.bbox = { (coordf_t)bb.min.x(), (coordf_t)bb.min.y(), (coordf_t)bb.max.x(), (coordf_t)bb.max.y() };
                             jbx.area = (float)((bb.max.x() - bb.min.x()) * (bb.max.y() - bb.min.y()));
                             bbox_data->bbox_objs.push_back(std::move(jbx));
-
-                            std::cout << "🔍 [3MF-21g] Object " << oi << " bbox added successfully" << std::endl;
                         }
                     }
-
-                    std::cout << "🔍 [3MF-21h] Finished loop, collected " << bbox_data->bbox_objs.size() << " bboxes" << std::endl;
                     if (all_bb_init) {
                         bbox_data->bbox_all = { (coordf_t)all_bb.min.x(), (coordf_t)all_bb.min.y(), (coordf_t)all_bb.max.x(), (coordf_t)all_bb.max.y() };
                     }
@@ -1941,71 +2850,31 @@ public:
                     bbox_data->version = 2;
 
                     if (!bbox_data->bbox_objs.empty()) {
-                        size_t obj_count = bbox_data->bbox_objs.size(); // Save before release()
                         sp.id_bboxes.push_back(bbox_data.release());
-                        std::cout << "🔍 [3MF-22] BBox data added, objects=" << obj_count << std::endl;
-                    } else {
-                        std::cout << "🔍 [3MF-22] BBox data empty, skipping" << std::endl;
                     }
                 } catch (...) {
-                    std::cout << "🔍 [3MF-22-ERR] BBox data generation failed" << std::endl;
+                    // best-effort bbox generation
                 }
 #endif
 
-                std::cout << "🔍 [3MF-23] ===== CALLING store_bbs_3mf =====" << std::endl;
-                std::cout << "🔍 [3MF-23] StoreParams summary:" << std::endl;
-                std::cout << "🔍 [3MF-23]   - path: " << sp.path << std::endl;
-                std::cout << "🔍 [3MF-23]   - strategy: " << (int)sp.strategy << std::endl;
-                std::cout << "🔍 [3MF-23]   - plate_data_list.size: " << sp.plate_data_list.size() << std::endl;
-                std::cout << "🔍 [3MF-23]   - export_plate_idx: " << sp.export_plate_idx << std::endl;
-                std::cout << "🔍 [3MF-23]   - model->objects.size: " << (sp.model ? sp.model->objects.size() : 0) << std::endl;
-                std::cout << "🔍 [3MF-23]   - project_presets.size: " << sp.project_presets.size() << std::endl;
-                std::cout << "🔍 [3MF-23]   - thumbnail_data.size: " << sp.thumbnail_data.size() << std::endl;
-                std::cout << "🔍 [3MF-23]   - id_bboxes.size: " << sp.id_bboxes.size() << std::endl;
-
-                // Check GCode file size
-                for (size_t i = 0; i < sp.plate_data_list.size(); ++i) {
-                    if (sp.plate_data_list[i] && !sp.plate_data_list[i]->gcode_file.empty()) {
-                        try {
-                            auto gcode_size = std::filesystem::file_size(sp.plate_data_list[i]->gcode_file);
-                            std::cout << "🔍 [3MF-23] Plate " << i << " GCode file: " << sp.plate_data_list[i]->gcode_file
-                                      << " (size: " << (gcode_size / 1024.0 / 1024.0) << " MB)" << std::endl;
-                        } catch (...) {
-                            std::cout << "🔍 [3MF-23] Plate " << i << " GCode file: " << sp.plate_data_list[i]->gcode_file
-                                      << " (size: UNKNOWN)" << std::endl;
-                        }
-                    }
-                }
-
                 bool ok3mf = false;
                 try {
-                    std::cout << "🔍 [3MF-24] >>> Entering store_bbs_3mf() <<<" << std::endl;
                     ok3mf = Slic3r::store_bbs_3mf(sp);
-                    std::cout << "🔍 [3MF-25] <<< Returned from store_bbs_3mf(), result=" << ok3mf << " >>>" << std::endl;
                 } catch (const std::bad_alloc &e) {
-                    std::cout << "🔍 [3MF-25-ERR] store_bbs_3mf threw std::bad_alloc (OUT OF MEMORY)" << std::endl;
-                    std::cout << "🔍 [3MF-25-ERR] This usually means the GCode file is too large to fit in memory" << std::endl;
-                    std::cout << "🔍 [3MF-25-ERR] OrcaSlicer uses streaming/chunked writing for large files" << std::endl;
                     last_error = "3MF packaging failed: Out of memory (GCode file too large)";
                     ok3mf = false;
                 } catch (const std::exception &e) {
-                    std::cout << "🔍 [3MF-25-ERR] store_bbs_3mf threw exception: " << e.what() << std::endl;
                     last_error = std::string("3MF packaging failed: ") + e.what();
                     ok3mf = false;
                 }
-
-                std::cout << "🔍 [3MF-26] Cleaning up temp GCode file" << std::endl;
 
                 // Clean up temp G-code
                 try { if (std::filesystem::exists(tmp_gcode)) std::filesystem::remove(tmp_gcode); } catch (...) {}
 
                 if (!ok3mf) {
-                    std::cout << "🔍 [3MF-27] ❌ 3MF export FAILED: " << last_error << std::endl;
                     if (last_error.empty()) last_error = "3MF packaging failed";
                     return false;
                 }
-
-                std::cout << "🔍 [3MF-28] ✅ 3MF export SUCCESS!" << std::endl;
 
                 // Success
                 return true;
@@ -2020,6 +2889,96 @@ public:
                 }
 
                 bool export_successful = false;
+
+                // CRITICAL: Synchronize flush_volumes_matrix in full_print_config() BEFORE export
+                // This prevents the "Flush volumes matrix do not match to the correct size" error
+                try {
+                    auto& fpc = const_cast<Slic3r::DynamicPrintConfig&>(print->full_print_config());
+                    auto* fil_colour = fpc.opt<Slic3r::ConfigOptionStrings>("filament_colour", false);
+                    auto* flush_matrix = fpc.opt<Slic3r::ConfigOptionFloats>("flush_volumes_matrix", false);
+                    auto* flush_vector = fpc.opt<Slic3r::ConfigOptionFloats>("flush_volumes_vector", false);
+                    auto* flush_multiplier = fpc.opt<Slic3r::ConfigOptionFloats>("flush_multiplier", false);
+
+                    size_t filament_count = fil_colour ? fil_colour->values.size() : 1;
+                    size_t heads_count = flush_multiplier ? flush_multiplier->values.size() : 1;
+                    size_t expected_matrix_size = filament_count * filament_count * heads_count;
+
+                    std::cout << "DEBUG: [BEFORE GCODE EXPORT] Synchronizing flush_volumes_matrix - filament_count=" << filament_count
+                              << ", heads_count=" << heads_count
+                              << ", expected_matrix_size=" << expected_matrix_size << std::endl;
+
+                    if (flush_matrix) {
+                        size_t current_size = flush_matrix->values.size();
+                        if (current_size != expected_matrix_size) {
+                            std::cout << "DEBUG: [BEFORE GCODE EXPORT] Resizing flush_volumes_matrix from " << current_size
+                                      << " to " << expected_matrix_size << std::endl;
+                            // Create a proper matrix: diagonal = 0 (same filament), off-diagonal = 280 (default purge)
+                            std::vector<double> new_matrix(expected_matrix_size, 280.0);
+                            for (size_t h = 0; h < heads_count; ++h) {
+                                for (size_t i = 0; i < filament_count; ++i) {
+                                    // Set diagonal elements to 0 (no purge needed for same filament)
+                                    size_t idx = h * (filament_count * filament_count) + i * filament_count + i;
+                                    new_matrix[idx] = 0.0;
+                                }
+                            }
+                            flush_matrix->values = new_matrix;
+                        }
+                    } else if (filament_count > 0) {
+                        // flush_matrix doesn't exist, create it
+                        std::cout << "DEBUG: [BEFORE GCODE EXPORT] Creating flush_volumes_matrix with size " << expected_matrix_size << std::endl;
+                        std::vector<double> new_matrix(expected_matrix_size, 280.0);
+                        for (size_t h = 0; h < heads_count; ++h) {
+                            for (size_t i = 0; i < filament_count; ++i) {
+                                size_t idx = h * (filament_count * filament_count) + i * filament_count + i;
+                                new_matrix[idx] = 0.0;
+                            }
+                        }
+                        fpc.set_key_value("flush_volumes_matrix", new Slic3r::ConfigOptionFloats(new_matrix));
+                    }
+
+                    // Also synchronize flush_volumes_vector (2 values per filament)
+                    size_t expected_vector_size = 2 * filament_count;
+                    if (flush_vector) {
+                        size_t current_size = flush_vector->values.size();
+                        if (current_size != expected_vector_size) {
+                            std::cout << "DEBUG: [BEFORE GCODE EXPORT] Resizing flush_volumes_vector from " << current_size
+                                      << " to " << expected_vector_size << std::endl;
+                            std::vector<double> new_vector(expected_vector_size, 140.0);
+                            flush_vector->values = new_vector;
+                        }
+                    } else if (filament_count > 0) {
+                        std::cout << "DEBUG: [BEFORE GCODE EXPORT] Creating flush_volumes_vector with size " << expected_vector_size << std::endl;
+                        std::vector<double> new_vector(expected_vector_size, 140.0);
+                        fpc.set_key_value("flush_volumes_vector", new Slic3r::ConfigOptionFloats(new_vector));
+                    }
+
+                    // Ensure flush_multiplier has correct size
+                    if (flush_multiplier && flush_multiplier->values.empty()) {
+                        flush_multiplier->values.push_back(1.0);
+                    } else if (!flush_multiplier) {
+                        fpc.set_key_value("flush_multiplier", new Slic3r::ConfigOptionFloats({1.0}));
+                    }
+
+                    // FIX: Clear bed_exclude_area to prevent crash in OrcaSlicer GUI when opening the 3MF
+                    // The default value of ["0x0"] is malformed (not a multiple of 4 points for rectangles)
+                    // This causes a crash in Model::setPrintSpeedTable() when diff() returns an empty polygon list
+                    auto* bed_exclude = fpc.opt<Slic3r::ConfigOptionPoints>("bed_exclude_area", false);
+                    if (bed_exclude && !bed_exclude->values.empty()) {
+                        // Only clear if it's the default malformed value (single point at 0,0)
+                        if (bed_exclude->values.size() == 1 &&
+                            bed_exclude->values[0].x() == 0.0 && bed_exclude->values[0].y() == 0.0) {
+                            std::cout << "DEBUG: Clearing malformed bed_exclude_area (default [0x0]) to prevent OrcaSlicer crash" << std::endl;
+                            bed_exclude->values.clear();
+                        } else if (bed_exclude->values.size() % 4 != 0) {
+                            // If not a multiple of 4 points, clear it (malformed)
+                            std::cout << "DEBUG: Clearing malformed bed_exclude_area (size " << bed_exclude->values.size()
+                                      << " is not a multiple of 4) to prevent OrcaSlicer crash" << std::endl;
+                            bed_exclude->values.clear();
+                        }
+                    }
+                } catch (const std::exception& e) {
+                    std::cout << "WARN: Failed to synchronize flush_volumes_matrix: " << e.what() << std::endl;
+                }
 
                 try {
 
@@ -2257,9 +3216,10 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
     m_impl->transfer_filament_customizations = params.transfer_filament_customizations;
     m_impl->transfer_process_customizations  = params.transfer_process_customizations;
     m_impl->transfer_project_overrides       = params.transfer_project_overrides;
-    // Behavior flags
-    m_impl->center_on_bed = params.center_on_bed;
-    m_impl->auto_realign_if_needed = params.auto_realign_if_needed;
+    // Behavior flags - SEMPRE ATIVOS para garantir que objetos cabem na mesa
+    // Ignora parametros e força centralizacao + realinhamento automatico
+    m_impl->center_on_bed = true;
+    m_impl->auto_realign_if_needed = true;
 
     std::cout << "DEBUG: Entering slice(): input='" << params.input_file
               << "' plate_index=" << params.plate_index
@@ -2285,75 +3245,173 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
     #endif
     }
 
-    // Load printer profile if specified
-    if (!params.printer_profile.empty()) {
-        std::cout << "🎨 [COLOR DEBUG] Loading printer profile: " << params.printer_profile << std::endl;
-
-        // Check if it's a K2 Plus printer
-        if (params.printer_profile.find("K2 Plus") != std::string::npos ||
-            params.printer_profile.find("K2Plus") != std::string::npos ||
-            params.printer_profile.find("k2plus") != std::string::npos) {
-            std::cout << "🎨 [COLOR DEBUG] ⚠️  DETECTED K2 PLUS PRINTER - Special handling may be needed!" << std::endl;
-        }
-
-        auto result = loadPrinterProfile(params.printer_profile);
-        if (!result.success) {
-            return OperationResult(false, "Failed to load printer profile: " + params.printer_profile, result.error_details);
-        }
-    }
-
-    // Load filament profile if specified
-    if (!params.filament_profile.empty()) {
-        auto result = loadFilamentProfile(params.filament_profile);
-        if (!result.success) {
-            return OperationResult(false, "Failed to load filament profile: " + params.filament_profile, result.error_details);
-        }
-    }
-
-    // Load process profile if specified
-    if (!params.process_profile.empty()) {
-        auto result = loadProcessProfile(params.process_profile);
-        if (!result.success) {
-            return OperationResult(false, "Failed to load process profile: " + params.process_profile, result.error_details);
-        }
-    }
-
-#if HAVE_LIBSLIC3R
-    // Auto-apply project presets from 3MF delegated to SliceEngine
-    OrcaSlicerCli::slice::auto_select_presets_from_3mf(
-        params.input_file,
-        m_impl->transfer_printer_customizations,
-        m_impl->transfer_filament_customizations,
-        m_impl->transfer_process_customizations,
-        m_impl->has_project_embedded_presets,
-        m_impl->project_printer_preset,
-        m_impl->project_print_preset,
-        m_impl->project_filament_preset,
-        m_impl->plate_printer_model_id,
-        m_impl->plate_nozzle_variant,
-        m_impl->preset_bundle,
-        m_impl->app_config,
-        *m_impl->config,
-        [&](const std::string& name){ return loadPrinterProfile(name); },
-        [&](const std::string& name){ return loadFilamentProfile(name); },
-        [&](const std::string& name){ return loadProcessProfile(name); },
-        params.printer_profile,
-        params.filament_profile,
-        params.process_profile);
-#endif
-
+    // CRITICAL: Reset preset bundle to clean state at the start of each slice
+    // This prevents preset state from persisting between requests (e.g., K2 Plus profiles
+    // being used when slicing for A1 if profiles are not explicitly passed)
 #if HAVE_LIBSLIC3R
     try {
-        m_impl->preset_bundle.update_compatible(Slic3r::PresetSelectCompatibleType::Always);
-        *m_impl->config = m_impl->preset_bundle.full_config_secure();
-        std::cout << "DEBUG: Synchronized working config with selected presets -> printer='"
-                  << m_impl->preset_bundle.printers.get_selected_preset_name()
-                  << "', print='" << m_impl->preset_bundle.prints.get_selected_preset_name()
-                  << "', filament='" << m_impl->preset_bundle.filaments.get_selected_preset_name()
-                  << "'" << std::endl;
+        std::cout << "DEBUG: Resetting preset bundle to clean state before loading new profiles" << std::endl;
+        // Reset preset selections to defaults
+        m_impl->preset_bundle.printers.select_preset(0);  // Select first (default) printer
+        m_impl->preset_bundle.prints.select_preset(0);    // Select first (default) print preset
+        m_impl->preset_bundle.filaments.select_preset(0); // Select first (default) filament
+        m_impl->preset_bundle.filament_presets.clear();
+        // Use selected preset name after select_preset(0)
+        m_impl->preset_bundle.filament_presets.push_back(m_impl->preset_bundle.filaments.get_selected_preset_name());
+        // Clear project preset names from previous 3MF
+        m_impl->project_printer_preset.clear();
+        m_impl->project_print_preset.clear();
+        m_impl->project_filament_preset.clear();
+        m_impl->plate_printer_model_id.clear();
+        m_impl->plate_nozzle_variant.clear();
+        m_impl->has_project_embedded_presets = false;
+        // Capture custom profile display names from SlicingParams
+        m_impl->custom_printer_profile_name = params.printer_profile_name;
+        m_impl->custom_filament_profile_name = params.filament_profile_name;
+        m_impl->custom_process_profile_name = params.process_profile_name;
+        if (!params.printer_profile_name.empty() || !params.filament_profile_name.empty() || !params.process_profile_name.empty()) {
+            std::cout << "DEBUG: Custom profile display names set: printer='" << params.printer_profile_name
+                      << "', filament='" << params.filament_profile_name
+                      << "', process='" << params.process_profile_name << "'" << std::endl;
+        }
+    } catch (const std::exception &e) {
+        std::cout << "WARN: Failed to reset preset bundle: " << e.what() << std::endl;
+    }
+#endif
+
+    // JSON on-the-fly mode: no profile loading, all config via custom_settings
+
+#if HAVE_LIBSLIC3R
+    std::cout << "DEBUG: [SLICE] About to update_compatible and apply presets..." << std::endl;
+    try {
+        // Check if ALL transfer flags are disabled - if so, use pure defaults + custom_settings
+        const bool all_transfer_disabled = !m_impl->transfer_printer_customizations &&
+                                            !m_impl->transfer_filament_customizations &&
+                                            !m_impl->transfer_process_customizations &&
+                                            !m_impl->transfer_project_overrides;
+
+        if (all_transfer_disabled) {
+            // PURE ON-THE-FLY MODE: Ignore all 3MF configs, use only FullPrintConfig::defaults()
+            // This allows slicing with only JSON config without any 3MF contamination
+            std::cout << "DEBUG: ALL transfer flags disabled - resetting to pure FullPrintConfig::defaults()" << std::endl;
+            m_impl->config->clear();
+            Slic3r::FullPrintConfig full_defaults = Slic3r::FullPrintConfig::defaults();
+            m_impl->config->apply(full_defaults, true);
+            std::cout << "DEBUG: Config reset to pure defaults (all 3MF configs ignored)" << std::endl;
+
+            // CRITICAL: Disable multi-material processing to avoid infinite loops
+            // When in pure on-the-fly mode, we force single-extruder mode to prevent
+            // the ToolOrdering algorithm from entering infinite loops in
+            // reorder_filaments_for_minimum_flush_volume() and update_filament_maps_to_config()
+            try {
+                std::cout << "DEBUG: PURE ON-THE-FLY MODE - Disabling multi-material processing" << std::endl;
+                m_impl->config->set_key_value("single_extruder_multi_material", new Slic3r::ConfigOptionBool(false));
+                m_impl->config->set_key_value("enable_prime_tower", new Slic3r::ConfigOptionBool(false));
+
+                // PRESERVE 3MF COLORS: Restore filament colors from the 3MF file
+                // This allows objects to keep their original colors even in on-the-fly mode
+                if (!m_impl->saved_filament_colours.empty()) {
+                    std::cout << "DEBUG: PURE ON-THE-FLY MODE - Restoring 3MF filament colors: ";
+                    for (const auto& c : m_impl->saved_filament_colours) std::cout << c << " ";
+                    std::cout << std::endl;
+
+                    size_t num_colors = m_impl->saved_filament_colours.size();
+                    m_impl->config->set_key_value("filament_colour", new Slic3r::ConfigOptionStrings(m_impl->saved_filament_colours));
+
+                    // Expand filament arrays to match the number of colors
+                    std::vector<std::string> filament_types(num_colors, "PLA");
+                    std::vector<int> nozzle_temps(num_colors, 220);
+                    std::vector<int> bed_temps(num_colors, 55);
+                    m_impl->config->set_key_value("filament_type", new Slic3r::ConfigOptionStrings(filament_types));
+                    m_impl->config->set_key_value("nozzle_temperature", new Slic3r::ConfigOptionInts(nozzle_temps));
+                    m_impl->config->set_key_value("nozzle_temperature_initial_layer", new Slic3r::ConfigOptionInts(nozzle_temps));
+                    m_impl->config->set_key_value("bed_temperature", new Slic3r::ConfigOptionInts(bed_temps));
+                    m_impl->config->set_key_value("bed_temperature_initial_layer", new Slic3r::ConfigOptionInts(bed_temps));
+                    std::cout << "DEBUG: Filament arrays expanded to " << num_colors << " entries to match 3MF colors" << std::endl;
+                } else {
+                    // No saved colors, use single white extruder
+                    m_impl->config->set_key_value("filament_type", new Slic3r::ConfigOptionStrings({"PLA"}));
+                    m_impl->config->set_key_value("filament_colour", new Slic3r::ConfigOptionStrings({"#FFFFFF"}));
+                    m_impl->config->set_key_value("nozzle_temperature", new Slic3r::ConfigOptionInts({220}));
+                    m_impl->config->set_key_value("nozzle_temperature_initial_layer", new Slic3r::ConfigOptionInts({220}));
+                    m_impl->config->set_key_value("bed_temperature", new Slic3r::ConfigOptionInts({55}));
+                    m_impl->config->set_key_value("bed_temperature_initial_layer", new Slic3r::ConfigOptionInts({55}));
+                }
+
+                // PRESERVE 3MF CHANGE_FILAMENT_GCODE: Critical for Bambu AMS multi-color printing
+                // This gcode contains M620/M621 macros that control the AMS filament changes
+                if (!m_impl->saved_change_filament_gcode.empty()) {
+                    std::cout << "DEBUG: PURE ON-THE-FLY MODE - Restoring 3MF change_filament_gcode ("
+                              << m_impl->saved_change_filament_gcode.size() << " chars)" << std::endl;
+                    m_impl->config->set_key_value("change_filament_gcode",
+                        new Slic3r::ConfigOptionString(m_impl->saved_change_filament_gcode));
+                }
+
+                std::cout << "DEBUG: Multi-material disabled, extruder colors preserved" << std::endl;
+            } catch (const std::exception& e) {
+                std::cout << "WARN: Failed to configure on-the-fly mode: " << e.what() << std::endl;
+            }
+        } else {
+            m_impl->preset_bundle.update_compatible(Slic3r::PresetSelectCompatibleType::Always);
+
+            // Only apply preset config if we have any loaded presets (not just defaults)
+            // This allows slicing with only JSON options when no profiles are loaded
+            const bool has_printer = !m_impl->preset_bundle.printers.get_selected_preset_name().empty() &&
+                                      m_impl->preset_bundle.printers.get_selected_preset_name() != "Default Printer";
+            const bool has_filament = !m_impl->preset_bundle.filament_presets.empty() &&
+                                       m_impl->preset_bundle.filament_presets[0] != "Default Filament";
+            const bool has_process = !m_impl->preset_bundle.prints.get_selected_preset_name().empty() &&
+                                      m_impl->preset_bundle.prints.get_selected_preset_name() != "Default Setting";
+
+            if (has_printer || has_filament || has_process) {
+                // Apply preset config on top of existing defaults using safe_build_config
+                Slic3r::DynamicPrintConfig preset_config;
+                OrcaSlicerCli::util::safe_build_config(m_impl->preset_bundle, preset_config);
+                m_impl->config->apply(preset_config, true);
+                std::cout << "DEBUG: Applied preset config on top of defaults -> printer='"
+                          << m_impl->preset_bundle.printers.get_selected_preset_name()
+                          << "', print='" << m_impl->preset_bundle.prints.get_selected_preset_name()
+                          << "', filament='" << m_impl->preset_bundle.filaments.get_selected_preset_name()
+                          << "'" << std::endl;
+            } else {
+                // No specific presets loaded - apply generic fallback config
+                // This enables on-the-fly slicing with custom_settings from the API
+                std::cout << "DEBUG: No specific presets loaded - applying generic fallback config" << std::endl;
+                OrcaSlicerCli::config::apply_generic_fallback_config(*m_impl->config, m_impl->resources_path);
+            }
+        }
+
         // Dump key values after syncing working config with selected presets
         try { if (const auto* o = m_impl->config->optptr("sparse_infill_density")) std::cout << "DEBUG: synced_config[sparse_infill_density]=" << o->serialize() << std::endl; } catch (...) {}
         try { if (const auto* o = m_impl->config->optptr("top_shell_layers")) std::cout << "DEBUG: synced_config[top_shell_layers]=" << o->serialize() << std::endl; } catch (...) {}
+
+        // CRITICAL: Clear printer-identifying keys when transfer is disabled
+        // This must be done AFTER full_config_secure() is applied, because that function
+        // re-applies the preset values (which include the 3MF values from load_config_model)
+        if (!m_impl->transfer_printer_customizations && !all_transfer_disabled) {
+            std::cout << "DEBUG: Clearing printer-identifying keys (transfer_printer_customizations=false)" << std::endl;
+            try {
+                m_impl->config->set_key_value("printer_model", new Slic3r::ConfigOptionString(""));
+                m_impl->config->set_key_value("printer_variant", new Slic3r::ConfigOptionString(""));
+                m_impl->config->set_key_value("printer_settings_id", new Slic3r::ConfigOptionString(""));
+                // Also clear related fields that may contain printer-specific references
+                m_impl->config->set_key_value("print_compatible_printers", new Slic3r::ConfigOptionStrings({}));
+            } catch (...) {}
+        }
+        if (!m_impl->transfer_process_customizations && !all_transfer_disabled) {
+            std::cout << "DEBUG: Clearing process-identifying keys (transfer_process_customizations=false)" << std::endl;
+            try {
+                m_impl->config->set_key_value("print_settings_id", new Slic3r::ConfigOptionString(""));
+                m_impl->config->set_key_value("default_print_profile", new Slic3r::ConfigOptionString(""));
+            } catch (...) {}
+        }
+        if (!m_impl->transfer_filament_customizations && !all_transfer_disabled) {
+            std::cout << "DEBUG: Clearing filament-identifying keys (transfer_filament_customizations=false)" << std::endl;
+            try {
+                m_impl->config->set_key_value("filament_settings_id", new Slic3r::ConfigOptionStrings({""}));
+                m_impl->config->set_key_value("default_filament_profile", new Slic3r::ConfigOptionStrings({""}));
+            } catch (...) {}
+        }
     } catch (const std::exception &e) {
         std::cout << "WARN: Failed to refresh working config from selected presets: " << e.what() << std::endl;
     }
@@ -2398,6 +3456,20 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
             __ignored_override_keys);
     }
 
+    // DEBUG: Check printable_area immediately after apply_custom_settings
+    try {
+        auto* pa_after_custom = m_impl->config->opt<Slic3r::ConfigOptionPoints>("printable_area", false);
+        if (pa_after_custom) {
+            std::cout << "DEBUG: [AFTER apply_custom_settings] printable_area has " << pa_after_custom->values.size() << " points: ";
+            for (const auto& pt : pa_after_custom->values) {
+                std::cout << "(" << pt(0) << "," << pt(1) << ") ";
+            }
+            std::cout << std::endl;
+        } else {
+            std::cout << "DEBUG: [AFTER apply_custom_settings] printable_area is NULL!" << std::endl;
+        }
+    } catch (...) {}
+
     if (params.dry_run) {
         return OperationResult(true, "Dry run completed - no actual slicing performed");
     }
@@ -2431,7 +3503,13 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
     std::cout << "🔍 [TRACE 29] Multi-material config will be applied after print->apply() in performSlicing()" << std::endl;
 
     // Enable single_extruder_multi_material and prime tower if multi-material detected
-    if (m_impl->detected_extruders > 1) {
+    // BUT NOT in pure on-the-fly mode (all transfer flags disabled) - this can cause infinite loops
+    const bool all_transfer_disabled_for_mm = !m_impl->transfer_printer_customizations &&
+                                               !m_impl->transfer_filament_customizations &&
+                                               !m_impl->transfer_process_customizations &&
+                                               !m_impl->transfer_project_overrides;
+
+    if (m_impl->detected_extruders > 1 && !all_transfer_disabled_for_mm) {
         std::cout << "🔍 Detected multi-material model (" << m_impl->detected_extruders << " colors in 3MF)" << std::endl;
         m_impl->config->set_key_value("single_extruder_multi_material", new Slic3r::ConfigOptionBool(true));
         m_impl->config->set_key_value("enable_prime_tower", new Slic3r::ConfigOptionBool(true));
@@ -2459,6 +3537,121 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
                 fil_type->values.push_back(fil_type->values.empty() ? "PLA" : fil_type->values.back());
             }
         }
+
+        // Restore change_filament_gcode for Bambu AMS multi-color printing
+        // ONLY if not overridden via config JSON (custom_settings)
+        {
+            bool gcode_overridden = std::find(__used_override_keys.begin(), __used_override_keys.end(),
+                                              "change_filament_gcode") != __used_override_keys.end();
+            std::cout << "DEBUG: gcode_overridden=" << (gcode_overridden ? "true" : "false")
+                      << ", __used_override_keys.size()=" << __used_override_keys.size() << std::endl;
+            if (!m_impl->saved_change_filament_gcode.empty() && !gcode_overridden) {
+                std::cout << "🔍 Restoring 3MF change_filament_gcode ("
+                          << m_impl->saved_change_filament_gcode.size() << " chars)" << std::endl;
+                m_impl->config->set_key_value("change_filament_gcode",
+                    new Slic3r::ConfigOptionString(m_impl->saved_change_filament_gcode));
+            } else if (gcode_overridden) {
+                std::cout << "🔍 Keeping config JSON change_filament_gcode (override from custom_settings)" << std::endl;
+            }
+        }
+    } else if (m_impl->detected_extruders > 1 && all_transfer_disabled_for_mm) {
+        // PURE ON-THE-FLY MODE with multi-material: Enable SEMM but disable problematic features
+        // We need to enable single_extruder_multi_material to respect object extruder assignments
+        // but disable features that can cause infinite loops
+        std::cout << "🔍 PURE ON-THE-FLY MODE: Enabling multi-material (" << m_impl->detected_extruders
+                  << " colors in 3MF) with safe settings" << std::endl;
+        m_impl->config->set_key_value("single_extruder_multi_material", new Slic3r::ConfigOptionBool(true));
+        m_impl->config->set_key_value("enable_prime_tower", new Slic3r::ConfigOptionBool(false));
+        // Disable features that can cause infinite loops in ToolOrdering
+        m_impl->config->set_key_value("flush_into_infill", new Slic3r::ConfigOptionBool(false));
+        m_impl->config->set_key_value("flush_into_support", new Slic3r::ConfigOptionBool(false));
+        m_impl->config->set_key_value("flush_into_objects", new Slic3r::ConfigOptionBool(false));
+
+        // Restore 3MF colors in on-the-fly mode
+        auto* fil_colour = m_impl->config->opt<Slic3r::ConfigOptionStrings>("filament_colour", false);
+        if (!m_impl->saved_filament_colours.empty() && fil_colour) {
+            std::cout << "🔍 Restoring 3MF colors in on-the-fly mode: ";
+            for (const auto& c : m_impl->saved_filament_colours) std::cout << c << " ";
+            std::cout << std::endl;
+            fil_colour->values = m_impl->saved_filament_colours;
+        }
+
+        // Expand filament arrays to match detected_extruders
+        auto* fil_diameter = m_impl->config->opt<Slic3r::ConfigOptionFloats>("filament_diameter", false);
+        auto* fil_type = m_impl->config->opt<Slic3r::ConfigOptionStrings>("filament_type", false);
+        if (fil_diameter && fil_diameter->values.size() < m_impl->detected_extruders) {
+            while (fil_diameter->values.size() < m_impl->detected_extruders) {
+                fil_diameter->values.push_back(fil_diameter->values.empty() ? 1.75 : fil_diameter->values.back());
+            }
+        }
+        if (fil_type && fil_type->values.size() < m_impl->detected_extruders) {
+            while (fil_type->values.size() < m_impl->detected_extruders) {
+                fil_type->values.push_back(fil_type->values.empty() ? "PLA" : fil_type->values.back());
+            }
+        }
+
+        // Restore change_filament_gcode for Bambu AMS multi-color printing
+        // ONLY if not overridden via config JSON (custom_settings)
+        {
+            bool gcode_overridden = std::find(__used_override_keys.begin(), __used_override_keys.end(),
+                                              "change_filament_gcode") != __used_override_keys.end();
+            if (!m_impl->saved_change_filament_gcode.empty() && !gcode_overridden) {
+                std::cout << "🔍 Restoring 3MF change_filament_gcode in on-the-fly mode ("
+                          << m_impl->saved_change_filament_gcode.size() << " chars)" << std::endl;
+                m_impl->config->set_key_value("change_filament_gcode",
+                    new Slic3r::ConfigOptionString(m_impl->saved_change_filament_gcode));
+            } else if (gcode_overridden) {
+                std::cout << "🔍 Keeping config JSON change_filament_gcode in on-the-fly mode (override from custom_settings)" << std::endl;
+            }
+        }
+    }
+
+    // CRITICAL: Synchronize flush_volumes_matrix and flush_volumes_vector with actual filament count
+    // This prevents the "Flush volumes matrix do not match to the correct size" error
+    // which occurs when the matrix size doesn't match (filament_count * filament_count * heads_count)
+    {
+        auto* fil_colour = m_impl->config->opt<Slic3r::ConfigOptionStrings>("filament_colour", false);
+        auto* flush_matrix = m_impl->config->opt<Slic3r::ConfigOptionFloats>("flush_volumes_matrix", false);
+        auto* flush_vector = m_impl->config->opt<Slic3r::ConfigOptionFloats>("flush_volumes_vector", false);
+        auto* flush_multiplier = m_impl->config->opt<Slic3r::ConfigOptionFloats>("flush_multiplier", false);
+
+        size_t filament_count = fil_colour ? fil_colour->values.size() : 1;
+        size_t heads_count = flush_multiplier ? flush_multiplier->values.size() : 1;
+        size_t expected_matrix_size = filament_count * filament_count * heads_count;
+
+        std::cout << "DEBUG: Synchronizing flush_volumes_matrix - filament_count=" << filament_count
+                  << ", heads_count=" << heads_count
+                  << ", expected_matrix_size=" << expected_matrix_size << std::endl;
+
+        if (flush_matrix) {
+            size_t current_size = flush_matrix->values.size();
+            if (current_size != expected_matrix_size) {
+                std::cout << "DEBUG: Resizing flush_volumes_matrix from " << current_size
+                          << " to " << expected_matrix_size << std::endl;
+                // Create a proper matrix: diagonal = 0 (same filament), off-diagonal = 280 (default purge)
+                std::vector<double> new_matrix(expected_matrix_size, 280.0);
+                for (size_t h = 0; h < heads_count; ++h) {
+                    for (size_t i = 0; i < filament_count; ++i) {
+                        // Set diagonal elements to 0 (no purge needed for same filament)
+                        size_t idx = h * (filament_count * filament_count) + i * filament_count + i;
+                        new_matrix[idx] = 0.0;
+                    }
+                }
+                flush_matrix->values = new_matrix;
+            }
+        }
+
+        // Also synchronize flush_volumes_vector (one value per filament per head)
+        size_t expected_vector_size = filament_count * heads_count;
+        if (flush_vector) {
+            size_t current_size = flush_vector->values.size();
+            if (current_size != expected_vector_size) {
+                std::cout << "DEBUG: Resizing flush_volumes_vector from " << current_size
+                          << " to " << expected_vector_size << std::endl;
+                std::vector<double> new_vector(expected_vector_size, 140.0);  // Default purge volume
+                flush_vector->values = new_vector;
+            }
+        }
     }
 
     // DEBUG: Final check of effective config for critical keys before performSlicing()
@@ -2480,6 +3673,8 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
         dump_one("filament_colour");
         dump_one("filament_type");
         dump_one("filament_diameter");
+        dump_one("flush_volumes_matrix");
+        dump_one("flush_multiplier");
     } catch (...) {}
 
 
@@ -2532,62 +3727,6 @@ AddonCore::OperationResult AddonCore::loadPreset(const std::string& preset_name)
     return OperationResult(false, "Preset loading not implemented");
 }
 
-AddonCore::OperationResult AddonCore::loadPrinterProfile(const std::string& printer_name) {
-    if (!m_impl->initialized) {
-        return OperationResult(false, "CLI Core not initialized");
-    }
-#if HAVE_LIBSLIC3R
-    std::string err;
-    bool ok = OrcaSlicerCli::config::load_printer_profile(
-        m_impl->resources_path,
-        printer_name,
-        m_impl->preset_bundle,
-        m_impl->app_config,
-        *m_impl->config,
-        err);
-    if (!ok) return OperationResult(false, "Printer profile not found", err);
-    return OperationResult(true, "Printer profile loaded successfully: " + printer_name);
-#else
-    return OperationResult(false, "libslic3r not available");
-#endif
-}
-
-AddonCore::OperationResult AddonCore::loadFilamentProfile(const std::string& filament_name) {
-    if (!m_impl->initialized) {
-        return OperationResult(false, "CLI Core not initialized");
-    }
-#if HAVE_LIBSLIC3R
-    std::string err;
-    bool ok = OrcaSlicerCli::config::load_filament_profile(
-        filament_name,
-        m_impl->preset_bundle,
-        *m_impl->config,
-        err);
-    if (!ok) return OperationResult(false, "Filament profile not found", err);
-    return OperationResult(true, "Filament profile loaded successfully: " + filament_name);
-#else
-    return OperationResult(false, "libslic3r not available");
-#endif
-}
-
-AddonCore::OperationResult AddonCore::loadProcessProfile(const std::string& process_name) {
-    if (!m_impl->initialized) {
-        return OperationResult(false, "CLI Core not initialized");
-    }
-#if HAVE_LIBSLIC3R
-    std::string err;
-    bool ok = OrcaSlicerCli::config::load_process_profile(
-        process_name,
-        m_impl->preset_bundle,
-        *m_impl->config,
-        err);
-    if (!ok) return OperationResult(false, "Process profile not found", err);
-    return OperationResult(true, "Process profile loaded successfully: " + process_name);
-#else
-    return OperationResult(false, "libslic3r not available");
-#endif
-}
-
 AddonCore::OperationResult AddonCore::setConfigOption(const std::string& key, const std::string& value) {
     if (!m_impl->initialized) {
         return OperationResult(false, "CLI Core not initialized");
@@ -2601,10 +3740,23 @@ AddonCore::OperationResult AddonCore::setConfigOption(const std::string& key, co
         if (m_impl->config->optptr(key.c_str()) == nullptr) {
             return OperationResult(false, std::string("Unknown config key: ") + key);
         }
+
+        // CRITICAL FIX: ConfigOptionPoints::deserialize() expects comma-separated points (e.g., "0x0,180x0,180x180,0x180")
+        // but the frontend may send semicolon-separated points (e.g., "0x0;180x0;180x180;0x180")
+        // Convert semicolons to commas for printable_area, bed_shape, bed_exclude_area, extruder_offset
+        std::string normalized_value = value;
+        if (key == "printable_area" || key == "bed_shape" || key == "bed_exclude_area" || key == "extruder_offset") {
+            // Replace semicolons with commas
+            for (char& c : normalized_value) {
+                if (c == ';') c = ',';
+            }
+            std::cout << "DEBUG: Normalized " << key << " from '" << value << "' to '" << normalized_value << "'" << std::endl;
+        }
+
         // Use set_deserialize to let libslic3r parse and validate the value
         Slic3r::ConfigSubstitutionContext ctx{Slic3r::ForwardCompatibilitySubstitutionRule::Enable};
-        m_impl->config->set_deserialize(key, value, ctx, /*append=*/false);
-        std::cout << "DEBUG: Override applied: " << key << "=" << value << std::endl;
+        m_impl->config->set_deserialize(key, normalized_value, ctx, /*append=*/false);
+        std::cout << "DEBUG: Override applied: " << key << "=" << normalized_value << std::endl;
         return OperationResult(true, "Config option set: " + key);
     } catch (const std::exception& e) {
         return OperationResult(false, std::string("Failed to set config option: ") + key, e.what());
@@ -2682,27 +3834,6 @@ AddonCore::ModelInfo AddonCore::validateModel(const std::string& filename) const
     }
 
     return info;
-}
-
-
-AddonCore::OperationResult AddonCore::loadVendor(const std::string& vendor_id) {
-    if (!m_impl->initialized) {
-        return OperationResult(false, "CLI Core not initialized");
-    }
-#if HAVE_LIBSLIC3R
-    std::string err;
-    bool ok = OrcaSlicerCli::config::load_vendor_from_resources(
-        m_impl->resources_path,
-        vendor_id,
-        m_impl->preset_bundle,
-        m_impl->app_config,
-        m_impl->loaded_vendors,
-        err);
-    if (!ok) return OperationResult(false, std::string("Error loading vendor: ") + vendor_id, err);
-    return OperationResult(true, std::string("Vendor loaded: ") + vendor_id);
-#else
-    return OperationResult(false, "libslic3r not available");
-#endif
 }
 
 } // namespace OrcaSlicerCli

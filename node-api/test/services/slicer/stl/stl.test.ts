@@ -53,10 +53,21 @@ describe('slicer/stl service', () => {
     const outTarget = path.join(outDir, `node_api_${modelBase}_plate_${plate}.gcode`)
     form.append('output', outTarget)
 
-    // Perfis explícitos para a impressão (usar nomes existentes no engine)
-    form.append('printerProfile', 'Bambu Lab X1 Carbon 0.4 nozzle')
-    form.append('filamentProfile', 'Bambu PLA Basic @BBL X1C')
-    form.append('processProfile', '0.20mm Standard @BBL X1C')
+    // Config JSON on-the-fly com parametros minimos para slicing
+    const config = {
+      printer_model: 'Bambu Lab X1 Carbon',
+      nozzle_diameter: 0.4,
+      printable_area: '0x0,256x0,256x256,0x256',
+      printable_height: 256,
+      layer_height: 0.2,
+      initial_layer_print_height: 0.2,
+      wall_loops: 2,
+      sparse_infill_density: 15,
+      filament_type: 'PLA',
+      nozzle_temperature: 220,
+      bed_temperature: 60
+    }
+    form.append('config', JSON.stringify(config))
 
     const resp = await axios.post(`${baseURL}/slicer/stl`, form, {
       headers: form.getHeaders(),

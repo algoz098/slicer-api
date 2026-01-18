@@ -160,6 +160,8 @@ bool center_instances_on_bed_center(Slic3r::Model* model,
                 inst->set_transformation(tf);
                 ++adjusted;
             }
+            // Invalidate bounding box so instance_bounding_box() returns updated values
+            obj->invalidate_bounding_box();
         }
 
         std::cout << "DEBUG: center_on_bed (instances) => shifted " << adjusted

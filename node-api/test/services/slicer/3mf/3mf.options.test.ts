@@ -35,13 +35,25 @@ describe('slicer/3mf service (JSON body with options)', () => {
     fs.mkdirSync(outDir, { recursive: true })
     const outTarget = path.join(outDir, `node_api_3mf_options_plate_1.gcode.3mf`)
 
+    // Config JSON on-the-fly com parametros minimos para slicing
+    const config = {
+      printer_model: 'Bambu Lab X1 Carbon',
+      nozzle_diameter: 0.4,
+      printable_area: '0x0,256x0,256x256,0x256',
+      printable_height: 256,
+      layer_height: 0.2,
+      wall_loops: 2,
+      sparse_infill_density: 15,
+      filament_type: 'PLA',
+      nozzle_temperature: 220,
+      bed_temperature: 60
+    }
+
     const body = {
       filePath: input3mf,
       output: outTarget,
       plate: 1,
-      printerProfile: 'Bambu Lab X1 Carbon 0.4 nozzle',
-      filamentProfile: 'Bambu PLA Basic @BBL X1C',
-      processProfile: '0.20mm Standard @BBL X1C',
+      config,
       options: { sparse_infill_density: 30, layer_height: 0.24 }
     }
 
@@ -68,4 +80,3 @@ describe('slicer/3mf service (JSON body with options)', () => {
     assert.strictEqual(stat.size, data.size, 'Tamanho no disco difere do declarado')
   })
 })
-

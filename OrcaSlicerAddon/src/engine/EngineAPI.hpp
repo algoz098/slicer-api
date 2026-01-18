@@ -42,9 +42,10 @@ typedef struct {
     const char* output_file;
     const char* config_file;      // optional
     const char* preset_name;      // optional
-    const char* printer_profile;  // optional
-    const char* filament_profile; // optional
-    const char* process_profile;  // optional
+    // Display names for profiles in output 3MF (metadata only, does not load any preset)
+    const char* printer_profile_name;  // optional - e.g. "My Printer" - sets printer_settings_id
+    const char* filament_profile_name; // optional - e.g. "Generic PLA" - sets filament_settings_id
+    const char* process_profile_name;  // optional - e.g. "High Quality" - sets print_settings_id
     int32_t     plate_index;      // 1-based
     bool        verbose;
     bool        dry_run;
@@ -70,19 +71,12 @@ orcacli_operation_result orcacli_initialize(orcacli_handle h, const char* resour
 orcacli_operation_result orcacli_load_model(orcacli_handle h, const char* filename);
 orcacli_model_info       orcacli_get_model_info(orcacli_handle h);
 orcacli_operation_result orcacli_slice(orcacli_handle h, const orcacli_slice_params* params);
-// Lazy loading of vendors/presets
-orcacli_operation_result orcacli_load_vendor(orcacli_handle h, const char* vendor_id);
 
 // Metadata
 const char* orcacli_version(); // static string, no free required
 
 // Global logging control (toggle stdout/stderr redirection without touching orcaslicer/ sources)
 void orcacli_set_logging_silenced(bool silent);
-
-// Profile loading (on-demand)
-orcacli_operation_result orcacli_load_printer_profile(orcacli_handle h, const char* printer_name);
-orcacli_operation_result orcacli_load_filament_profile(orcacli_handle h, const char* filament_name);
-orcacli_operation_result orcacli_load_process_profile(orcacli_handle h, const char* process_name);
 
 // Memory management helpers
 void orcacli_free_string(const char* s);

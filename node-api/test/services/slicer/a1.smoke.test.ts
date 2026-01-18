@@ -37,12 +37,16 @@ describe('slicer: A1 smoke (end-to-end)', function () {
   })
 
   after(async () => {
-    try { if (appRef?.teardown) await appRef.teardown() } catch {}
-    try { if (server) server.close() } catch {}
+    try {
+      if (appRef?.teardown) await appRef.teardown()
+    } catch {}
+    try {
+      if (server) server.close()
+    } catch {}
   })
 
   it('should slice STL and return valid G-code', async () => {
-    const repoRoot = path.resolve(__dirname, '../../../../..')
+    const repoRoot = path.resolve(__dirname, '../../../..')
     const stlPath = path.join(repoRoot, 'example_files/3DBenchy.stl')
     if (!fs.existsSync(stlPath)) {
       throw new Error(`Exemplo STL não encontrado em ${stlPath}`)
@@ -88,4 +92,3 @@ describe('slicer: A1 smoke (end-to-end)', function () {
     }
   })
 })
-

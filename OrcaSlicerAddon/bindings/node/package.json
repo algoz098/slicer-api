@@ -1,6 +1,6 @@
 {
   "name": "orcaslicer-addon",
-  "version": "0.1.0",
+  "version": "2.3.2",
   "private": false,
   "description": "Node.js native addon for OrcaSlicer (N-API) — programmatic slicing",
   "license": "AGPL-3.0-only",

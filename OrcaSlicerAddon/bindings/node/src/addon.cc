@@ -126,7 +126,7 @@ typedef struct { bool success; const char* message; const char* error_details; d
 typedef struct { const char* filename; uint32_t object_count; uint32_t triangle_count; double volume; const char* bounding_box; bool is_valid; } orcacli_model_info;
 // key/value override
 typedef struct { const char* key; const char* value; } orcacli_kv;
-typedef struct { const char* input_file; const char* output_file; const char* config_file; const char* preset_name; const char* printer_profile; const char* filament_profile; const char* process_profile; int32_t plate_index; bool verbose; bool dry_run; bool transfer_printer_customizations; bool transfer_filament_customizations; bool transfer_process_customizations; bool transfer_project_overrides; bool center_on_bed; bool auto_realign_if_needed; const orcacli_kv* overrides; int32_t overrides_count; } orcacli_slice_params;
+typedef struct { const char* input_file; const char* output_file; const char* config_file; const char* preset_name; const char* printer_profile_name; const char* filament_profile_name; const char* process_profile_name; int32_t plate_index; bool verbose; bool dry_run; bool transfer_printer_customizations; bool transfer_filament_customizations; bool transfer_process_customizations; bool transfer_project_overrides; bool center_on_bed; bool auto_realign_if_needed; const orcacli_kv* overrides; int32_t overrides_count; } orcacli_slice_params;
 
 typedef orcacli_handle       (*PF_orcacli_create)();
 typedef void                 (*PF_orcacli_destroy)(orcacli_handle);
@@ -139,10 +139,6 @@ typedef void                 (*PF_orcacli_set_logging_silenced)(bool);
 typedef void                 (*PF_orcacli_free_string)(const char*);
 typedef void                 (*PF_orcacli_free_model_info)(orcacli_model_info*);
 typedef void                 (*PF_orcacli_free_result)(orcacli_operation_result*);
-typedef orcacli_operation_result (*PF_orcacli_load_vendor)(orcacli_handle, const char*);
-typedef orcacli_operation_result (*PF_orcacli_load_printer_profile)(orcacli_handle, const char*);
-typedef orcacli_operation_result (*PF_orcacli_load_filament_profile)(orcacli_handle, const char*);
-typedef orcacli_operation_result (*PF_orcacli_load_process_profile)(orcacli_handle, const char*);
 
 struct FFI {
   void* lib = nullptr;
@@ -158,10 +154,6 @@ struct FFI {
   PF_orcacli_free_string free_string = nullptr;
   PF_orcacli_free_model_info free_model_info = nullptr;
   PF_orcacli_free_result free_result = nullptr;
-  PF_orcacli_load_vendor load_vendor = nullptr;
-  PF_orcacli_load_printer_profile load_printer_profile = nullptr;
-  PF_orcacli_load_filament_profile load_filament_profile = nullptr;
-  PF_orcacli_load_process_profile load_process_profile = nullptr;
   // state
   orcacli_handle inst = nullptr;
 };
@@ -210,7 +202,8 @@ static bool ensure_engine_loaded(std::string* err_out) {
     std::filesystem::path p3 = base / ".." / ".." / "src" / libname;          // <module>/../../src/lib...
     std::filesystem::path p4 = base / ".." / "bindings" / "node" / libname;   // <module>/../bindings/node/lib...
     // Also consider Ninja build output dir used in this repo layout
-    std::filesystem::path p5 = base / ".." / ".." / ".." / "build-ninja" / "src" / libname; // <module>/../../../build-ninja/src/lib...
+    // From bindings/node/build/Release we need 4 levels up to reach OrcaSlicerAddon/build-ninja/src
+    std::filesystem::path p5 = base / ".." / ".." / ".." / ".." / "build-ninja" / "src" / libname; // <module>/../../../../build-ninja/src/lib...
     // Prefer the Ninja engine (freshly built in this monorepo) before local copies to avoid stale engines during dev
     candidates.push_back(p5.lexically_normal().string());
     candidates.push_back(p1.lexically_normal().string());
@@ -259,10 +252,6 @@ static bool ensure_engine_loaded(std::string* err_out) {
   g_ffi.free_string    = reinterpret_cast<PF_orcacli_free_string>(load_sym(g_ffi.lib, "orcacli_free_string"));
   g_ffi.free_model_info= reinterpret_cast<PF_orcacli_free_model_info>(load_sym(g_ffi.lib, "orcacli_free_model_info"));
   g_ffi.free_result    = reinterpret_cast<PF_orcacli_free_result>(load_sym(g_ffi.lib, "orcacli_free_result"));
-  g_ffi.load_vendor    = reinterpret_cast<PF_orcacli_load_vendor>(load_sym(g_ffi.lib, "orcacli_load_vendor"));
-  g_ffi.load_printer_profile = reinterpret_cast<PF_orcacli_load_printer_profile>(load_sym(g_ffi.lib, "orcacli_load_printer_profile"));
-  g_ffi.load_filament_profile = reinterpret_cast<PF_orcacli_load_filament_profile>(load_sym(g_ffi.lib, "orcacli_load_filament_profile"));
-  g_ffi.load_process_profile = reinterpret_cast<PF_orcacli_load_process_profile>(load_sym(g_ffi.lib, "orcacli_load_process_profile"));
   // Relaxed symbol requirements: require core create/destroy; others optional for dev
   if (!g_ffi.create || !g_ffi.destroy) {
     if (err_out) *err_out = "Missing required core symbols in engine library (create/destroy)";
@@ -284,10 +273,6 @@ static bool ensure_engine_loaded(std::string* err_out) {
   log_missing("orcacli_free_string", (void*)g_ffi.free_string);
   log_missing("orcacli_free_model_info", (void*)g_ffi.free_model_info);
   log_missing("orcacli_free_result", (void*)g_ffi.free_result);
-  log_missing("orcacli_load_vendor", (void*)g_ffi.load_vendor);
-  log_missing("orcacli_load_printer_profile", (void*)g_ffi.load_printer_profile);
-  log_missing("orcacli_load_filament_profile", (void*)g_ffi.load_filament_profile);
-  log_missing("orcacli_load_process_profile", (void*)g_ffi.load_process_profile);
   log_missing("orcacli_set_logging_silenced", (void*)g_ffi.set_logging_silenced);
   ADDON_DEBUGF("DEBUG: [addon] ensure_engine_loaded: calling create()...\n");
   g_ffi.inst = g_ffi.create();
@@ -331,11 +316,6 @@ static napi_value Initialize(napi_env env, napi_callback_info info) {
   std::string resourcesPath;
   bool verbose = false;
   bool strict = true; // API-only: default to strict no-autoload
-  std::vector<std::string> vendors_requested;
-  std::vector<std::string> printer_profiles_requested;
-  std::vector<std::string> filament_profiles_requested;
-  std::vector<std::string> process_profiles_requested;
-  bool has_vendors = false;
 
   if (argc >= 1) {
     napi_valuetype t; NAPI_CALL(env, napi_typeof(env, args[0], &t));
@@ -348,58 +328,11 @@ static napi_value Initialize(napi_env env, napi_callback_info info) {
       if (has) { NAPI_CALL(env, napi_get_named_property(env, args[0], "verbose", &v)); (void)get_bool(env, v, &verbose); }
       NAPI_CALL(env, napi_has_named_property(env, args[0], "strict", &has));
       if (has) { NAPI_CALL(env, napi_get_named_property(env, args[0], "strict", &v)); (void)get_bool(env, v, &strict); }
-      // Pre-scan vendors/presets to decide strict mode before core initialize
-      // Collect arrays of strings from options into target vectors
-      auto collect_into = [&](const char* prop, std::vector<std::string>& target){
-        bool has_prop=false; napi_value arr;
-        NAPI_CALL_VOID(env, napi_has_named_property(env, args[0], prop, &has_prop));
-        if (has_prop) {
-          NAPI_CALL_VOID(env, napi_get_named_property(env, args[0], prop, &arr));
-          bool isArr=false; NAPI_CALL_VOID(env, napi_is_array(env, arr, &isArr));
-          if (isArr) {
-            uint32_t len=0; NAPI_CALL_VOID(env, napi_get_array_length(env, arr, &len));
-            for (uint32_t i=0;i<len;++i) {
-              napi_value el; NAPI_CALL_VOID(env, napi_get_element(env, arr, i, &el));
-              napi_valuetype et; NAPI_CALL_VOID(env, napi_typeof(env, el, &et));
-              if (et == napi_string) {
-                target.emplace_back(get_string(env, el));
-              }
-            }
-          }
-        }
-      };
-      collect_into("vendors", vendors_requested);
-      collect_into("presets", vendors_requested); // alias
-      collect_into("printerProfiles", printer_profiles_requested);
-      collect_into("filamentProfiles", filament_profiles_requested);
-      collect_into("processProfiles", process_profiles_requested);
-      has_vendors = !vendors_requested.empty();
     }
   }
-  // DEBUG: dump requested vendors and profiles
-  if (!vendors_requested.empty()) {
-    ADDON_DEBUGF("DEBUG: [addon] requested vendors (%zu):\n", vendors_requested.size());
-    for (const auto &s : vendors_requested) { ADDON_DEBUGF("  - %s\n", s.c_str()); }
-  }
-  if (!printer_profiles_requested.empty()) {
-    ADDON_DEBUGF("DEBUG: [addon] requested printerProfiles (%zu):\n", printer_profiles_requested.size());
-    for (const auto &s : printer_profiles_requested) { ADDON_DEBUGF("  - %s\n", s.c_str()); }
-  }
-  if (!filament_profiles_requested.empty()) {
-    ADDON_DEBUGF("DEBUG: [addon] requested filamentProfiles (%zu):\n", filament_profiles_requested.size());
-    for (const auto &s : filament_profiles_requested) { ADDON_DEBUGF("  - %s\n", s.c_str()); }
-  }
-  if (!process_profiles_requested.empty()) {
-    ADDON_DEBUGF("DEBUG: [addon] requested processProfiles (%zu):\n", process_profiles_requested.size());
-    for (const auto &s : process_profiles_requested) { ADDON_DEBUGF("  - %s\n", s.c_str()); }
-  }
 
-
-
-  // API-only control: do not read or modify environment for autoload behavior.
-  // Respect the 'strict' flag from initialize() only. Currently, strict is enforced in core.
-  ADDON_DEBUGF("DEBUG: [addon] initialize options: strict=%d, vendors=%zu, printers=%zu, filaments=%zu, processes=%zu\n",
-          (int)strict, vendors_requested.size(), printer_profiles_requested.size(), filament_profiles_requested.size(), process_profiles_requested.size());
+  // JSON on-the-fly mode only - no profile loading
+  ADDON_DEBUGF("DEBUG: [addon] initialize options: strict=%d\n", (int)strict);
 
   ADDON_DEBUGF("DEBUG: [addon] before ensure_engine_loaded()\n");
   std::lock_guard<std::mutex> lk(g_mutex);
@@ -428,58 +361,6 @@ static napi_value Initialize(napi_env env, napi_callback_info info) {
     // if (g_ffi.free_result) { g_ffi.free_result(&r); }
   }
 
-  // Optionally load vendors passed (via 'vendors' or 'presets')
-  if (!vendors_requested.empty()) {
-    for (const auto& v : vendors_requested) {
-      ADDON_DEBUGF("DEBUG: [addon] calling load_vendor('%s')\n", v.c_str());
-
-      auto lr = g_ffi.load_vendor(g_ffi.inst, v.c_str());
-      if (!lr.success) {
-
-
-        std::string msg = lr.message ? lr.message : "loadVendor failed";
-        if (g_ffi.free_result) g_ffi.free_result(&lr);
-        napi_throw_error(env, nullptr, msg.c_str());
-        return nullptr;
-      }
-      if (g_ffi.free_result) g_ffi.free_result(&lr);
-    }
-  }
-  // Optionally load specific profiles passed (only these will be loaded by the addon)
-  if (!printer_profiles_requested.empty()) {
-    for (const auto& name : printer_profiles_requested) {
-      ADDON_DEBUGF("DEBUG: [addon] calling load_printer_profile('%s')\n", name.c_str());
-
-      auto r = g_ffi.load_printer_profile(g_ffi.inst, name.c_str());
-
-      if (!r.success) { std::string msg = r.message ? r.message : "loadPrinterProfile failed"; if (g_ffi.free_result) g_ffi.free_result(&r); napi_throw_error(env, nullptr, msg.c_str()); return nullptr; }
-      if (g_ffi.free_result) g_ffi.free_result(&r);
-    }
-  }
-
-  if (!filament_profiles_requested.empty()) {
-    for (const auto& name : filament_profiles_requested) {
-      ADDON_DEBUGF("DEBUG: [addon] calling load_filament_profile('%s')\n", name.c_str());
-
-      auto r = g_ffi.load_filament_profile(g_ffi.inst, name.c_str());
-
-      if (!r.success) { std::string msg = r.message ? r.message : "loadFilamentProfile failed"; if (g_ffi.free_result) g_ffi.free_result(&r); napi_throw_error(env, nullptr, msg.c_str()); return nullptr; }
-
-      if (g_ffi.free_result) g_ffi.free_result(&r);
-    }
-  }
-  if (!process_profiles_requested.empty()) {
-
-    for (const auto& name : process_profiles_requested) {
-      ADDON_DEBUGF("DEBUG: [addon] calling load_process_profile('%s')\n", name.c_str());
-
-      auto r = g_ffi.load_process_profile(g_ffi.inst, name.c_str());
-
-
-      if (!r.success) { std::string msg = r.message ? r.message : "loadProcessProfile failed"; if (g_ffi.free_result) g_ffi.free_result(&r); napi_throw_error(env, nullptr, msg.c_str()); return nullptr; }
-      if (g_ffi.free_result) g_ffi.free_result(&r);
-    }
-  }
   napi_value undef; NAPI_CALL(env, napi_get_undefined(env, &undef)); return undef;
 }
 
@@ -549,7 +430,7 @@ struct SliceWork {
   napi_async_work work; napi_deferred deferred;
   struct {
     std::string input_file; std::string output_file;
-    std::string printer_profile; std::string filament_profile; std::string process_profile;
+    std::string printer_profile_name; std::string filament_profile_name; std::string process_profile_name;
     int plate_index=1; bool verbose=false; bool dry_run=false;
     bool transfer_printer_customizations=true;
     bool transfer_filament_customizations=true;
@@ -576,9 +457,10 @@ static void SliceExecute(napi_env env, void* data) {
   orcacli_slice_params p{};
   p.input_file = w->p.input_file.c_str();
   p.output_file = w->p.output_file.c_str();
-  p.printer_profile = w->p.printer_profile.empty()?nullptr:w->p.printer_profile.c_str();
-  p.filament_profile = w->p.filament_profile.empty()?nullptr:w->p.filament_profile.c_str();
-  p.process_profile = w->p.process_profile.empty()?nullptr:w->p.process_profile.c_str();
+  // Display names for profiles in output 3MF (metadata only)
+  p.printer_profile_name = w->p.printer_profile_name.empty()?nullptr:w->p.printer_profile_name.c_str();
+  p.filament_profile_name = w->p.filament_profile_name.empty()?nullptr:w->p.filament_profile_name.c_str();
+  p.process_profile_name = w->p.process_profile_name.empty()?nullptr:w->p.process_profile_name.c_str();
   p.plate_index = w->p.plate_index;
   p.verbose = w->p.verbose;
   p.dry_run = w->p.dry_run;
@@ -706,9 +588,10 @@ static napi_value Slice(napi_env env, napi_callback_info info) {
 
   set_str("input", work->p.input_file);
   set_str("output", work->p.output_file);
-  set_str("printerProfile", work->p.printer_profile);
-  set_str("filamentProfile", work->p.filament_profile);
-  set_str("processProfile", work->p.process_profile);
+  // Display names for profiles in output 3MF (metadata only, does not load any preset)
+  set_str("printerProfileName", work->p.printer_profile_name);
+  set_str("filamentProfileName", work->p.filament_profile_name);
+  set_str("processProfileName", work->p.process_profile_name);
   set_int("plate", work->p.plate_index);
   set_bool("verbose", work->p.verbose);
   set_bool("dryRun", work->p.dry_run);
@@ -724,6 +607,7 @@ static napi_value Slice(napi_env env, napi_callback_info info) {
   set_bool("center", work->p.center_on_bed);
 
   // Collect options from params.options and params.custom
+  // Supports: string, number, boolean, and arrays (serialized with semicolon separator for OrcaSlicer)
   auto collect_kv = [&](napi_value mapObj){
     if (!mapObj) return;
     napi_valuetype vt; if (napi_typeof(env, mapObj, &vt) != napi_ok || vt != napi_object) return;
@@ -742,7 +626,33 @@ static napi_value Slice(napi_env env, napi_callback_info info) {
       } else if (vt2 == napi_number) {
         double d=0; napi_get_value_double(env, v, &d); sval = std::to_string(d);
       } else {
-        continue; // ignore other types
+        // Check if it's an array - serialize elements with semicolon separator
+        bool is_array = false;
+        napi_is_array(env, v, &is_array);
+        if (is_array) {
+          uint32_t arr_len = 0;
+          napi_get_array_length(env, v, &arr_len);
+          for (uint32_t j = 0; j < arr_len; ++j) {
+            napi_value elem;
+            napi_get_element(env, v, j, &elem);
+            napi_valuetype elem_type;
+            napi_typeof(env, elem, &elem_type);
+            std::string elem_str;
+            if (elem_type == napi_string) {
+              elem_str = get_string(env, elem);
+            } else if (elem_type == napi_number) {
+              double d = 0; napi_get_value_double(env, elem, &d); elem_str = std::to_string(d);
+            } else if (elem_type == napi_boolean) {
+              bool b = false; get_bool(env, elem, &b); elem_str = b ? "1" : "0";
+            } else {
+              continue;
+            }
+            if (!sval.empty()) sval += ";";
+            sval += elem_str;
+          }
+        } else {
+          continue; // ignore other types
+        }
       }
       work->opts.emplace_back(std::move(key), std::move(sval));
     }
@@ -766,94 +676,6 @@ static napi_value Slice(napi_env env, napi_callback_info info) {
 }
 
 // loadVendor(vendorId: string)
-static napi_value LoadVendor(napi_env env, napi_callback_info info) {
-  size_t argc = 1; napi_value args[1]; napi_value thisArg; void* data;
-  NAPI_CALL(env, napi_get_cb_info(env, info, &argc, args, &thisArg, &data));
-  if (argc < 1) { napi_throw_type_error(env, nullptr, "vendorId is required"); return nullptr; }
-  napi_valuetype t; NAPI_CALL(env, napi_typeof(env, args[0], &t));
-  if (t != napi_string) { napi_throw_type_error(env, nullptr, "vendorId must be a string"); return nullptr; }
-  std::string vendor = get_string(env, args[0]);
-  // Marker to confirm when LoadVendor is invoked and which vendor is requested
-  ADDON_DEBUGF("DEBUG: [addon] LoadVendor('%s')\n", vendor.c_str());
-  std::lock_guard<std::mutex> lk(g_mutex);
-  std::string err;
-  if (!ensure_engine_loaded(&err)) { napi_throw_error(env, nullptr, err.c_str()); return nullptr; }
-  auto r = g_ffi.load_vendor(g_ffi.inst, vendor.c_str());
-  if (!r.success) {
-    std::string msg = r.message ? r.message : "loadVendor failed";
-    if (g_ffi.free_result) g_ffi.free_result(&r);
-    napi_throw_error(env, nullptr, msg.c_str());
-    return nullptr;
-  }
-  if (g_ffi.free_result) g_ffi.free_result(&r);
-  napi_value undef; NAPI_CALL(env, napi_get_undefined(env, &undef)); return undef;
-}
-
-// loadPrinterProfile(name: string)
-static napi_value LoadPrinterProfile(napi_env env, napi_callback_info info) {
-  size_t argc = 1; napi_value args[1]; napi_value thisArg; void* data;
-  NAPI_CALL(env, napi_get_cb_info(env, info, &argc, args, &thisArg, &data));
-  if (argc < 1) { napi_throw_type_error(env, nullptr, "printer name is required"); return nullptr; }
-  napi_valuetype t; NAPI_CALL(env, napi_typeof(env, args[0], &t));
-  if (t != napi_string) { napi_throw_type_error(env, nullptr, "printer name must be a string"); return nullptr; }
-  std::string name = get_string(env, args[0]);
-  std::lock_guard<std::mutex> lk(g_mutex);
-  std::string err; if (!ensure_engine_loaded(&err)) { napi_throw_error(env, nullptr, err.c_str()); return nullptr; }
-  auto r = g_ffi.load_printer_profile(g_ffi.inst, name.c_str());
-  if (!r.success) {
-    std::string msg = r.message ? r.message : "loadPrinterProfile failed";
-    if (g_ffi.free_result) g_ffi.free_result(&r);
-    napi_throw_error(env, nullptr, msg.c_str());
-    return nullptr;
-  }
-  if (g_ffi.free_result) g_ffi.free_result(&r);
-  napi_value undef; NAPI_CALL(env, napi_get_undefined(env, &undef)); return undef;
-}
-
-// loadFilamentProfile(name: string)
-static napi_value LoadFilamentProfile(napi_env env, napi_callback_info info) {
-  size_t argc = 1; napi_value args[1]; napi_value thisArg; void* data;
-  NAPI_CALL(env, napi_get_cb_info(env, info, &argc, args, &thisArg, &data));
-  if (argc < 1) { napi_throw_type_error(env, nullptr, "filament name is required"); return nullptr; }
-  napi_valuetype t; NAPI_CALL(env, napi_typeof(env, args[0], &t));
-  if (t != napi_string) { napi_throw_type_error(env, nullptr, "filament name must be a string"); return nullptr; }
-  std::string name = get_string(env, args[0]);
-  std::lock_guard<std::mutex> lk(g_mutex);
-  std::string err; if (!ensure_engine_loaded(&err)) { napi_throw_error(env, nullptr, err.c_str()); return nullptr; }
-  auto r = g_ffi.load_filament_profile(g_ffi.inst, name.c_str());
-  if (!r.success) {
-    std::string msg = r.message ? r.message : "loadFilamentProfile failed";
-    if (g_ffi.free_result) g_ffi.free_result(&r);
-    napi_throw_error(env, nullptr, msg.c_str());
-    return nullptr;
-  }
-  if (g_ffi.free_result) g_ffi.free_result(&r);
-  napi_value undef; NAPI_CALL(env, napi_get_undefined(env, &undef)); return undef;
-}
-
-// loadProcessProfile(name: string)
-static napi_value LoadProcessProfile(napi_env env, napi_callback_info info) {
-  size_t argc = 1; napi_value args[1]; napi_value thisArg; void* data;
-  NAPI_CALL(env, napi_get_cb_info(env, info, &argc, args, &thisArg, &data));
-  if (argc < 1) { napi_throw_type_error(env, nullptr, "process name is required"); return nullptr; }
-  napi_valuetype t; NAPI_CALL(env, napi_typeof(env, args[0], &t));
-  if (t != napi_string) { napi_throw_type_error(env, nullptr, "process name must be a string"); return nullptr; }
-  std::string name = get_string(env, args[0]);
-  std::lock_guard<std::mutex> lk(g_mutex);
-  std::string err; if (!ensure_engine_loaded(&err)) { napi_throw_error(env, nullptr, err.c_str()); return nullptr; }
-  auto r = g_ffi.load_process_profile(g_ffi.inst, name.c_str());
-  if (!r.success) {
-    std::string msg = r.message ? r.message : "loadProcessProfile failed";
-    if (g_ffi.free_result) g_ffi.free_result(&r);
-    napi_throw_error(env, nullptr, msg.c_str());
-    return nullptr;
-  }
-  if (g_ffi.free_result) g_ffi.free_result(&r);
-  napi_value undef; NAPI_CALL(env, napi_get_undefined(env, &undef)); return undef;
-}
-
-
-
 // shutdown(): cleans up engine state deterministically
 static napi_value Shutdown(napi_env env, napi_callback_info info) {
   (void)info;
@@ -865,106 +687,6 @@ static napi_value Shutdown(napi_env env, napi_callback_info info) {
   g_current_resources.clear();
   // Keep the library handle loaded; subsequent initialize can reuse it.
   napi_value undef; napi_get_undefined(env, &undef); return undef;
-}
-
-// loadVendorBundle({ vendor: string, vendorJson: string, files: Record<string,string> })
-static napi_value LoadVendorBundle(napi_env env, napi_callback_info info) {
-  size_t argc = 1; napi_value args[1]; napi_value thisArg; void* data;
-  NAPI_CALL(env, napi_get_cb_info(env, info, &argc, args, &thisArg, &data));
-  if (argc < 1) { napi_throw_type_error(env, nullptr, "bundle object is required"); return nullptr; }
-  napi_value obj = args[0]; napi_valuetype t; NAPI_CALL(env, napi_typeof(env, obj, &t)); if (t != napi_object) { napi_throw_type_error(env, nullptr, "bundle must be object"); return nullptr; }
-
-  // Extract vendor
-  napi_value v; bool has=false;
-  std::string vendor, vendorJson;
-  NAPI_CALL(env, napi_has_named_property(env, obj, "vendor", &has));
-  if (!has) { napi_throw_type_error(env, nullptr, "bundle.vendor is required"); return nullptr; }
-  NAPI_CALL(env, napi_get_named_property(env, obj, "vendor", &v)); vendor = get_string(env, v);
-  if (vendor.empty()) { napi_throw_type_error(env, nullptr, "bundle.vendor must be non-empty string"); return nullptr; }
-
-  NAPI_CALL(env, napi_has_named_property(env, obj, "vendorJson", &has));
-  if (!has) { napi_throw_type_error(env, nullptr, "bundle.vendorJson is required"); return nullptr; }
-  NAPI_CALL(env, napi_get_named_property(env, obj, "vendorJson", &v)); vendorJson = get_string(env, v);
-  if (vendorJson.empty()) { napi_throw_type_error(env, nullptr, "bundle.vendorJson must be non-empty string"); return nullptr; }
-
-  // files map
-  NAPI_CALL(env, napi_has_named_property(env, obj, "files", &has));
-  if (!has) { napi_throw_type_error(env, nullptr, "bundle.files is required"); return nullptr; }
-  napi_value filesObj; NAPI_CALL(env, napi_get_named_property(env, obj, "files", &filesObj));
-  napi_valuetype ft; NAPI_CALL(env, napi_typeof(env, filesObj, &ft)); if (ft != napi_object) { napi_throw_type_error(env, nullptr, "bundle.files must be an object map"); return nullptr; }
-
-  std::lock_guard<std::mutex> lk(g_mutex);
-  std::string err;
-  if (!ensure_engine_loaded(&err)) { napi_throw_error(env, nullptr, err.c_str()); return nullptr; }
-
-  // Build persistent sandbox directory under OS temp (one per process)
-  namespace fs = std::filesystem;
-  fs::path base = fs::temp_directory_path() / ".orcaslicercli";
-#if defined(_WIN32)
-  DWORD pid = GetCurrentProcessId();
-  std::string pid_str = std::to_string((long long)pid);
-#else
-  pid_t pid = getpid();
-  std::string pid_str = std::to_string((long long)pid);
-#endif
-  fs::path sandbox = base / (std::string("bundle-") + pid_str);
-  fs::create_directories(sandbox / "profiles" / vendor);
-
-  // Write vendor JSON to profiles/<vendor>.json
-  {
-    fs::create_directories(sandbox / "profiles");
-    fs::path vfile = sandbox / "profiles" / (vendor + std::string(".json"));
-    std::ofstream ofs(vfile);
-    ofs << vendorJson;
-  }
-
-  // Iterate files map and write them under profiles/
-  napi_value names; NAPI_CALL(env, napi_get_property_names(env, filesObj, &names));
-  uint32_t len=0; NAPI_CALL(env, napi_get_array_length(env, names, &len));
-  for (uint32_t i=0;i<len;++i) {
-    napi_value k; NAPI_CALL(env, napi_get_element(env, names, i, &k));
-    std::string rel = get_string(env, k);
-    napi_value val; NAPI_CALL(env, napi_get_named_property(env, filesObj, rel.c_str(), &val));
-    napi_valuetype vt; NAPI_CALL(env, napi_typeof(env, val, &vt)); if (vt != napi_string) { continue; }
-    std::string content = get_string(env, val);
-    // normalize path
-    while (!rel.empty() && (rel[0] == '/' || rel[0] == '\\')) rel.erase(rel.begin());
-    if (rel.rfind("profiles/", 0) == 0) rel = rel.substr(std::string("profiles/").size());
-    // If starts with vendor/ keep as-is, else if starts with "machine/" prefix with vendor/
-    if (rel.rfind(vendor + "/", 0) != 0) {
-      if (rel.rfind("machine/", 0) == 0) rel = vendor + "/" + rel; // vendor/machine/...
-    }
-    fs::path dst = sandbox / "profiles" / rel;
-    fs::create_directories(dst.parent_path());
-    std::ofstream ofs(dst);
-    ofs << content;
-  }
-
-  // Reinitialize engine with resourcesPath pointing to sandbox only if not already using it
-  if (g_current_resources != sandbox.string()) {
-    if (g_ffi.inst && g_ffi.destroy) {
-      try { g_ffi.destroy(g_ffi.inst); } catch (...) {}
-      g_ffi.inst = nullptr;
-    }
-    if (g_ffi.create) {
-      g_ffi.inst = g_ffi.create();
-    }
-    if (!g_ffi.inst) { napi_throw_error(env, nullptr, "failed to create engine instance"); return nullptr; }
-    if (g_ffi.initialize) {
-      auto r = g_ffi.initialize(g_ffi.inst, sandbox.string().c_str());
-      if (!r.success) { std::string msg = r.message ? r.message : "initialize failed"; if (g_ffi.free_result) g_ffi.free_result(&r); napi_throw_error(env, nullptr, msg.c_str()); return nullptr; }
-      if (g_ffi.free_result) g_ffi.free_result(&r);
-      g_current_resources = sandbox.string();
-    }
-  }
-  // Now load the vendor by ID (it will see all vendors present in the persistent sandbox)
-  if (g_ffi.load_vendor) {
-    auto r = g_ffi.load_vendor(g_ffi.inst, vendor.c_str());
-    if (!r.success) { std::string msg = r.message ? r.message : "loadVendor failed"; if (g_ffi.free_result) g_ffi.free_result(&r); napi_throw_error(env, nullptr, msg.c_str()); return nullptr; }
-    if (g_ffi.free_result) g_ffi.free_result(&r);
-  }
-
-  napi_value undef; NAPI_CALL(env, napi_get_undefined(env, &undef)); return undef;
 }
 
 // setLoggingSilenced(silent: boolean)
@@ -994,11 +716,6 @@ static napi_value Init(napi_env env, napi_value exports) {
     {"version",    0, Version,    0, 0, 0, napi_default, 0},
     {"getModelInfo", 0, GetModelInfo, 0, 0, 0, napi_default, 0},
     {"slice",      0, Slice,      0, 0, 0, napi_default, 0},
-    {"loadVendor", 0, LoadVendor, 0, 0, 0, napi_default, 0},
-    {"loadVendorBundle", 0, LoadVendorBundle, 0, 0, 0, napi_default, 0},
-    {"loadPrinterProfile", 0, LoadPrinterProfile, 0, 0, 0, napi_default, 0},
-    {"loadFilamentProfile", 0, LoadFilamentProfile, 0, 0, 0, napi_default, 0},
-    {"loadProcessProfile", 0, LoadProcessProfile, 0, 0, 0, napi_default, 0},
     {"setLoggingSilenced", 0, SetLoggingSilenced, 0, 0, 0, napi_default, 0},
   };
   NAPI_CALL(env, napi_define_properties(env, exports, sizeof(props)/sizeof(props[0]), props));

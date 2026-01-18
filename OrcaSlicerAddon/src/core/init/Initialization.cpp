@@ -1,4 +1,5 @@
 #include "core/init/Initialization.hpp"
+#include "core/util/Utilities.hpp"
 
 #if HAVE_LIBSLIC3R
 
@@ -18,6 +19,8 @@
 #include "libslic3r/PrintConfig.hpp"
 
 namespace OrcaSlicerCli { namespace init {
+
+using OrcaSlicerCli::util::safe_build_config;
 
 static inline bool truthy_env(const char* name) {
     if (const char* s = std::getenv(name)) return (s[0]=='1'||s[0]=='T'||s[0]=='t'||s[0]=='Y'||s[0]=='y');
@@ -138,8 +141,20 @@ bool initialize_slic3r(const std::string& resources_path,
         config = std::make_unique<Slic3r::DynamicPrintConfig>();
         model  = std::make_unique<Slic3r::Model>();
         print  = nullptr; // Print is created fresh per slice
+
+        // CRITICAL: Always initialize config with FullPrintConfig::defaults()
+        // This provides all default values for slicing, making profiles optional.
+        // Options passed via JSON will override these defaults.
+        Slic3r::FullPrintConfig full_defaults = Slic3r::FullPrintConfig::defaults();
+        config->apply(full_defaults, true);
+        std::cout << "DEBUG: Initialized config with FullPrintConfig::defaults()" << std::endl;
+
+        // If vendors are loaded, merge their config on top of defaults
         if (!loaded_vendors.empty()) {
-            *config = preset_bundle.full_config_secure();
+            Slic3r::DynamicPrintConfig vendor_config;
+            safe_build_config(preset_bundle, vendor_config);
+            config->apply(vendor_config, true);
+            std::cout << "DEBUG: Applied vendor config on top of defaults" << std::endl;
         }
 
         return true;

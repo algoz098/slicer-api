@@ -10,10 +10,7 @@ import type { ProfileConverterService } from './profile-converter.class'
 // Response schema: a JSON object of overrides compatible with slicer `options`
 export const profileConverterSchema = Type.Object(
   {
-    options: Type.Record(
-      Type.String(),
-      Type.Union([Type.String(), Type.Number(), Type.Boolean()])
-    )
+    options: Type.Record(Type.String(), Type.Union([Type.String(), Type.Number(), Type.Boolean()]))
   },
   { $id: 'ProfileConverter', additionalProperties: false }
 )
@@ -30,18 +27,9 @@ export const profileConverterExternalResolver = resolve<
 // `data` is optional when a multipart file is provided.
 export const profileConverterDataSchema = Type.Object(
   {
-    type: Type.Union([
-      Type.Literal('printer'),
-      Type.Literal('filament'),
-      Type.Literal('process')
-    ]),
+    type: Type.Union([Type.Literal('printer'), Type.Literal('filament'), Type.Literal('process')]),
     // Accepts: JSON string, base64 string, raw text, filesystem path, or already-parsed object
-    data: Type.Optional(
-      Type.Union([
-        Type.String(),
-        Type.Record(Type.String(), Type.Any())
-      ])
-    )
+    data: Type.Optional(Type.Union([Type.String(), Type.Record(Type.String(), Type.Any())]))
   },
   { $id: 'ProfileConverterData', additionalProperties: false }
 )

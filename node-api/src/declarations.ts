@@ -9,6 +9,7 @@ export type { NextFunction }
 // Extend with custom runtime values you set via app.set(...)
 export interface Configuration extends ApplicationConfiguration {
   orca: any
+  orca_resourcesPath: string
 }
 
 // A mapping of service names to types. Will be extended in service files.

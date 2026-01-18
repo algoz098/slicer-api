@@ -38,4 +38,3 @@ describe('Feathers application tests (mocha puro)', () => {
     }
   })
 })
-

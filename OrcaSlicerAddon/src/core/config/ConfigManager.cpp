@@ -1,4 +1,5 @@
 #include "core/config/ConfigManager.hpp"
+#include "core/util/Utilities.hpp"
 
 #include <filesystem>
 #include <iostream>
@@ -14,6 +15,7 @@
 #include "libslic3r/PresetBundle.hpp"
 #include "libslic3r/AppConfig.hpp"
 #include "libslic3r/Preset.hpp"
+#include "libslic3r/Utils.hpp"
 
 #include <nlohmann/json.hpp>
 #include <fstream>
@@ -21,6 +23,8 @@
 
 
 namespace OrcaSlicerCli { namespace config {
+
+using OrcaSlicerCli::util::safe_build_config;
 
 // Keep minimal shared state about resources and vendors loaded within this module.
 static std::string g_resources_path;
@@ -192,7 +196,7 @@ bool load_vendor_from_resources(const std::string& resources_path,
                                 try { fs::create_directories(file_path.parent_path()); } catch (...) {}
 
                                 // Load directly into printers collection to avoid the bundle path that expects full bundles.
-                                Slic3r::Preset &loaded = preset_bundle.printers.load_preset(file_path.string(), preset_name, std::move(merged), /*select=*/false, vendor_ver, /*is_custom_defined=*/false);
+                                Slic3r::Preset &loaded = preset_bundle.printers.load_preset(file_path.string(), preset_name, std::move(merged), /*select=*/false, vendor_ver);
                                 loaded.is_system = true;
                                 if (itv != preset_bundle.vendors.end()) {
                                     loaded.vendor  = &itv->second;
@@ -525,7 +529,7 @@ bool load_printer_profile(const std::string& resources_path,
             return false;
         }
         preset_bundle.update_compatible(Slic3r::PresetSelectCompatibleType::Always);
-        out_config = preset_bundle.full_config_secure();
+        safe_build_config(preset_bundle, out_config);
         return true;
     } catch (const std::exception &e) {
         last_error = std::string("Error loading printer profile: ") + e.what();
@@ -580,7 +584,7 @@ bool load_filament_profile(const std::string& filament_name,
             return false;
         }
         preset_bundle.update_compatible(Slic3r::PresetSelectCompatibleType::Always);
-        out_config = preset_bundle.full_config_secure();
+        safe_build_config(preset_bundle, out_config);
         return true;
     } catch (const std::exception& e) {
         last_error = std::string("Error loading filament profile: ") + e.what();
@@ -631,7 +635,7 @@ bool load_process_profile(const std::string& process_name,
             return false;
         }
         preset_bundle.update_compatible(Slic3r::PresetSelectCompatibleType::Always);
-        out_config = preset_bundle.full_config_secure();
+        safe_build_config(preset_bundle, out_config);
         return true;
     } catch (const std::exception& e) {
         last_error = std::string("Error loading process profile: ") + e.what();
@@ -693,6 +697,157 @@ std::vector<std::string> list_process_profiles(const std::string& resources_path
     return profiles;
 }
 
+
+bool apply_generic_fallback_config(Slic3r::DynamicPrintConfig& config,
+                                   const std::string& resources_path)
+{
+    std::cout << "DEBUG: Applying generic fallback config for on-the-fly slicing..." << std::endl;
+
+    try {
+        // Set minimal printer configuration for generic slicing
+        // These values are based on fdm_machine_common.json from OrcaSlicer
+
+        // Printer basics
+        config.set_key_value("gcode_flavor", new Slic3r::ConfigOptionEnum<Slic3r::GCodeFlavor>(Slic3r::gcfMarlinLegacy));
+        config.set_key_value("printer_technology", new Slic3r::ConfigOptionEnum<Slic3r::PrinterTechnology>(Slic3r::ptFFF));
+
+        // Bed and printable area - default 256x256x256 (common for modern printers)
+        // ConfigOptionPoints uses Vec2d (double coordinates in mm), not scaled Points
+        std::vector<Slic3r::Vec2d> printable_points;
+        printable_points.push_back(Slic3r::Vec2d(0, 0));
+        printable_points.push_back(Slic3r::Vec2d(256, 0));
+        printable_points.push_back(Slic3r::Vec2d(256, 256));
+        printable_points.push_back(Slic3r::Vec2d(0, 256));
+        config.set_key_value("printable_area", new Slic3r::ConfigOptionPoints(printable_points));
+        config.set_key_value("printable_height", new Slic3r::ConfigOptionFloat(256.0));
+
+        // Nozzle
+        Slic3r::ConfigOptionFloats* nozzle_dia = new Slic3r::ConfigOptionFloats();
+        nozzle_dia->values.push_back(0.4);
+        config.set_key_value("nozzle_diameter", nozzle_dia);
+
+        // Retraction defaults
+        Slic3r::ConfigOptionFloats* retract_len = new Slic3r::ConfigOptionFloats();
+        retract_len->values.push_back(0.8);
+        config.set_key_value("retraction_length", retract_len);
+
+        Slic3r::ConfigOptionFloats* retract_speed = new Slic3r::ConfigOptionFloats();
+        retract_speed->values.push_back(30);
+        config.set_key_value("retraction_speed", retract_speed);
+
+        Slic3r::ConfigOptionFloats* deretract_speed = new Slic3r::ConfigOptionFloats();
+        deretract_speed->values.push_back(30);
+        config.set_key_value("deretraction_speed", deretract_speed);
+
+        Slic3r::ConfigOptionFloats* z_hop = new Slic3r::ConfigOptionFloats();
+        z_hop->values.push_back(0.4);
+        config.set_key_value("z_hop", z_hop);
+
+        // Filament basics
+        Slic3r::ConfigOptionStrings* fil_type = new Slic3r::ConfigOptionStrings();
+        fil_type->values.push_back("PLA");
+        config.set_key_value("filament_type", fil_type);
+
+        Slic3r::ConfigOptionFloats* fil_dia = new Slic3r::ConfigOptionFloats();
+        fil_dia->values.push_back(1.75);
+        config.set_key_value("filament_diameter", fil_dia);
+
+        Slic3r::ConfigOptionInts* nozzle_temp = new Slic3r::ConfigOptionInts();
+        nozzle_temp->values.push_back(220);
+        config.set_key_value("nozzle_temperature", nozzle_temp);
+
+        Slic3r::ConfigOptionInts* nozzle_temp_init = new Slic3r::ConfigOptionInts();
+        nozzle_temp_init->values.push_back(220);
+        config.set_key_value("nozzle_temperature_initial_layer", nozzle_temp_init);
+
+        Slic3r::ConfigOptionInts* bed_temp = new Slic3r::ConfigOptionInts();
+        bed_temp->values.push_back(60);
+        config.set_key_value("hot_plate_temp", bed_temp);
+
+        Slic3r::ConfigOptionInts* bed_temp_init = new Slic3r::ConfigOptionInts();
+        bed_temp_init->values.push_back(60);
+        config.set_key_value("hot_plate_temp_initial_layer", bed_temp_init);
+
+        // Process/print defaults
+        config.set_key_value("layer_height", new Slic3r::ConfigOptionFloat(0.2));
+        config.set_key_value("initial_layer_print_height", new Slic3r::ConfigOptionFloat(0.2));
+        config.set_key_value("line_width", new Slic3r::ConfigOptionFloatOrPercent(0.42, false));
+        config.set_key_value("wall_loops", new Slic3r::ConfigOptionInt(3));
+        config.set_key_value("top_shell_layers", new Slic3r::ConfigOptionInt(4));
+        config.set_key_value("bottom_shell_layers", new Slic3r::ConfigOptionInt(4));
+        config.set_key_value("sparse_infill_density", new Slic3r::ConfigOptionPercent(15));
+
+        // Speeds
+        config.set_key_value("outer_wall_speed", new Slic3r::ConfigOptionFloat(200));
+        config.set_key_value("inner_wall_speed", new Slic3r::ConfigOptionFloat(300));
+        config.set_key_value("sparse_infill_speed", new Slic3r::ConfigOptionFloat(270));
+        config.set_key_value("travel_speed", new Slic3r::ConfigOptionFloat(400));
+        config.set_key_value("initial_layer_speed", new Slic3r::ConfigOptionFloat(50));
+
+        // Acceleration
+        config.set_key_value("default_acceleration", new Slic3r::ConfigOptionFloatOrPercent(10000, false));
+        config.set_key_value("travel_acceleration", new Slic3r::ConfigOptionFloatOrPercent(10000, false));
+
+        // Machine limits
+        Slic3r::ConfigOptionFloats* max_speed_x = new Slic3r::ConfigOptionFloats();
+        max_speed_x->values.push_back(500);
+        max_speed_x->values.push_back(200);
+        config.set_key_value("machine_max_speed_x", max_speed_x);
+
+        Slic3r::ConfigOptionFloats* max_speed_y = new Slic3r::ConfigOptionFloats();
+        max_speed_y->values.push_back(500);
+        max_speed_y->values.push_back(200);
+        config.set_key_value("machine_max_speed_y", max_speed_y);
+
+        Slic3r::ConfigOptionFloats* max_speed_z = new Slic3r::ConfigOptionFloats();
+        max_speed_z->values.push_back(20);
+        max_speed_z->values.push_back(20);
+        config.set_key_value("machine_max_speed_z", max_speed_z);
+
+        Slic3r::ConfigOptionFloats* max_accel_x = new Slic3r::ConfigOptionFloats();
+        max_accel_x->values.push_back(20000);
+        max_accel_x->values.push_back(20000);
+        config.set_key_value("machine_max_acceleration_x", max_accel_x);
+
+        Slic3r::ConfigOptionFloats* max_accel_y = new Slic3r::ConfigOptionFloats();
+        max_accel_y->values.push_back(20000);
+        max_accel_y->values.push_back(20000);
+        config.set_key_value("machine_max_acceleration_y", max_accel_y);
+
+        Slic3r::ConfigOptionFloats* max_accel_z = new Slic3r::ConfigOptionFloats();
+        max_accel_z->values.push_back(500);
+        max_accel_z->values.push_back(200);
+        config.set_key_value("machine_max_acceleration_z", max_accel_z);
+
+        // G-code placeholders (minimal)
+        config.set_key_value("machine_start_gcode", new Slic3r::ConfigOptionString(
+            "G28 ; Home\n"
+            "G1 Z5 F3000 ; Lift nozzle\n"
+            "M104 S[nozzle_temperature_initial_layer] ; Set nozzle temp\n"
+            "M140 S[hot_plate_temp_initial_layer] ; Set bed temp\n"
+            "M190 S[hot_plate_temp_initial_layer] ; Wait for bed\n"
+            "M109 S[nozzle_temperature_initial_layer] ; Wait for nozzle\n"
+            "G92 E0 ; Reset extruder\n"
+        ));
+        config.set_key_value("machine_end_gcode", new Slic3r::ConfigOptionString(
+            "G91 ; Relative positioning\n"
+            "G1 E-2 F2700 ; Retract\n"
+            "G1 Z10 F3000 ; Lift nozzle\n"
+            "G90 ; Absolute positioning\n"
+            "G1 X0 Y200 F6000 ; Move to front\n"
+            "M104 S0 ; Turn off nozzle\n"
+            "M140 S0 ; Turn off bed\n"
+            "M84 ; Disable motors\n"
+        ));
+
+        std::cout << "DEBUG: Generic fallback config applied successfully" << std::endl;
+        return true;
+
+    } catch (const std::exception& e) {
+        std::cerr << "ERROR: Failed to apply generic fallback config: " << e.what() << std::endl;
+        return false;
+    }
+}
 
 }} // namespace OrcaSlicerCli::config
 

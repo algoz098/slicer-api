@@ -9,12 +9,12 @@ import type { Application } from '../../../declarations'
 import type { SlicerStl, SlicerStlData, SlicerStlPatch, SlicerStlQuery } from './stl.schema'
 import { BadRequest } from '@feathersjs/errors'
 
-
 export type { SlicerStl, SlicerStlData, SlicerStlPatch, SlicerStlQuery }
 
 // Carrega o addon N-API do OrcaSlicerAddon. Preferimos ORCACLI_ADDON_DIR em dev para usar o addon precompilado da imagem.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const addonDir = process.env.ORCACLI_ADDON_DIR || path.resolve(__dirname, '../../../../../OrcaSlicerAddon/bindings/node')
+const addonDir =
+  process.env.ORCACLI_ADDON_DIR || path.resolve(__dirname, '../../../../../OrcaSlicerAddon/bindings/node')
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const orca = require(addonDir)
 
@@ -61,7 +61,8 @@ export class SlicerStlService<ServiceParams extends SlicerStlParams = SlicerStlP
     const anyParams: any = params ?? {}
 
     // Detecta arquivo vindo via multipart (koa-body, multer, etc.)
-    const filesContainer = anyParams?.koa?.request?.files ?? anyParams?.files ?? anyParams?.koa?.ctx?.request?.files
+    const filesContainer =
+      anyParams?.koa?.request?.files ?? anyParams?.files ?? anyParams?.koa?.ctx?.request?.files
 
     let fileObj: any | undefined
     if (filesContainer) {
@@ -88,24 +89,23 @@ export class SlicerStlService<ServiceParams extends SlicerStlParams = SlicerStlP
     // Define caminho de saída do G-code
     const outPath = data.output ?? path.join(os.tmpdir(), `orca-${randomUUID()}.gcode`)
 
-    // Pré-carregar vendor/perfis quando explicitados (evita qualquer fallback/auto-load)
-    try {
-      const p = (data.printerProfile || '').trim()
-      if (p && typeof orcaAny?.loadVendor === 'function') {
-        if (p.startsWith('Bambu ')) {
-          try { orcaAny.setLoggingSilenced(true); try { orcaAny.loadVendor('BBL') } finally { orcaAny.setLoggingSilenced(false) } } catch {}
-        } else if (p.startsWith('Creality ')) {
-          try { orcaAny.setLoggingSilenced(true); try { orcaAny.loadVendor('Creality') } finally { orcaAny.setLoggingSilenced(false) } } catch {}
-          if (p.includes('K2 Plus')) { try { orcaAny.setLoggingSilenced(true); try { orcaAny.loadVendor('CrealityPrint') } finally { orcaAny.setLoggingSilenced(false) } } catch {} }
-        }
-      }
-      if (typeof orcaAny?.loadPrinterProfile === 'function' && data.printerProfile) {
-        try { orcaAny.setLoggingSilenced(true); try { orcaAny.loadPrinterProfile(String(data.printerProfile)) } finally { orcaAny.setLoggingSilenced(false) } } catch {}
-      }
-    } catch {}
+    // NOTE: Nao carregamos vendors/profiles aqui.
+    // O addon funciona em modo on-the-fly puro:
+    // - A configuracao completa e passada via `options` em cada chamada de slice
+    // - O addon usa FullPrintConfig::defaults() como fallback
+
+    // Mescla options e config, onde config tem precedencia
+    // Precedencia: config > options > profiles
+    const baseOptions = (data as any).options ?? {}
+    const configOverrides = (data as any).config ?? {}
+    const finalOptions = { ...baseOptions, ...configOverrides }
+
+    // Guarda as chaves de options para validacao posterior
+    const optionsKeys = new Set(Object.keys(baseOptions))
 
     // Executa fatiamento via N-API
     let output: string
+    let ignoredOptions: string[] = []
     try {
       orcaAny.setLoggingSilenced(true)
       let res: any
@@ -114,10 +114,7 @@ export class SlicerStlService<ServiceParams extends SlicerStlParams = SlicerStlP
           input: inputPath,
           output: outPath,
           plate: data.plate,
-          printerProfile: data.printerProfile,
-          filamentProfile: data.filamentProfile,
-          processProfile: data.processProfile,
-          options: (data as any).options,
+          options: finalOptions,
           center: true,
           autoRealignIfNeeded: true
         })
@@ -125,14 +122,27 @@ export class SlicerStlService<ServiceParams extends SlicerStlParams = SlicerStlP
         orcaAny.setLoggingSilenced(false)
       }
       output = res.output
+      ignoredOptions = res.ignoredOptions ?? []
     } catch (err: any) {
       const msg = String(err?.message ?? err ?? '')
       const lower = msg.toLowerCase()
-      if (lower.includes('unknown') || lower.includes('invalid') || lower.includes('unrecognized') || lower.includes('failed to set')) {
+      if (
+        lower.includes('unknown') ||
+        lower.includes('invalid') ||
+        lower.includes('unrecognized') ||
+        lower.includes('failed to set')
+      ) {
         throw new BadRequest(`Invalid override option(s): ${msg}`)
       }
       // Sempre propague um Error bem formado para evitar logs "error: undefined"
       throw new Error(msg || 'Slice failed')
+    }
+
+    // Verifica se alguma opcao de 'options' foi ignorada (erro 400)
+    // Opcoes de 'config' sao ignoradas silenciosamente
+    const ignoredFromOptions = ignoredOptions.filter((k: string) => optionsKeys.has(k))
+    if (ignoredFromOptions.length > 0) {
+      throw new BadRequest(`Invalid override option(s): unknown keys: ${ignoredFromOptions.join(', ')}`)
     }
 
     const gcode = await fs.promises.readFile(output, 'utf8')

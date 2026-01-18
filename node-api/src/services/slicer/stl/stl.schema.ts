@@ -32,15 +32,22 @@ export const slicerStlDataSchema = Type.Object(
     field: Type.Optional(Type.String()),
     // Opcional: plate quando input for .3mf
     plate: Type.Optional(Type.Number({ minimum: 1 })),
-    // Opcional: nomes de perfis do Orca (impressora/filamento/processo)
-    printerProfile: Type.Optional(Type.String()),
-    filamentProfile: Type.Optional(Type.String()),
-    processProfile: Type.Optional(Type.String()),
     // Opcional: overrides de configuração (coerção p/ string no addon)
     options: Type.Optional(
+      Type.Record(Type.String(), Type.Union([Type.String(), Type.Number(), Type.Boolean()]))
+    ),
+    // Opcional: configuracao completa via JSON (tem precedencia sobre options e profiles)
+    // Permite enviar todas as configuracoes de impressora/filamento/processo como JSON
+    // Aceita strings, numeros, booleans e arrays (muitas configs do OrcaSlicer usam arrays)
+    config: Type.Optional(
       Type.Record(
         Type.String(),
-        Type.Union([Type.String(), Type.Number(), Type.Boolean()])
+        Type.Union([
+          Type.String(),
+          Type.Number(),
+          Type.Boolean(),
+          Type.Array(Type.Union([Type.String(), Type.Number(), Type.Boolean()]))
+        ])
       )
     ),
     // Opcional: caminho de saída para salvar o G-code

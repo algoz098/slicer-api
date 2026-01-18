@@ -20,7 +20,8 @@ describe('slicer: logging control (native setLoggingSilenced)', function () {
     )
 
     // Load addon directly (same path logic used by services)
-    const addonDir = process.env.ORCACLI_ADDON_DIR || path.resolve(nodeApiRoot, '../OrcaSlicerAddon/bindings/node')
+    const addonDir =
+      process.env.ORCACLI_ADDON_DIR || path.resolve(nodeApiRoot, '../OrcaSlicerAddon/bindings/node')
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const orca = require(addonDir)
 
@@ -29,9 +30,25 @@ describe('slicer: logging control (native setLoggingSilenced)', function () {
     }
 
     // Toggle on/off twice to ensure idempotency at runtime
-    try { orca.setLoggingSilenced(true) } catch (e) { throw new Error('toggle on failed: ' + (e as Error).message) }
-    try { orca.setLoggingSilenced(false) } catch (e) { throw new Error('toggle off failed: ' + (e as Error).message) }
-    try { orca.setLoggingSilenced(true) } catch (e) { throw new Error('toggle on(2) failed: ' + (e as Error).message) }
-    try { orca.setLoggingSilenced(false) } catch (e) { throw new Error('toggle off(2) failed: ' + (e as Error).message) }
+    try {
+      orca.setLoggingSilenced(true)
+    } catch (e) {
+      throw new Error('toggle on failed: ' + (e as Error).message)
+    }
+    try {
+      orca.setLoggingSilenced(false)
+    } catch (e) {
+      throw new Error('toggle off failed: ' + (e as Error).message)
+    }
+    try {
+      orca.setLoggingSilenced(true)
+    } catch (e) {
+      throw new Error('toggle on(2) failed: ' + (e as Error).message)
+    }
+    try {
+      orca.setLoggingSilenced(false)
+    } catch (e) {
+      throw new Error('toggle off(2) failed: ' + (e as Error).message)
+    }
   })
 })

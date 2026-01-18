@@ -20,11 +20,11 @@ export class MediasService<ServiceParams extends MediasParams = MediasParams>
   constructor(public options: MediasServiceOptions) {}
 
   async find(_params?: ServiceParams): Promise<any> {
-    const { path } = _params?.query || {};
-    if (!path) throw new Error('Missing query params');
+    const { path } = _params?.query || {}
+    if (!path) throw new Error('Missing query params')
     //check if file exists
-    if (!fs.existsSync(path)) throw new Error('File not found');
-    return {path}
+    if (!fs.existsSync(path)) throw new Error('File not found')
+    return { path }
   }
 
   async get(id: Id, _params?: ServiceParams): Promise<Medias> {

@@ -388,6 +388,24 @@ foreach(p IN LISTS _CLIPPER_CANDIDATES)
     endif()
 endforeach()
 
+# Clipper2 library (new in OrcaSlicer 2.3.x)
+set(_CLIPPER2_CANDIDATES
+    "${ORCASLICER_BUILD_DIR}/deps_src/clipper2/Release/libClipper2.a"
+    "${ORCASLICER_BUILD_DIR}/deps_src/clipper2/libClipper2.a"
+)
+set(LIBCLIPPER2_PATH "")
+foreach(p IN LISTS _CLIPPER2_CANDIDATES)
+    if(EXISTS "${p}")
+        set(LIBCLIPPER2_PATH "${p}")
+        break()
+    endif()
+endforeach()
+
+if(EXISTS "${LIBCLIPPER2_PATH}" AND ENABLE_LIBSLIC3R)
+    message(STATUS "Found libClipper2 at: ${LIBCLIPPER2_PATH}")
+    target_link_libraries(orcacli_core ${LIBCLIPPER2_PATH})
+endif()
+
 # TBB
 if(EXISTS "${LIBTBB_PATH2}" AND ENABLE_LIBSLIC3R)
     message(STATUS "Found libtbb at: ${LIBTBB_PATH2}")
@@ -649,6 +667,17 @@ if(EXISTS "${BOOST_THREAD_PATH2}" AND ENABLE_LIBSLIC3R)
 elseif(EXISTS "${BOOST_THREAD_PATH}" AND ENABLE_LIBSLIC3R)
     message(STATUS "Found boost_thread at: ${BOOST_THREAD_PATH}")
     target_link_libraries(orcacli_core ${BOOST_THREAD_PATH})
+endif()
+
+# boost_chrono (required for STEP.cpp sleep_for)
+set(BOOST_CHRONO_PATH2 "${ORCASLICER_DEPS_PREFIX}/lib/libboost_chrono.a")
+set(BOOST_CHRONO_PATH "${ORCASLICER_ROOT_DIR}/deps/build/${ORCASLICER_ARCH}/OrcaSlicer_dep/usr/local/lib/libboost_chrono.a")
+if(EXISTS "${BOOST_CHRONO_PATH2}" AND ENABLE_LIBSLIC3R)
+    message(STATUS "Found boost_chrono at: ${BOOST_CHRONO_PATH2}")
+    target_link_libraries(orcacli_core ${BOOST_CHRONO_PATH2})
+elseif(EXISTS "${BOOST_CHRONO_PATH}" AND ENABLE_LIBSLIC3R)
+    message(STATUS "Found boost_chrono at: ${BOOST_CHRONO_PATH}")
+    target_link_libraries(orcacli_core ${BOOST_CHRONO_PATH})
 endif()
 
 # Begin linker group to handle static OCCT cyclic deps (not supported on Apple ld)
