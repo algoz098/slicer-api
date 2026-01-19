@@ -90,38 +90,57 @@ target_link_libraries(orcacli_core
 
 # Create boost_headeronly target if not already defined (when built standalone via cmake-js)
 if(NOT TARGET boost_headeronly)
-    # Debug: print paths being searched
     message(STATUS "Looking for Boost headers...")
     message(STATUS "  ORCASLICER_BUILD_DIR: ${ORCASLICER_BUILD_DIR}")
     message(STATUS "  ORCASLICER_ROOT_DIR: ${ORCASLICER_ROOT_DIR}")
     message(STATUS "  ORCASLICER_ARCH: ${ORCASLICER_ARCH}")
 
-    # Look for Boost headers in OrcaSlicer deps install tree
-    find_path(BOOST_INCLUDE_DIR NAMES boost/optional.hpp
-        HINTS
-            "${ORCASLICER_BUILD_DIR}/deps/usr/local/include"
-            "${ORCASLICER_ROOT_DIR}/deps/build/OrcaSlicer_dep/usr/local/include"
-            "${ORCASLICER_ROOT_DIR}/deps/build/destdir/usr/local/include"
-            "${ORCASLICER_ROOT_DIR}/deps/build/${ORCASLICER_ARCH}/OrcaSlicer_dep/usr/local/include"
-        PATHS
-            /opt/homebrew/include
-            /usr/local/include
-            /usr/include
+    # Build list of candidate paths for Boost headers
+    set(_BOOST_SEARCH_PATHS
+        "${ORCASLICER_ROOT_DIR}/deps/build/${ORCASLICER_ARCH}/OrcaSlicer_dep/usr/local/include"
+        "${ORCASLICER_BUILD_DIR}/deps/usr/local/include"
+        "${ORCASLICER_ROOT_DIR}/deps/build/OrcaSlicer_dep/usr/local/include"
+        "${ORCASLICER_ROOT_DIR}/deps/build/destdir/usr/local/include"
     )
 
-    if(BOOST_INCLUDE_DIR)
-        message(STATUS "Found Boost headers at: ${BOOST_INCLUDE_DIR}")
+    # On Windows, also check for deps next to the build dir
+    if(WIN32)
+        list(APPEND _BOOST_SEARCH_PATHS
+            "${ORCASLICER_ROOT_DIR}/deps/build/x64/OrcaSlicer_dep/usr/local/include"
+            "${ORCASLICER_ROOT_DIR}/deps/build/x64/destdir/usr/local/include"
+        )
+    endif()
+
+    # Manually check which paths exist
+    set(_BOOST_FOUND_PATH "")
+    foreach(_path ${_BOOST_SEARCH_PATHS})
+        message(STATUS "  Checking: ${_path}")
+        if(EXISTS "${_path}/boost/optional.hpp")
+            message(STATUS "  -> Found boost/optional.hpp!")
+            set(_BOOST_FOUND_PATH "${_path}")
+            break()
+        elseif(EXISTS "${_path}")
+            message(STATUS "  -> Directory exists but no boost/optional.hpp")
+            # List contents to debug
+            file(GLOB _contents "${_path}/*")
+            foreach(_item ${_contents})
+                get_filename_component(_name "${_item}" NAME)
+                message(STATUS "      ${_name}")
+            endforeach()
+        else()
+            message(STATUS "  -> Does not exist")
+        endif()
+    endforeach()
+
+    if(_BOOST_FOUND_PATH)
+        message(STATUS "Found Boost headers at: ${_BOOST_FOUND_PATH}")
         add_library(boost_headeronly INTERFACE)
-        target_include_directories(boost_headeronly SYSTEM INTERFACE ${BOOST_INCLUDE_DIR})
+        target_include_directories(boost_headeronly SYSTEM INTERFACE ${_BOOST_FOUND_PATH})
         if(APPLE)
             target_compile_definitions(boost_headeronly INTERFACE BOOST_ASIO_DISABLE_KQUEUE)
         endif()
     else()
-        message(WARNING "Boost headers not found! Searched in:")
-        message(WARNING "  ${ORCASLICER_BUILD_DIR}/deps/usr/local/include")
-        message(WARNING "  ${ORCASLICER_ROOT_DIR}/deps/build/OrcaSlicer_dep/usr/local/include")
-        message(WARNING "  ${ORCASLICER_ROOT_DIR}/deps/build/destdir/usr/local/include")
-        message(WARNING "  ${ORCASLICER_ROOT_DIR}/deps/build/${ORCASLICER_ARCH}/OrcaSlicer_dep/usr/local/include")
+        message(WARNING "Boost headers not found in any searched path!")
     endif()
 endif()
 
