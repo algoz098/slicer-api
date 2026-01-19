@@ -671,6 +671,29 @@ jobs:
             echo "Patch already applied or failed, continuing..."
           }
 
+      - name: Clean incomplete ExternalProject source dirs (Windows)
+        if: steps.check_prebuilt.outputs.found == 'false' && steps.check_cache.outputs.found == 'false'
+        shell: bash
+        run: |
+          # Remove ExternalProject source directories that may be incomplete from a failed cache
+          # These directories need .git to allow CMake ExternalProject to update them
+          # If they exist without .git, the build will fail with "fatal: not a git repository"
+          DEPS_BUILD="OrcaSlicer/deps/build"
+          if [ -d "$DEPS_BUILD" ]; then
+            echo "Checking for incomplete ExternalProject source directories..."
+            find "$DEPS_BUILD" -maxdepth 2 -type d -name 'dep_*-prefix' | while read prefix_dir; do
+              src_dir="$prefix_dir/src"
+              if [ -d "$src_dir" ]; then
+                for subdir in "$src_dir"/*/; do
+                  if [ -d "$subdir" ] && [ ! -d "$subdir/.git" ]; then
+                    echo "Removing incomplete source dir (no .git): $subdir"
+                    rm -rf "$subdir"
+                  fi
+                done
+              fi
+            done
+          fi
+
       - name: Build OrcaSlicer dependencies with CMake
         if: steps.check_prebuilt.outputs.found == 'false' && steps.check_cache.outputs.found == 'false'
         shell: bash
