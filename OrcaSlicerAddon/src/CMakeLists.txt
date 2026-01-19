@@ -90,6 +90,12 @@ target_link_libraries(orcacli_core
 
 # Create boost_headeronly target if not already defined (when built standalone via cmake-js)
 if(NOT TARGET boost_headeronly)
+    # Debug: print paths being searched
+    message(STATUS "Looking for Boost headers...")
+    message(STATUS "  ORCASLICER_BUILD_DIR: ${ORCASLICER_BUILD_DIR}")
+    message(STATUS "  ORCASLICER_ROOT_DIR: ${ORCASLICER_ROOT_DIR}")
+    message(STATUS "  ORCASLICER_ARCH: ${ORCASLICER_ARCH}")
+
     # Look for Boost headers in OrcaSlicer deps install tree
     find_path(BOOST_INCLUDE_DIR NAMES boost/optional.hpp
         HINTS
@@ -110,6 +116,12 @@ if(NOT TARGET boost_headeronly)
         if(APPLE)
             target_compile_definitions(boost_headeronly INTERFACE BOOST_ASIO_DISABLE_KQUEUE)
         endif()
+    else()
+        message(WARNING "Boost headers not found! Searched in:")
+        message(WARNING "  ${ORCASLICER_BUILD_DIR}/deps/usr/local/include")
+        message(WARNING "  ${ORCASLICER_ROOT_DIR}/deps/build/OrcaSlicer_dep/usr/local/include")
+        message(WARNING "  ${ORCASLICER_ROOT_DIR}/deps/build/destdir/usr/local/include")
+        message(WARNING "  ${ORCASLICER_ROOT_DIR}/deps/build/${ORCASLICER_ARCH}/OrcaSlicer_dep/usr/local/include")
     endif()
 endif()
 
