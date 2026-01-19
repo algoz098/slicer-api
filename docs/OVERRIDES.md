@@ -1,26 +1,31 @@
-# Parameter Overrides (CLI, Addon and HTTP API)
-
-Note: The CLI has been removed from this repository. Use the Node addon (orcaslicer-addon) or the HTTP API (node-api). CLI examples below are legacy and kept for historical reference only.
-
+# Parameter Overrides (Addon and HTTP API)
 
 This document describes how to send slicing parameter overrides and which keys are accepted across all interfaces:
 
-- Node Addon (N-API): require('orcaslicer-addon')
-- HTTP API (node-api)
+- Node Addon (N-API): `require('orcaslicer-addon')`
+- HTTP API (node-api): `POST /slicer/stl` and `POST /slicer/3mf`
 
-Important summary:
+## Summary
+
 - We accept ALL configuration keys recognized by OrcaSlicer (libslic3r) in the version embedded in this repository.
 - The keys are the same as those that appear in the INI exported by the OrcaSlicer GUI and in PrintConfig.cpp (DynamicPrintConfig).
 - We also offer compatibility aliases for common keys from other slicers (table below).
-- Precedence: overrides (CLI --set / addon options / API options) > explicit profiles (printer/filament/process) > settings embedded in the 3MF > defaults.
+- Precedence: `options` > `config` > `profiles` > `3MF embedded` > `defaults`
 - Errors: unknown key or invalid value is rejected by the Addon (throw) and returns HTTP 400 in the API.
 
+## config vs options
 
-## Usage formats
+Both `config` and `options` accept the same keys. The difference is:
 
-(Legacy CLI example removed; use addon/API examples below.)
+- **config**: A complete JSON object with all configuration. Useful when you have a full preset exported from OrcaSlicer.
+- **options**: Individual key-value overrides. Useful for tweaking specific parameters.
 
-- Node Addon (N-API)
+When both are provided, `options` takes precedence over `config`.
+
+
+## Usage Examples
+
+### Node Addon (N-API)
   ```js
   const { slice } = require('orcaslicer-addon')
   await slice({
@@ -38,21 +43,42 @@ Important summary:
   })
   ```
 
-- HTTP API (node-api)
-  ```json
-  {
-    "filePath": "path/to/model.stl",
-    "printerProfile": "Bambu Lab X1 Carbon 0.4 nozzle",
-    "filamentProfile": "Bambu PLA Basic @BBL X1C",
-    "processProfile": "0.20mm Standard @BBL X1C",
-    "options": {
-      "sparse_infill_density": 30,
-      "layer_height": 0.24,
-      "skirt_loops": 1,
-      "infill_direction": 45
-    }
+### HTTP API (node-api)
+
+Using `options` for individual overrides:
+```json
+{
+  "filePath": "path/to/model.stl",
+  "printerProfile": "Bambu Lab X1 Carbon 0.4 nozzle",
+  "filamentProfile": "Bambu PLA Basic @BBL X1C",
+  "processProfile": "0.20mm Standard @BBL X1C",
+  "options": {
+    "sparse_infill_density": 30,
+    "layer_height": 0.24,
+    "skirt_loops": 1,
+    "infill_direction": 45
   }
-  ```
+}
+```
+
+Using `config` for complete configuration:
+```json
+{
+  "filePath": "path/to/model.stl",
+  "config": {
+    "printer_model": "Bambu Lab A1",
+    "nozzle_diameter": 0.4,
+    "printable_area": "0x0,256x0,256x256,0x256",
+    "printable_height": 256,
+    "layer_height": 0.2,
+    "wall_loops": 2,
+    "sparse_infill_density": 15,
+    "filament_type": "PLA",
+    "nozzle_temperature": 220,
+    "bed_temperature": 60
+  }
+}
+```
 
 
 ## Value types
@@ -122,26 +148,34 @@ If an alias is not in the table, use the native OrcaSlicer key (as per INI/Print
 
 ## Additional examples
 
-- Percentages and enums:
-  ```bash
-  --set "sparse_infill_density=15%,sparse_infill_pattern=grid"
-  ```
-- Wall tweaks and overlap:
-  ```bash
-  --set "wall_loops=3,infill_wall_overlap=15%"
-  ```
-- Cooling targeted at overhangs/bridges:
-  ```bash
-  --set "overhang_fan_speed=80"
-  ```
+Percentages and enums:
+```javascript
+options: {
+  sparse_infill_density: '15%',
+  sparse_infill_pattern: 'grid'
+}
+```
 
+Wall tweaks and overlap:
+```javascript
+options: {
+  wall_loops: 3,
+  infill_wall_overlap: '15%'
+}
+```
+
+Cooling targeted at overhangs/bridges:
+```javascript
+options: {
+  overhang_fan_speed: 80
+}
+```
 
 ## Questions and contributions
 
 If you find a key that is valid in the INI/PrintConfig.cpp but does not work as an override, open an issue with:
 - repository version/commit,
-- a minimal example (CLI `--set` or API JSON body),
+- a minimal example (addon options or API JSON body),
 - a snippet of the CONFIG_BLOCK from the generated G-code.
 
 This helps maintain full parity with the OrcaSlicer GUI.
-
