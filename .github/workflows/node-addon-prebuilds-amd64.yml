@@ -695,8 +695,8 @@ jobs:
           cmake --build . --config Release --target deps -- -m
           echo "Dependencies built. Listing deps/build:"
           ls -la || dir
-          echo "Listing OrcaSlicer_dep:"
-          ls -laR OrcaSlicer_dep || dir OrcaSlicer_dep /s
+          echo "Listing x64/OrcaSlicer_dep:"
+          ls -laR x64/OrcaSlicer_dep || dir x64\OrcaSlicer_dep /s || echo "Listing skipped"
 
       - name: Build OrcaSlicer with CMake
         if: steps.check_prebuilt.outputs.found == 'false' && steps.check_cache.outputs.found == 'false'
