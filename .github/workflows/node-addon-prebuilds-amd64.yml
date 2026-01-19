@@ -686,7 +686,12 @@ jobs:
           perl -v || true
           # Optional: check nmake presence in PATH
           where.exe nmake 2>/dev/null || echo "[warn] where.exe did not find nmake in PATH"
-          cmake .. -G "Visual Studio 17 2022" -A x64 -DDESTDIR="${GITHUB_WORKSPACE}/OrcaSlicer/deps/build/x64/OrcaSlicer_dep" -DCMAKE_BUILD_TYPE=Release -DDEP_DEBUG=OFF -DORCA_INCLUDE_DEBUG_INFO=OFF
+          # Convert DESTDIR to forward slashes to avoid CMake escape issues on Windows
+          # (e.g., \a in "slicer-api" being interpreted as an escape sequence)
+          DESTDIR_PATH="${GITHUB_WORKSPACE}/OrcaSlicer/deps/build/x64/OrcaSlicer_dep"
+          DESTDIR_PATH="${DESTDIR_PATH//\\//}"
+          echo "Using DESTDIR: $DESTDIR_PATH"
+          cmake .. -G "Visual Studio 17 2022" -A x64 -DDESTDIR="$DESTDIR_PATH" -DCMAKE_BUILD_TYPE=Release -DDEP_DEBUG=OFF -DORCA_INCLUDE_DEBUG_INFO=OFF
           cmake --build . --config Release --target deps -- -m
           echo "Dependencies built. Listing deps/build:"
           ls -la || dir
@@ -700,7 +705,11 @@ jobs:
           cd OrcaSlicer
           mkdir -p build/x64
           cd build/x64
-          cmake ../.. -G "Visual Studio 17 2022" -A x64 -DBBL_RELEASE_TO_PUBLIC=1 -DORCA_TOOLS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="${GITHUB_WORKSPACE}/OrcaSlicer/deps/build/x64/OrcaSlicer_dep/usr/local"
+          # Convert CMAKE_PREFIX_PATH to forward slashes to avoid CMake escape issues on Windows
+          PREFIX_PATH="${GITHUB_WORKSPACE}/OrcaSlicer/deps/build/x64/OrcaSlicer_dep/usr/local"
+          PREFIX_PATH="${PREFIX_PATH//\\//}"
+          echo "Using CMAKE_PREFIX_PATH: $PREFIX_PATH"
+          cmake ../.. -G "Visual Studio 17 2022" -A x64 -DBBL_RELEASE_TO_PUBLIC=1 -DORCA_TOOLS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PREFIX_PATH"
           cmake --build . --config Release --target libslic3r libslic3r_cgal semver -- -m
           echo "OrcaSlicer libs built. Listing build/src/libslic3r:"
           ls -laR src/libslic3r || dir src\libslic3r /s
