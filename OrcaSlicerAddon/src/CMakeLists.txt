@@ -991,10 +991,33 @@ if(ENABLE_LIBSLIC3R)
     endif()
 endif()
 
-# Link system zlib for PNG support
+# Link zlib for PNG support
 if(ENABLE_LIBSLIC3R)
-    find_package(ZLIB REQUIRED)
-    target_link_libraries(orcacli_core ${ZLIB_LIBRARIES})
+    if(WIN32)
+        # On Windows, ZLIB is built as part of OrcaSlicer deps
+        # Set hints for find_package to locate it in the deps install prefix
+        set(ZLIB_ROOT "${ORCASLICER_DEPS_PREFIX}")
+        set(ZLIB_INCLUDE_DIR "${ORCASLICER_DEPS_PREFIX}/include")
+        # Look for zlib library in deps (static lib naming varies)
+        find_library(ZLIB_LIBRARY_RELEASE
+            NAMES zlib zlibstatic z
+            PATHS "${ORCASLICER_DEPS_LIBDIR}"
+            NO_DEFAULT_PATH)
+        if(ZLIB_LIBRARY_RELEASE)
+            set(ZLIB_LIBRARY "${ZLIB_LIBRARY_RELEASE}")
+            set(ZLIB_LIBRARIES "${ZLIB_LIBRARY_RELEASE}")
+            message(STATUS "Found ZLIB in OrcaSlicer deps: ${ZLIB_LIBRARY_RELEASE}")
+            target_include_directories(orcacli_core PRIVATE "${ZLIB_INCLUDE_DIR}")
+            target_link_libraries(orcacli_core ${ZLIB_LIBRARY_RELEASE})
+        else()
+            message(FATAL_ERROR "ZLIB not found in OrcaSlicer deps at ${ORCASLICER_DEPS_LIBDIR}. "
+                "Expected zlib.lib, zlibstatic.lib or z.lib")
+        endif()
+    else()
+        # On Unix systems, use system zlib
+        find_package(ZLIB REQUIRED)
+        target_link_libraries(orcacli_core ${ZLIB_LIBRARIES})
+    endif()
 endif()
 
 # Platform-specific libraries
