@@ -1,0 +1,64 @@
+diff --git a/deps/GMP/GMP.cmake b/deps/GMP/GMP.cmake
+index 623f01a171..79ed6dd8e5 100644
+--- a/deps/GMP/GMP.cmake
++++ b/deps/GMP/GMP.cmake
+@@ -6,15 +6,19 @@ if (IN_GIT_REPO)
+ endif ()
+ 
+ if (MSVC)
+-    set(_output  ${DESTDIR}/include/gmp.h
+-                 ${DESTDIR}/lib/libgmp-10.lib
+-                 ${DESTDIR}/bin/libgmp-10.dll)
++    # Convert DESTDIR to CMake-style path (forward slashes) to avoid escape issues on Windows
++    # (e.g., \a in "slicer-api" being interpreted as an escape sequence)
++    file(TO_CMAKE_PATH "${DESTDIR}" _DESTDIR_CMAKE)
++
++    set(_output  "${_DESTDIR_CMAKE}/include/gmp.h"
++                 "${_DESTDIR_CMAKE}/lib/libgmp-10.lib"
++                 "${_DESTDIR_CMAKE}/bin/libgmp-10.dll")
+ 
+     add_custom_command(
+         OUTPUT  ${_output}
+-        COMMAND ${CMAKE_COMMAND} -E copy ${_srcdir}/include/gmp.h ${DESTDIR}/include/
+-        COMMAND ${CMAKE_COMMAND} -E copy ${_srcdir}/lib/win-${DEPS_ARCH}/libgmp-10.lib ${DESTDIR}/lib/
+-        COMMAND ${CMAKE_COMMAND} -E copy ${_srcdir}/lib/win-${DEPS_ARCH}/libgmp-10.dll ${DESTDIR}/bin/
++        COMMAND ${CMAKE_COMMAND} -E copy "${_srcdir}/include/gmp.h" "${_DESTDIR_CMAKE}/include/"
++        COMMAND ${CMAKE_COMMAND} -E copy "${_srcdir}/lib/win-${DEPS_ARCH}/libgmp-10.lib" "${_DESTDIR_CMAKE}/lib/"
++        COMMAND ${CMAKE_COMMAND} -E copy "${_srcdir}/lib/win-${DEPS_ARCH}/libgmp-10.dll" "${_DESTDIR_CMAKE}/bin/"
+     )
+ 
+     add_custom_target(dep_GMP SOURCES ${_output})
+diff --git a/deps/MPFR/MPFR.cmake b/deps/MPFR/MPFR.cmake
+index 67758a8596..ea039038b2 100644
+--- a/deps/MPFR/MPFR.cmake
++++ b/deps/MPFR/MPFR.cmake
+@@ -1,17 +1,21 @@
+ set(_srcdir ${CMAKE_CURRENT_LIST_DIR}/mpfr)
+ 
+ if (MSVC)
+-    set(_output  ${DESTDIR}/include/mpfr.h
+-                 ${DESTDIR}/include/mpf2mpfr.h
+-                 ${DESTDIR}/lib/libmpfr-4.lib 
+-                 ${DESTDIR}/bin/libmpfr-4.dll)
++    # Convert DESTDIR to CMake-style path (forward slashes) to avoid escape issues on Windows
++    # (e.g., \a in "slicer-api" being interpreted as an escape sequence)
++    file(TO_CMAKE_PATH "${DESTDIR}" _DESTDIR_CMAKE)
++
++    set(_output  "${_DESTDIR_CMAKE}/include/mpfr.h"
++                 "${_DESTDIR_CMAKE}/include/mpf2mpfr.h"
++                 "${_DESTDIR_CMAKE}/lib/libmpfr-4.lib"
++                 "${_DESTDIR_CMAKE}/bin/libmpfr-4.dll")
+ 
+     add_custom_command(
+         OUTPUT  ${_output}
+-        COMMAND ${CMAKE_COMMAND} -E copy ${_srcdir}/include/mpfr.h ${DESTDIR}/include/
+-        COMMAND ${CMAKE_COMMAND} -E copy ${_srcdir}/include/mpf2mpfr.h ${DESTDIR}/include/
+-        COMMAND ${CMAKE_COMMAND} -E copy ${_srcdir}/lib/win-${DEPS_ARCH}/libmpfr-4.lib ${DESTDIR}/lib/
+-        COMMAND ${CMAKE_COMMAND} -E copy ${_srcdir}/lib/win-${DEPS_ARCH}/libmpfr-4.dll ${DESTDIR}/bin/
++        COMMAND ${CMAKE_COMMAND} -E copy "${_srcdir}/include/mpfr.h" "${_DESTDIR_CMAKE}/include/"
++        COMMAND ${CMAKE_COMMAND} -E copy "${_srcdir}/include/mpf2mpfr.h" "${_DESTDIR_CMAKE}/include/"
++        COMMAND ${CMAKE_COMMAND} -E copy "${_srcdir}/lib/win-${DEPS_ARCH}/libmpfr-4.lib" "${_DESTDIR_CMAKE}/lib/"
++        COMMAND ${CMAKE_COMMAND} -E copy "${_srcdir}/lib/win-${DEPS_ARCH}/libmpfr-4.dll" "${_DESTDIR_CMAKE}/bin/"
+     )
+ 
+     add_custom_target(dep_MPFR SOURCES ${_output})

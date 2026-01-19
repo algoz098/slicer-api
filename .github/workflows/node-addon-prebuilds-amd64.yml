@@ -660,6 +660,17 @@ jobs:
             echo "found=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Apply Windows CMake path escape fix
+        if: steps.check_prebuilt.outputs.found == 'false' && steps.check_cache.outputs.found == 'false'
+        shell: bash
+        run: |
+          # Apply patch to fix CMake path escape issues on Windows
+          # (e.g., \a in "slicer-api" being interpreted as an escape sequence)
+          cd OrcaSlicer
+          git apply --verbose "$GITHUB_WORKSPACE/patches/windows-cmake-path-escape.patch" || {
+            echo "Patch already applied or failed, continuing..."
+          }
+
       - name: Build OrcaSlicer dependencies with CMake
         if: steps.check_prebuilt.outputs.found == 'false' && steps.check_cache.outputs.found == 'false'
         shell: bash
