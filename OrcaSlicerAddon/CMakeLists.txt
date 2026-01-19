@@ -111,7 +111,12 @@ endif()
 list(APPEND CMAKE_MODULE_PATH "${ORCASLICER_ROOT_DIR}/cmake/modules")
 
 # Include OrcaSlicer's dependencies
-set(CMAKE_PREFIX_PATH "${ORCASLICER_BUILD_DIR}/deps/usr/local" ${CMAKE_PREFIX_PATH})
+# Support both old (destdir) and new (OrcaSlicer_dep) dependency paths
+set(CMAKE_PREFIX_PATH
+    "${ORCASLICER_BUILD_DIR}/deps/usr/local"
+    "${ORCASLICER_ROOT_DIR}/deps/build/OrcaSlicer_dep/usr/local"
+    "${ORCASLICER_ROOT_DIR}/deps/build/destdir/usr/local"
+    ${CMAKE_PREFIX_PATH})
 
 # Find required dependencies
 find_package(Threads REQUIRED)
@@ -122,6 +127,7 @@ set(BOOST_ROOT "/opt/homebrew")
 find_path(BOOST_INCLUDE_DIR NAMES boost/optional.hpp
     HINTS
         "${ORCASLICER_BUILD_DIR}/deps/usr/local/include"
+        "${ORCASLICER_ROOT_DIR}/deps/build/OrcaSlicer_dep/usr/local/include"
         "${ORCASLICER_ROOT_DIR}/deps/build/destdir/usr/local/include"
     PATHS
         /opt/homebrew/include
