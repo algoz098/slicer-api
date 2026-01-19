@@ -107,11 +107,20 @@ ARG ENFORCE_PREBUILT_BASE
 ARG BASE_CORE_IMAGE
 RUN bash -lc 'if [ "${ENFORCE_PREBUILT_BASE}" = "true" ] && [ -z "${BASE_CORE_IMAGE}" ]; then echo "ERROR: BASE_CORE_IMAGE is required. This build is configured to not compile OrcaSlicer core inside Docker. Provide --build-arg BASE_CORE_IMAGE=<image-with-core> (built elsewhere) or set ENFORCE_PREBUILT_BASE=false to allow building core here."; exit 11; fi'
 
-# Preserve compiled deps before COPY overwrites OrcaSlicer directory
-RUN if [ -d OrcaSlicer/deps/build ]; then mv OrcaSlicer/deps/build /tmp/orca_deps_build; fi
+# Preserve compiled deps (destdir contains Boost, wxWidgets, etc.) before COPY overwrites OrcaSlicer
+RUN if [ -d OrcaSlicer/deps/build/destdir ]; then \
+      mkdir -p /tmp/orca_destdir && \
+      cp -a OrcaSlicer/deps/build/destdir /tmp/orca_destdir/; \
+    fi
+
 COPY OrcaSlicer ./OrcaSlicer
-# Restore compiled deps after COPY
-RUN if [ -d /tmp/orca_deps_build ]; then mkdir -p OrcaSlicer/deps && mv /tmp/orca_deps_build OrcaSlicer/deps/build; fi
+
+# Restore compiled deps after COPY - merge back the destdir
+RUN if [ -d /tmp/orca_destdir/destdir ]; then \
+      mkdir -p OrcaSlicer/deps/build && \
+      cp -a /tmp/orca_destdir/destdir OrcaSlicer/deps/build/ && \
+      rm -rf /tmp/orca_destdir; \
+    fi
 
 RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache --mount=type=cache,id=tmp-orca-amd64,target=/opt/tmp bash -lc 'export TMPDIR=/opt/tmp; JOBS=${CI_MAX_JOBS:-$(nproc)}; cmake -S OrcaSlicer -B OrcaSlicer/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSLIC3R_STATIC=ON -DSLIC3R_GTK=3 -DCMAKE_PREFIX_PATH=/opt/orca/OrcaSlicer/deps/build/destdir/usr/local -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && cmake --build OrcaSlicer/build --config Release --parallel "$JOBS"'
 
