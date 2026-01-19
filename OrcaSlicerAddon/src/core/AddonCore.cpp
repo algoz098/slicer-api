@@ -3223,8 +3223,8 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
 
     std::cout << "DEBUG: Entering slice(): input='" << params.input_file
               << "' plate_index=" << params.plate_index
-              << ", profiles(prn/fil/proc)=('" << params.printer_profile << "','"
-              << params.filament_profile << "','" << params.process_profile << "')"
+              << ", profiles(prn/fil/proc)=('" << params.printer_profile_name << "','"
+              << params.filament_profile_name << "','" << params.process_profile_name << "')"
               << std::endl;
 
     // Load model if not already loaded
