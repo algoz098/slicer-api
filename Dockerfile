@@ -107,22 +107,30 @@ ARG ENFORCE_PREBUILT_BASE
 ARG BASE_CORE_IMAGE
 RUN bash -lc 'if [ "${ENFORCE_PREBUILT_BASE}" = "true" ] && [ -z "${BASE_CORE_IMAGE}" ]; then echo "ERROR: BASE_CORE_IMAGE is required. This build is configured to not compile OrcaSlicer core inside Docker. Provide --build-arg BASE_CORE_IMAGE=<image-with-core> (built elsewhere) or set ENFORCE_PREBUILT_BASE=false to allow building core here."; exit 11; fi'
 
-# Preserve compiled deps (destdir contains Boost, wxWidgets, etc.) before COPY overwrites OrcaSlicer
-RUN if [ -d OrcaSlicer/deps/build/destdir ]; then \
-      mkdir -p /tmp/orca_destdir && \
-      cp -a OrcaSlicer/deps/build/destdir /tmp/orca_destdir/; \
+# Preserve compiled deps (OrcaSlicer_dep contains Boost, wxWidgets, etc.) before COPY overwrites OrcaSlicer
+# Note: older builds used "destdir", newer ones use "OrcaSlicer_dep"
+RUN mkdir -p /tmp/orca_deps_backup && \
+    if [ -d OrcaSlicer/deps/build/OrcaSlicer_dep ]; then \
+      cp -a OrcaSlicer/deps/build/OrcaSlicer_dep /tmp/orca_deps_backup/; \
+    fi && \
+    if [ -d OrcaSlicer/deps/build/destdir ]; then \
+      cp -a OrcaSlicer/deps/build/destdir /tmp/orca_deps_backup/; \
     fi
 
 COPY OrcaSlicer ./OrcaSlicer
 
-# Restore compiled deps after COPY - merge back the destdir
-RUN if [ -d /tmp/orca_destdir/destdir ]; then \
-      mkdir -p OrcaSlicer/deps/build && \
-      cp -a /tmp/orca_destdir/destdir OrcaSlicer/deps/build/ && \
-      rm -rf /tmp/orca_destdir; \
-    fi
+# Restore compiled deps after COPY
+RUN mkdir -p OrcaSlicer/deps/build && \
+    if [ -d /tmp/orca_deps_backup/OrcaSlicer_dep ]; then \
+      cp -a /tmp/orca_deps_backup/OrcaSlicer_dep OrcaSlicer/deps/build/; \
+    fi && \
+    if [ -d /tmp/orca_deps_backup/destdir ]; then \
+      cp -a /tmp/orca_deps_backup/destdir OrcaSlicer/deps/build/; \
+    fi && \
+    rm -rf /tmp/orca_deps_backup && \
+    echo "Deps restored. Contents:" && ls -la OrcaSlicer/deps/build/ || true
 
-RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache --mount=type=cache,id=tmp-orca-amd64,target=/opt/tmp bash -lc 'export TMPDIR=/opt/tmp; JOBS=${CI_MAX_JOBS:-$(nproc)}; cmake -S OrcaSlicer -B OrcaSlicer/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSLIC3R_STATIC=ON -DSLIC3R_GTK=3 -DCMAKE_PREFIX_PATH=/opt/orca/OrcaSlicer/deps/build/destdir/usr/local -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && cmake --build OrcaSlicer/build --config Release --parallel "$JOBS"'
+RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache --mount=type=cache,id=tmp-orca-amd64,target=/opt/tmp bash -lc 'export TMPDIR=/opt/tmp; JOBS=${CI_MAX_JOBS:-$(nproc)}; cmake -S OrcaSlicer -B OrcaSlicer/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSLIC3R_STATIC=ON -DSLIC3R_GTK=3 -DCMAKE_PREFIX_PATH=/opt/orca/OrcaSlicer/deps/build/OrcaSlicer_dep/usr/local -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && cmake --build OrcaSlicer/build --config Release --parallel "$JOBS"'
 
 
 
