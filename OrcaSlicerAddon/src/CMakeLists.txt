@@ -267,6 +267,23 @@ if(LIBSLIC3R_PATH AND SEMVER_PATH)
         ${ORCASLICER_BUILD_DIR}/src/libslic3r
     )
 
+    # Windows may have OCCT headers in different locations depending on deps build
+    if(WIN32)
+        # Additional Windows-specific include paths for OpenCASCADE
+        set(_WIN_OCCT_INCLUDE_CANDIDATES
+            "${ORCASLICER_ROOT_DIR}/deps/build/x64/OrcaSlicer_dep/usr/local/include/opencascade"
+            "${ORCASLICER_ROOT_DIR}/deps/build/x64/OrcaSlicer_dep/include/opencascade"
+            "${ORCASLICER_ROOT_DIR}/deps/build/OrcaSlicer_dep/usr/local/include/opencascade"
+        )
+        foreach(_occt_inc ${_WIN_OCCT_INCLUDE_CANDIDATES})
+            if(EXISTS "${_occt_inc}")
+                message(STATUS "Adding Windows OCCT include path: ${_occt_inc}")
+                target_include_directories(orcacli_core PRIVATE "${_occt_inc}")
+                break()
+            endif()
+        endforeach()
+    endif()
+
     message(STATUS "libslic3r integration enabled")
 
     # NLopt linkage (required by libnest2d optimizers used by arrange)
@@ -1119,6 +1136,14 @@ endif()
 target_compile_definitions(orcacli_core PRIVATE
     SLIC3R_VERSION="1.0.0"  # Default version
 )
+
+# Windows-specific definitions
+if(WIN32)
+    # _USE_MATH_DEFINES must be defined before <cmath> is included for M_PI to be available
+    target_compile_definitions(orcacli_core PRIVATE _USE_MATH_DEFINES)
+    # Suppress CRT security warnings for sscanf, sprintf, etc.
+    target_compile_definitions(orcacli_core PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
 
 # Add Boost definitions if found
 if(Boost_FOUND)
