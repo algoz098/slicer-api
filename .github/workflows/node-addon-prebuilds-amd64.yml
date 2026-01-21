@@ -286,6 +286,41 @@ jobs:
         shell: bash
         run: cmake --version
 
+      - name: Get OrcaSlicer submodule SHA
+        id: orca_sha
+        shell: bash
+        run: |
+          ORCA_SHA=$(git submodule status OrcaSlicer | awk '{print $1}' | tr -d '+-')
+          echo "sha=$ORCA_SHA" >> $GITHUB_OUTPUT
+          echo "OrcaSlicer SHA: $ORCA_SHA"
+
+      - name: Cache Orca deps downloads (DL_CACHE) - Windows
+        uses: actions/cache@v4
+        with:
+          path: OrcaSlicer/deps/DL_CACHE
+          key: windows-x64-orca-dlcache-${{ steps.orca_sha.outputs.sha }}
+          restore-keys: |
+            windows-x64-orca-dlcache-
+
+      - name: Cache Orca deps build - Windows
+        id: cache_deps
+        uses: actions/cache@v4
+        with:
+          path: OrcaSlicer/deps/build/x64/OrcaSlicer_dep
+          key: windows-x64-orca-deps-${{ steps.orca_sha.outputs.sha }}
+          restore-keys: |
+            windows-x64-orca-deps-
+
+      - name: Cache Orca build outputs - Windows
+        id: cache_build
+        uses: actions/cache@v4
+        with:
+          path: |
+            OrcaSlicer/build/x64
+          key: windows-x64-orca-build-${{ steps.orca_sha.outputs.sha }}-${{ hashFiles('OrcaSlicerAddon/**/*.cpp', 'OrcaSlicerAddon/**/*.h', 'OrcaSlicerAddon/**/CMakeLists.txt') }}
+          restore-keys: |
+            windows-x64-orca-build-${{ steps.orca_sha.outputs.sha }}-
+            windows-x64-orca-build-
 
       - name: Read addon package version
         id: pkg
@@ -625,25 +660,50 @@ jobs:
           LIBSLIC3R_FOUND=false
           SEMVER_FOUND=false
 
-          # Check for libslic3r.lib in Release or RelWithDebInfo
-          if [ -f "OrcaSlicer/build/src/libslic3r/Release/libslic3r.lib" ] || \
+          # Check for libslic3r.lib in x64/Release or x64/RelWithDebInfo (Windows uses x64 subdirectory)
+          if [ -f "OrcaSlicer/build/x64/src/libslic3r/Release/libslic3r.lib" ] || \
+             [ -f "OrcaSlicer/build/x64/src/libslic3r/RelWithDebInfo/libslic3r.lib" ] || \
+             [ -f "OrcaSlicer/build/src/libslic3r/Release/libslic3r.lib" ] || \
              [ -f "OrcaSlicer/build/src/libslic3r/RelWithDebInfo/libslic3r.lib" ]; then
             echo "Found libslic3r.lib"
             LIBSLIC3R_FOUND=true
           fi
 
-          # Check for semver.lib in Release or RelWithDebInfo
-          if [ -f "OrcaSlicer/build/lib/Release/semver.lib" ] || \
+          # Check for semver.lib in x64/Release or x64/RelWithDebInfo
+          if [ -f "OrcaSlicer/build/x64/lib/Release/semver.lib" ] || \
+             [ -f "OrcaSlicer/build/x64/lib/RelWithDebInfo/semver.lib" ] || \
+             [ -f "OrcaSlicer/build/lib/Release/semver.lib" ] || \
              [ -f "OrcaSlicer/build/lib/RelWithDebInfo/semver.lib" ]; then
             echo "Found semver.lib"
             SEMVER_FOUND=true
           fi
 
-          # Check if deps are built
+          # Check if deps are built (Windows uses x64/OrcaSlicer_dep path)
           DEPS_FOUND=false
-          if [ -d "OrcaSlicer/deps/build/OrcaSlicer_dep" ] && [ -n "$(ls -A "OrcaSlicer/deps/build/OrcaSlicer_dep" 2>/dev/null || true)" ]; then
-            echo "Found OrcaSlicer_dep directory"
+          if [ -d "OrcaSlicer/deps/build/x64/OrcaSlicer_dep" ] && [ -n "$(ls -A "OrcaSlicer/deps/build/x64/OrcaSlicer_dep" 2>/dev/null || true)" ]; then
+            echo "Found OrcaSlicer_dep directory in x64 path"
             DEPS_FOUND=true
+          elif [ -d "OrcaSlicer/deps/build/OrcaSlicer_dep" ] && [ -n "$(ls -A "OrcaSlicer/deps/build/OrcaSlicer_dep" 2>/dev/null || true)" ]; then
+            echo "Found OrcaSlicer_dep directory in legacy path"
+            DEPS_FOUND=true
+          fi
+
+          # Also check if actions/cache restored the deps and build
+          if [ "${{ steps.cache_deps.outputs.cache-hit }}" = "true" ]; then
+            echo "actions/cache restored deps from cache"
+            DEPS_FOUND=true
+          fi
+          if [ "${{ steps.cache_build.outputs.cache-hit }}" = "true" ]; then
+            echo "actions/cache restored build from cache"
+            # Re-check for libs since cache was restored
+            if [ -f "OrcaSlicer/build/x64/src/libslic3r/Release/libslic3r.lib" ] || \
+               [ -f "OrcaSlicer/build/x64/src/libslic3r/RelWithDebInfo/libslic3r.lib" ]; then
+              LIBSLIC3R_FOUND=true
+            fi
+            if [ -f "OrcaSlicer/build/x64/lib/Release/semver.lib" ] || \
+               [ -f "OrcaSlicer/build/x64/lib/RelWithDebInfo/semver.lib" ]; then
+              SEMVER_FOUND=true
+            fi
           fi
 
           # Cache is valid only if we have both required libs AND deps
@@ -655,6 +715,8 @@ jobs:
             echo "  libslic3r: $LIBSLIC3R_FOUND"
             echo "  semver: $SEMVER_FOUND"
             echo "  deps: $DEPS_FOUND"
+            echo "  cache_deps hit: ${{ steps.cache_deps.outputs.cache-hit }}"
+            echo "  cache_build hit: ${{ steps.cache_build.outputs.cache-hit }}"
             echo "Contents of OrcaSlicer (if any):"
             ls -laR OrcaSlicer || true
             echo "found=false" >> $GITHUB_OUTPUT
