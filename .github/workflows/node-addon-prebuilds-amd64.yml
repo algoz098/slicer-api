@@ -603,27 +603,46 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: node-addon-prebuilds-amd64.yml
           workflow_conclusion: ""
-          name: orca-build-windows-v2
-          path: orca-build-windows-v2
+          name: orca-build-windows-v3
+          path: orca-build-windows-v3
           search_artifacts: true
           if_no_artifact_found: ignore
+          # Skip automatic unpacking to avoid path length issues on Windows
+          # We will unpack manually in the next step using 7z which handles long paths better
+          skip_unpack: true
 
       - name: Materialize cached Orca build into expected location
         if: steps.check_prebuilt.outputs.found == 'false'
         shell: bash
         run: |
-          echo "Contents of downloaded Windows cache artifact (orca-build-windows-v2):"
-          ls -laR orca-build-windows-v2 || true
+          echo "Contents of downloaded Windows cache artifact (orca-build-windows-v3):"
+          ls -laR orca-build-windows-v3 || true
+
+          # Extract the downloaded zip manually
+          if [ -f "orca-build-windows-v3/orca-build-windows-v3.zip" ]; then
+            echo "Extracting cache zip..."
+            # Use 7z to extract, it handles long paths better than standard unzip
+            # -y: assume yes on all queries
+            # -o: output directory
+            7z x "orca-build-windows-v3/orca-build-windows-v3.zip" -y -o"orca-build-windows-v3-extracted" > /dev/null
+            CACHE_ROOT="orca-build-windows-v3-extracted"
+          else
+             # Fallback if skip_unpack was ignored or behavior changed
+             CACHE_ROOT="orca-build-windows-v3"
+          fi
+
+          echo "Listing extracted cache root:"
+          ls -la "$CACHE_ROOT" || true
 
           # The artifact should contain OrcaSlicer/build/** and OrcaSlicer/deps/build/**
           # Copy directly if the structure is correct
-          if [ -d "orca-build-windows-v2/OrcaSlicer/build" ] || [ -d "orca-build-windows-v2/OrcaSlicer/deps/build" ]; then
+          if [ -d "$CACHE_ROOT/OrcaSlicer/build" ] || [ -d "$CACHE_ROOT/OrcaSlicer/deps/build" ]; then
             echo "Found correct structure in artifact, copying..."
             mkdir -p OrcaSlicer
-            cp -R orca-build-windows-v2/OrcaSlicer/* OrcaSlicer/ 2>/dev/null || true
+            cp -R "$CACHE_ROOT/OrcaSlicer"/* OrcaSlicer/ 2>/dev/null || true
           else
             # Try to find the OrcaSlicer directory anywhere in the artifact
-            ORCA_DIR=$(find orca-build-windows-v2 -type d -name OrcaSlicer -print -quit 2>/dev/null || true)
+            ORCA_DIR=$(find "$CACHE_ROOT" -type d -name OrcaSlicer -print -quit 2>/dev/null || true)
             if [ -n "$ORCA_DIR" ]; then
               echo "Found OrcaSlicer directory at: $ORCA_DIR"
               mkdir -p OrcaSlicer
@@ -631,8 +650,8 @@ jobs:
             else
               echo "No OrcaSlicer directory found in artifact, trying to find build directories..."
               # Look for build and deps/build directories directly
-              BUILD_DIR=$(find orca-build-windows-v2 -type d -path "*/build" -not -path "*/deps/build" -print -quit 2>/dev/null || true)
-              DEPS_BUILD_DIR=$(find orca-build-windows-v2 -type d -path "*/deps/build" -print -quit 2>/dev/null || true)
+              BUILD_DIR=$(find "$CACHE_ROOT" -type d -path "*/build" -not -path "*/deps/build" -print -quit 2>/dev/null || true)
+              DEPS_BUILD_DIR=$(find "$CACHE_ROOT" -type d -path "*/deps/build" -print -quit 2>/dev/null || true)
 
               mkdir -p OrcaSlicer
               if [ -n "$BUILD_DIR" ]; then
@@ -807,7 +826,7 @@ jobs:
         if: steps.check_prebuilt.outputs.found == 'false' && steps.check_cache.outputs.found == 'false'
         uses: actions/upload-artifact@v4
         with:
-          name: orca-build-windows-v2
+          name: orca-build-windows-v3
           path: |
             OrcaSlicer/build/**
             OrcaSlicer/deps/build/**
