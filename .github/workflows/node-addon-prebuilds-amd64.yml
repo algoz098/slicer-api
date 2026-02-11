@@ -746,12 +746,16 @@ jobs:
             find "$DEPS_BUILD" -maxdepth 2 -type d -name 'dep_*-prefix' | while read prefix_dir; do
               src_dir="$prefix_dir/src"
               if [ -d "$src_dir" ]; then
+                # Enable nullglob to handle case with no subdirectories
+                shopt -s nullglob
                 for subdir in "$src_dir"/*/; do
                   if [ -d "$subdir" ] && [ ! -d "$subdir/.git" ]; then
                     echo "Removing incomplete source dir (no .git): $subdir"
-                    rm -rf "$subdir"
+                    # Ignore errors during removal (e.g. locked files on Windows)
+                    rm -rf "$subdir" || echo "Warning: Failed to remove $subdir"
                   fi
                 done
+                shopt -u nullglob
               fi
             done
           fi
