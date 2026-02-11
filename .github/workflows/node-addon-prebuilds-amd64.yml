@@ -603,8 +603,8 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: node-addon-prebuilds-amd64.yml
           workflow_conclusion: ""
-          name: orca-build-windows
-          path: orca-build-windows
+          name: orca-build-windows-v2
+          path: orca-build-windows-v2
           search_artifacts: true
           if_no_artifact_found: ignore
 
@@ -612,18 +612,18 @@ jobs:
         if: steps.check_prebuilt.outputs.found == 'false'
         shell: bash
         run: |
-          echo "Contents of downloaded Windows cache artifact (orca-build-windows):"
-          ls -laR orca-build-windows || true
+          echo "Contents of downloaded Windows cache artifact (orca-build-windows-v2):"
+          ls -laR orca-build-windows-v2 || true
 
           # The artifact should contain OrcaSlicer/build/** and OrcaSlicer/deps/build/**
           # Copy directly if the structure is correct
-          if [ -d "orca-build-windows/OrcaSlicer/build" ] || [ -d "orca-build-windows/OrcaSlicer/deps/build" ]; then
+          if [ -d "orca-build-windows-v2/OrcaSlicer/build" ] || [ -d "orca-build-windows-v2/OrcaSlicer/deps/build" ]; then
             echo "Found correct structure in artifact, copying..."
             mkdir -p OrcaSlicer
-            cp -R orca-build-windows/OrcaSlicer/* OrcaSlicer/ 2>/dev/null || true
+            cp -R orca-build-windows-v2/OrcaSlicer/* OrcaSlicer/ 2>/dev/null || true
           else
             # Try to find the OrcaSlicer directory anywhere in the artifact
-            ORCA_DIR=$(find orca-build-windows -type d -name OrcaSlicer -print -quit 2>/dev/null || true)
+            ORCA_DIR=$(find orca-build-windows-v2 -type d -name OrcaSlicer -print -quit 2>/dev/null || true)
             if [ -n "$ORCA_DIR" ]; then
               echo "Found OrcaSlicer directory at: $ORCA_DIR"
               mkdir -p OrcaSlicer
@@ -631,8 +631,8 @@ jobs:
             else
               echo "No OrcaSlicer directory found in artifact, trying to find build directories..."
               # Look for build and deps/build directories directly
-              BUILD_DIR=$(find orca-build-windows -type d -path "*/build" -not -path "*/deps/build" -print -quit 2>/dev/null || true)
-              DEPS_BUILD_DIR=$(find orca-build-windows -type d -path "*/deps/build" -print -quit 2>/dev/null || true)
+              BUILD_DIR=$(find orca-build-windows-v2 -type d -path "*/build" -not -path "*/deps/build" -print -quit 2>/dev/null || true)
+              DEPS_BUILD_DIR=$(find orca-build-windows-v2 -type d -path "*/deps/build" -print -quit 2>/dev/null || true)
 
               mkdir -p OrcaSlicer
               if [ -n "$BUILD_DIR" ]; then
@@ -807,7 +807,7 @@ jobs:
         if: steps.check_prebuilt.outputs.found == 'false' && steps.check_cache.outputs.found == 'false'
         uses: actions/upload-artifact@v4
         with:
-          name: orca-build-windows
+          name: orca-build-windows-v2
           path: |
             OrcaSlicer/build/**
             OrcaSlicer/deps/build/**
