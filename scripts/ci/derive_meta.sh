@@ -1,24 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Resolve suffix with precedence: env > .env > VERSION_SUFFIX (KEY=VAL or raw) > 'c'
+# Resolve suffix from VERSION_SUFFIX file
 resolve_suffix() {
-  if [[ -n "${ORCASLICER_SUFFIX:-}" ]]; then echo -n "$ORCASLICER_SUFFIX"; return; fi
-  if [[ -f ".env" ]] && grep -q "^ORCASLICER_SUFFIX=" .env; then
-    # shellcheck disable=SC1091
-    . ./.env >/dev/null 2>&1 || true
-    if [[ -n "${ORCASLICER_SUFFIX:-}" ]]; then echo -n "$ORCASLICER_SUFFIX"; return; fi
-  fi
   if [[ -f "VERSION_SUFFIX" ]]; then
-    if grep -q "=" VERSION_SUFFIX; then
-      # shellcheck disable=SC1091
-      . ./VERSION_SUFFIX >/dev/null 2>&1 || true
-      if [[ -n "${ORCASLICER_SUFFIX:-}" ]]; then echo -n "$ORCASLICER_SUFFIX"; return; fi
-    else
-      tr -d '[:space:]' < VERSION_SUFFIX; return
-    fi
+    tr -d '[:space:]' < VERSION_SUFFIX
+  else
+    echo "ERROR: VERSION_SUFFIX file not found" >&2
+    exit 1
   fi
-  echo -n c
 }
 
 suffix="$(resolve_suffix)"
