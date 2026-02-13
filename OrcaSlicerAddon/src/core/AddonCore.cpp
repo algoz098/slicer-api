@@ -30,6 +30,26 @@
 #include "utils/Logger.hpp"
 #include <fcntl.h>
 
+#ifdef _WIN32
+  #include <io.h>
+  #define ADDON_OPEN   ::_open
+  #define ADDON_CLOSE  ::_close
+  #define ADDON_DUP    ::_dup
+  #define ADDON_DUP2   ::_dup2
+  #define ADDON_STDOUT_FD _fileno(stdout)
+  #define ADDON_STDERR_FD _fileno(stderr)
+  #define ADDON_DEVNULL "NUL"
+#else
+  #include <unistd.h>
+  #define ADDON_OPEN   ::open
+  #define ADDON_CLOSE  ::close
+  #define ADDON_DUP    ::dup
+  #define ADDON_DUP2   ::dup2
+  #define ADDON_STDOUT_FD STDOUT_FILENO
+  #define ADDON_STDERR_FD STDERR_FILENO
+  #define ADDON_DEVNULL "/dev/null"
+#endif
+
 
 #if !HAVE_LIBSLIC3R
 #error "libslic3r is required. Placeholders are not allowed."
@@ -62,22 +82,22 @@ void OrcaSlicerCli::AddonCore::setLoggingSilenced(bool silent) {
     if (silent == s_silenced) return;
 
     if (silent) {
-        // Open /dev/null once
+        // Open /dev/null (or NUL on Windows) once
         try {
-            if (!s_devnull_stream.is_open()) s_devnull_stream.open("/dev/null");
+            if (!s_devnull_stream.is_open()) s_devnull_stream.open(ADDON_DEVNULL);
         } catch (...) {}
-        if (s_devnull_fd < 0) { s_devnull_fd = ::open("/dev/null", O_WRONLY); }
+        if (s_devnull_fd < 0) { s_devnull_fd = ADDON_OPEN(ADDON_DEVNULL, O_WRONLY); }
         // Save originals once
         if (!s_orig_cout) s_orig_cout = std::cout.rdbuf();
         if (!s_orig_cerr) s_orig_cerr = std::cerr.rdbuf();
-        if (s_saved_stdout < 0) s_saved_stdout = ::dup(STDOUT_FILENO);
-        if (s_saved_stderr < 0) s_saved_stderr = ::dup(STDERR_FILENO);
+        if (s_saved_stdout < 0) s_saved_stdout = ADDON_DUP(ADDON_STDOUT_FD);
+        if (s_saved_stderr < 0) s_saved_stderr = ADDON_DUP(ADDON_STDERR_FD);
         // Redirect
         try { std::cout.rdbuf(s_devnull_stream.rdbuf()); } catch (...) {}
         try { std::cerr.rdbuf(s_devnull_stream.rdbuf()); } catch (...) {}
         if (s_devnull_fd >= 0) {
-            ::dup2(s_devnull_fd, STDOUT_FILENO);
-            ::dup2(s_devnull_fd, STDERR_FILENO);
+            ADDON_DUP2(s_devnull_fd, ADDON_STDOUT_FD);
+            ADDON_DUP2(s_devnull_fd, ADDON_STDERR_FD);
         }
         s_silenced = true;
     } else {
@@ -85,8 +105,8 @@ void OrcaSlicerCli::AddonCore::setLoggingSilenced(bool silent) {
         if (s_orig_cout) { try { std::cout.rdbuf(s_orig_cout); } catch (...) {} }
         if (s_orig_cerr) { try { std::cerr.rdbuf(s_orig_cerr); } catch (...) {} }
         // Restore POSIX fds
-        if (s_saved_stdout >= 0) { ::dup2(s_saved_stdout, STDOUT_FILENO); ::close(s_saved_stdout); s_saved_stdout = -1; }
-        if (s_saved_stderr >= 0) { ::dup2(s_saved_stderr, STDERR_FILENO); ::close(s_saved_stderr); s_saved_stderr = -1; }
+        if (s_saved_stdout >= 0) { ADDON_DUP2(s_saved_stdout, ADDON_STDOUT_FD); ADDON_CLOSE(s_saved_stdout); s_saved_stdout = -1; }
+        if (s_saved_stderr >= 0) { ADDON_DUP2(s_saved_stderr, ADDON_STDERR_FD); ADDON_CLOSE(s_saved_stderr); s_saved_stderr = -1; }
         s_silenced = false;
     }
 }
