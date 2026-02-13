@@ -272,6 +272,7 @@ if(LIBSLIC3R_PATH AND SEMVER_PATH)
         # Additional Windows-specific include paths for OpenCASCADE
         set(_WIN_OCCT_INCLUDE_CANDIDATES
             "${ORCASLICER_ROOT_DIR}/deps/build/x64/OrcaSlicer_dep/usr/local/include/opencascade"
+            "${ORCASLICER_ROOT_DIR}/deps/build/x64/destdir/usr/local/include/opencascade"
             "${ORCASLICER_ROOT_DIR}/deps/build/x64/OrcaSlicer_dep/include/opencascade"
             "${ORCASLICER_ROOT_DIR}/deps/build/OrcaSlicer_dep/usr/local/include/opencascade"
         )
