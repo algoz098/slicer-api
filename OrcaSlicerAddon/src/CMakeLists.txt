@@ -264,6 +264,7 @@ if(LIBSLIC3R_PATH AND SEMVER_PATH)
         ${ORCASLICER_ROOT_DIR}/deps_src/qoi
         ${ORCASLICER_DEPS_PREFIX}/include
         ${ORCASLICER_DEPS_PREFIX}/include/opencascade
+        ${ORCASLICER_DEPS_PREFIX}/include/occt
         ${ORCASLICER_BUILD_DIR}/src/libslic3r
     )
 
@@ -271,7 +272,9 @@ if(LIBSLIC3R_PATH AND SEMVER_PATH)
     if(WIN32)
         # Additional Windows-specific include paths for OpenCASCADE
         set(_WIN_OCCT_INCLUDE_CANDIDATES
+            "${ORCASLICER_ROOT_DIR}/deps/build/x64/OrcaSlicer_dep/usr/local/include/occt"
             "${ORCASLICER_ROOT_DIR}/deps/build/x64/OrcaSlicer_dep/usr/local/include/opencascade"
+            "${ORCASLICER_ROOT_DIR}/deps/build/x64/destdir/usr/local/include/occt"
             "${ORCASLICER_ROOT_DIR}/deps/build/x64/destdir/usr/local/include/opencascade"
             "${ORCASLICER_ROOT_DIR}/deps/build/x64/OrcaSlicer_dep/include/opencascade"
             "${ORCASLICER_ROOT_DIR}/deps/build/OrcaSlicer_dep/usr/local/include/opencascade"
@@ -284,11 +287,6 @@ if(LIBSLIC3R_PATH AND SEMVER_PATH)
             endif()
         endforeach()
     endif()
-    message(STATUS "DEBUG: ORCASLICER_ROOT_DIR=${ORCASLICER_ROOT_DIR}")
-    file(GLOB _occt_debug "${ORCASLICER_ROOT_DIR}/deps/build/x64/destdir/usr/local/include/opencascade/*")
-    foreach(_f ${_occt_debug})
-            # utilize a very short list to avoid log spam
-    endforeach()
 
     message(STATUS "libslic3r integration enabled")
 
