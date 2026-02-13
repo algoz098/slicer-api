@@ -284,6 +284,11 @@ if(LIBSLIC3R_PATH AND SEMVER_PATH)
             endif()
         endforeach()
     endif()
+    message(STATUS "DEBUG: ORCASLICER_ROOT_DIR=${ORCASLICER_ROOT_DIR}")
+    file(GLOB _occt_debug "${ORCASLICER_ROOT_DIR}/deps/build/x64/destdir/usr/local/include/opencascade/*")
+    foreach(_f ${_occt_debug})
+            # utilize a very short list to avoid log spam
+    endforeach()
 
     message(STATUS "libslic3r integration enabled")
 

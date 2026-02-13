@@ -782,6 +782,8 @@ jobs:
           ls -la || dir
           echo "Listing x64/OrcaSlicer_dep:"
           ls -laR x64/OrcaSlicer_dep || dir x64\OrcaSlicer_dep /s || echo "Listing skipped"
+          echo "Listing x64/destdir:"
+          ls -laR x64/destdir || dir x64\destdir /s || echo "Listing skipped"
 
       - name: Build OrcaSlicer with CMake
         if: steps.check_prebuilt.outputs.found == 'false' && steps.check_cache.outputs.found == 'false'
