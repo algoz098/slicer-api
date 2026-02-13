@@ -255,6 +255,13 @@ if(LIBSLIC3R_PATH AND SEMVER_PATH)
     # Common prefix for 3rd party static libs installed by deps build
     set(ORCASLICER_DEPS_LIBDIR "${ORCASLICER_DEPS_PREFIX}/lib")
 
+    # On Windows, ensure the deps lib directory is in the linker search path
+    # so that imported targets (e.g. TBB's tbb12.lib) can be found
+    if(WIN32 AND EXISTS "${ORCASLICER_DEPS_LIBDIR}")
+        target_link_directories(orcacli_core PRIVATE "${ORCASLICER_DEPS_LIBDIR}")
+        message(STATUS "Added Windows link directory: ${ORCASLICER_DEPS_LIBDIR}")
+    endif()
+
     # Add additional include directories
     target_include_directories(orcacli_core PRIVATE
         ${ORCASLICER_ROOT_DIR}/deps_src
@@ -319,12 +326,19 @@ endif()
 
 # Find additional required libraries for libslic3r
 # Core dep library locations (prefer deps install prefix, fallback to arch-specific cache)
-set(LIBTBB_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libtbb.a")
-set(LIBTBBMALLOC_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libtbbmalloc.a")
+if(WIN32)
+    set(LIBTBB_PATH2 "${ORCASLICER_DEPS_LIBDIR}/tbb12.lib")
+    set(LIBTBBMALLOC_PATH2 "${ORCASLICER_DEPS_LIBDIR}/tbbmalloc.lib")
+else()
+    set(LIBTBB_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libtbb.a")
+    set(LIBTBBMALLOC_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libtbbmalloc.a")
+endif()
 # miniz (both multi-config and single-config layouts)
 set(_MINIZ_CANDIDATES
     "${ORCASLICER_BUILD_DIR}/deps_src/miniz/Release/libminiz_static.a"
     "${ORCASLICER_BUILD_DIR}/deps_src/miniz/libminiz_static.a"
+    "${ORCASLICER_BUILD_DIR}/deps_src/miniz/Release/miniz_static.lib"
+    "${ORCASLICER_BUILD_DIR}/deps_src/miniz/Release/miniz.lib"
 )
 set(LIBMINIZ_PATH "")
 foreach(p IN LISTS _MINIZ_CANDIDATES)
@@ -334,16 +348,25 @@ foreach(p IN LISTS _MINIZ_CANDIDATES)
     endif()
 endforeach()
 
-set(LIBPNG_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libpng16.a")
-set(LIBQHULL_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libqhullstatic_r.a")
-set(LIBMPFR_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libmpfr.a")
-set(LIBGMPXX_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libgmpxx.a")
-set(LIBGMP_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libgmp.a")
+if(WIN32)
+    set(LIBPNG_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libpng16.lib")
+    set(LIBQHULL_PATH2 "${ORCASLICER_DEPS_LIBDIR}/qhullstatic_r.lib")
+    set(LIBMPFR_PATH2 "${ORCASLICER_DEPS_LIBDIR}/mpfr.lib")
+    set(LIBGMPXX_PATH2 "${ORCASLICER_DEPS_LIBDIR}/gmpxx.lib")
+    set(LIBGMP_PATH2 "${ORCASLICER_DEPS_LIBDIR}/gmp.lib")
+else()
+    set(LIBPNG_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libpng16.a")
+    set(LIBQHULL_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libqhullstatic_r.a")
+    set(LIBMPFR_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libmpfr.a")
+    set(LIBGMPXX_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libgmpxx.a")
+    set(LIBGMP_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libgmp.a")
+endif()
 
 # qoi
 set(_QOI_CANDIDATES
     "${ORCASLICER_BUILD_DIR}/deps_src/qoi/Release/libqoi.a"
     "${ORCASLICER_BUILD_DIR}/deps_src/qoi/libqoi.a"
+    "${ORCASLICER_BUILD_DIR}/deps_src/qoi/Release/qoi.lib"
 )
 set(LIBQOI_PATH "")
 foreach(p IN LISTS _QOI_CANDIDATES)
@@ -357,6 +380,7 @@ endforeach()
 set(_GLU_CANDIDATES
     "${ORCASLICER_BUILD_DIR}/deps_src/glu-libtess/Release/libglu-libtess.a"
     "${ORCASLICER_BUILD_DIR}/deps_src/glu-libtess/libglu-libtess.a"
+    "${ORCASLICER_BUILD_DIR}/deps_src/glu-libtess/Release/glu-libtess.lib"
 )
 set(LIBGLU_PATH "")
 foreach(p IN LISTS _GLU_CANDIDATES)
@@ -370,6 +394,7 @@ endforeach()
 set(_MCUT_CANDIDATES
     "${ORCASLICER_BUILD_DIR}/deps_src/mcut/Release/libmcut.a"
     "${ORCASLICER_BUILD_DIR}/deps_src/mcut/libmcut.a"
+    "${ORCASLICER_BUILD_DIR}/deps_src/mcut/Release/mcut.lib"
 )
 set(LIBMCUT_PATH "")
 foreach(p IN LISTS _MCUT_CANDIDATES)
@@ -378,9 +403,15 @@ foreach(p IN LISTS _MCUT_CANDIDATES)
         break()
     endif()
 endforeach()
-set(LIBJPEG_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libjpeg.a")
-set(LIBQHULL_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libqhullstatic_r.a")
-set(QHULLCPP_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libqhullcpp.a")
+if(WIN32)
+    set(LIBJPEG_PATH2 "${ORCASLICER_DEPS_LIBDIR}/jpeg-static.lib")
+    set(LIBQHULL_PATH2 "${ORCASLICER_DEPS_LIBDIR}/qhullstatic_r.lib")
+    set(QHULLCPP_PATH2 "${ORCASLICER_DEPS_LIBDIR}/qhullcpp.lib")
+else()
+    set(LIBJPEG_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libjpeg.a")
+    set(LIBQHULL_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libqhullstatic_r.a")
+    set(QHULLCPP_PATH2 "${ORCASLICER_DEPS_LIBDIR}/libqhullcpp.a")
+endif()
 
 # Fallback arch-specific cache locations
 set(LIBTBB_PATH "${ORCASLICER_ROOT_DIR}/deps/build/arm64/OrcaSlicer_dep/usr/local/lib/libtbb.a")
