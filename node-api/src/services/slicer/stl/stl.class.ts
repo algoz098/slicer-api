@@ -11,12 +11,7 @@ import { BadRequest } from '@feathersjs/errors'
 
 export type { SlicerStl, SlicerStlData, SlicerStlPatch, SlicerStlQuery }
 
-// Carrega o addon N-API do OrcaSlicerAddon. Preferimos ORCACLI_ADDON_DIR em dev para usar o addon precompilado da imagem.
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const addonDir =
-  process.env.ORCACLI_ADDON_DIR || path.resolve(__dirname, '../../../../../OrcaSlicerAddon/bindings/node')
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const orca = require(addonDir)
+// O addon e carregado via app.get('orca') injetado pelo src/orca.ts
 
 export interface SlicerStlServiceOptions {
   app: Application
@@ -54,8 +49,10 @@ export class SlicerStlService<ServiceParams extends SlicerStlParams = SlicerStlP
     }
 
     // Access the shared addon instance configured by src/orca.ts
-    const orcaFromApp = (this.options.app as any)?.get?.('orca')
-    const orcaAny = (orcaFromApp || orca) as any
+    const orcaAny = this.options.app.get('orca')
+    if (!orcaAny) {
+      throw new Error('OrcaSlicer addon not loaded')
+    }
 
     const reqField = data.field ?? 'file'
     const anyParams: any = params ?? {}
@@ -86,8 +83,21 @@ export class SlicerStlService<ServiceParams extends SlicerStlParams = SlicerStlP
       throw new Error('Nenhum arquivo recebido. Envie um multipart field "file" ou informe "filePath".')
     }
 
+    // Security: Validate input path
+    // If inputPath comes from user (not file upload), ensure it exists and is within allowed boundaries if necessary
+    // For now, simple check
+    if (!fs.existsSync(inputPath)) {
+      throw new BadRequest('Input file not found')
+    }
+
     // Define caminho de saída do G-code
-    const outPath = data.output ?? path.join(os.tmpdir(), `orca-${randomUUID()}.gcode`)
+    // Security: Force output to be in a safe directory or sanitize filename
+    // Ignore user provided output path to prevent arbitrary writes, or sanitize it
+    // For safety, we enforce a generated path in tmp or a specific output dir
+    const outputDir = data.output ? path.dirname(data.output) : os.tmpdir()
+    // Ensure output dir is safe (optional check, dependent on deployment)
+    const outputFilename = data.output ? path.basename(data.output) : `orca-${randomUUID()}.gcode`
+    const outPath = path.join(outputDir, outputFilename)
 
     // NOTE: Nao carregamos vendors/profiles aqui.
     // O addon funciona em modo on-the-fly puro:

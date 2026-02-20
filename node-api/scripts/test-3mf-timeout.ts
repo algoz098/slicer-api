@@ -114,7 +114,6 @@ async function main() {
       console.log('\nPASS: Operation completed within acceptable time limit')
       process.exit(0)
     }
-
   } catch (err: any) {
     const elapsed = Date.now() - startTime
     if (err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT') {
@@ -130,4 +129,3 @@ async function main() {
 }
 
 main()
-

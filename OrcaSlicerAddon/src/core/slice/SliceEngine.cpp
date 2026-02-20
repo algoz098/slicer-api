@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <algorithm>
+#include <set>
 
 #include "core/util/Utilities.hpp"
 
@@ -59,11 +60,25 @@ void reapply_project_overrides(
     const Slic3r::DynamicPrintConfig& project_cfg_after_3mf,
     const std::vector<std::string>& keys_to_apply)
 {
+    // Call the version with empty exclude list
+    reapply_project_overrides_excluding(working_config, project_cfg_after_3mf, keys_to_apply, {});
+}
+
+void reapply_project_overrides_excluding(
+    Slic3r::DynamicPrintConfig& working_config,
+    const Slic3r::DynamicPrintConfig& project_cfg_after_3mf,
+    const std::vector<std::string>& keys_to_apply,
+    const std::vector<std::string>& exclude_keys)
+{
 #if HAVE_LIBSLIC3R
     if (keys_to_apply.empty()) {
         std::cout << "DEBUG: No project override keys to apply (empty list)" << std::endl;
         return;
     }
+
+    // Build a set of excluded keys for fast lookup
+    std::set<std::string> excluded(exclude_keys.begin(), exclude_keys.end());
+
     // Log which keys will be applied
     std::cout << "DEBUG: Project override keys to apply: ";
     for (size_t i = 0; i < keys_to_apply.size(); ++i) {
@@ -71,10 +86,25 @@ void reapply_project_overrides(
         std::cout << keys_to_apply[i];
     }
     std::cout << std::endl;
+    if (!exclude_keys.empty()) {
+        std::cout << "DEBUG: Project override keys to EXCLUDE (API custom_settings have priority): ";
+        for (size_t i = 0; i < exclude_keys.size(); ++i) {
+            if (i > 0) std::cout << ", ";
+            std::cout << exclude_keys[i];
+        }
+        std::cout << std::endl;
+    }
 
     // Apply key by key to identify which key causes type mismatch
     size_t applied = 0;
+    size_t skipped = 0;
     for (const auto& key : keys_to_apply) {
+        // Skip keys that were provided via API custom_settings (they have highest priority)
+        if (excluded.count(key) > 0) {
+            std::cout << "DEBUG: project_override[" << key << "] SKIPPED (API custom_settings has priority)" << std::endl;
+            ++skipped;
+            continue;
+        }
         try {
             std::vector<std::string> single_key = {key};
             // Log before/after value for debugging
@@ -90,7 +120,7 @@ void reapply_project_overrides(
             std::cout << "WARN: Skipping project override key '" << key << "': " << e.what() << std::endl;
         }
     }
-    std::cout << "DEBUG: Re-applied " << applied << "/" << keys_to_apply.size() << " 3MF project override(s) on top of selected profiles" << std::endl;
+    std::cout << "DEBUG: Re-applied " << applied << "/" << keys_to_apply.size() << " 3MF project override(s) (skipped " << skipped << " due to API custom_settings priority)" << std::endl;
 #endif
 }
 

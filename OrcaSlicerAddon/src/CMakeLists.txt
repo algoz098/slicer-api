@@ -1240,4 +1240,16 @@ add_custom_command(TARGET orcacli_engine POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:orcacli_engine>" "${CMAKE_BINARY_DIR}/bindings/node"
 )
 
+# When building from OrcaSlicerAddon root (via build.sh), also copy to the bindings/node subdir
+# that cmake-js uses when npm run build is invoked. This ensures the addon always loads the latest engine.
+get_filename_component(_ADDON_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
+set(_NODE_BUILD_DIR "${_ADDON_ROOT}/bindings/node/build/bindings/node")
+if(EXISTS "${_NODE_BUILD_DIR}" OR EXISTS "${_ADDON_ROOT}/bindings/node/build")
+    add_custom_command(TARGET orcacli_engine POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${_NODE_BUILD_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:orcacli_engine>" "${_NODE_BUILD_DIR}"
+        COMMENT "Copying engine library to Node addon build directory"
+    )
+endif()
+
 

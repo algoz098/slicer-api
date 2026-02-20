@@ -32,9 +32,9 @@ const RESOURCES_PATH = path.resolve(__dirname, '../../OrcaSlicer/resources')
 // NOTE: These profile names are NOT used when transfer flags are enabled.
 // The 3MF file specifies its own profiles, and we should respect those.
 // These are only used as fallbacks or when we want to explicitly override.
-const PRINTER_PROFILE_NAME = 'Bambu Lab A1 0.4 nozzle'  // Match what the 3MF uses
-const FILAMENT_PROFILE_NAME = 'Bambu PLA Basic @BBL A1'  // Match what the 3MF uses
-const PROCESS_PROFILE_NAME = '0.20mm Standard @BBL A1'   // Match what the 3MF uses
+const PRINTER_PROFILE_NAME = 'Bambu Lab A1 0.4 nozzle' // Match what the 3MF uses
+const FILAMENT_PROFILE_NAME = 'Bambu PLA Basic @BBL A1' // Match what the 3MF uses
+const PROCESS_PROFILE_NAME = '0.20mm Standard @BBL A1' // Match what the 3MF uses
 
 /**
  * Resolve profile inheritance chain and merge all configs
@@ -103,7 +103,13 @@ function resolveProfileInheritance(profileName: string, profileType: string): Re
     // Merge parent with current (current takes precedence)
     const merged = { ...parentConfig }
     for (const [key, value] of Object.entries(content)) {
-      if (key !== 'inherits' && key !== 'type' && key !== 'from' && key !== 'setting_id' && key !== 'instantiation') {
+      if (
+        key !== 'inherits' &&
+        key !== 'type' &&
+        key !== 'from' &&
+        key !== 'setting_id' &&
+        key !== 'instantiation'
+      ) {
         merged[key] = value
       }
     }
@@ -120,36 +126,104 @@ function resolveProfileInheritance(profileName: string, profileType: string): Re
  * The 3MF file has these arrays with 4 elements (one per AMS slot).
  */
 const FILAMENT_ARRAY_KEYS_TO_PRESERVE = new Set([
-  'activate_air_filtration', 'activate_chamber_temp_control', 'adaptive_pressure_advance',
-  'adaptive_pressure_advance_bridges', 'adaptive_pressure_advance_model', 'adaptive_pressure_advance_overhangs',
-  'additional_cooling_fan_speed', 'chamber_temperature', 'close_fan_the_first_x_layers',
-  'complete_print_exhaust_fan_speed', 'cool_plate_temp', 'cool_plate_temp_initial_layer',
-  'default_filament_colour', 'dont_slow_down_outer_wall', 'during_print_exhaust_fan_speed',
-  'enable_overhang_bridge_fan', 'enable_pressure_advance', 'eng_plate_temp', 'eng_plate_temp_initial_layer',
-  'fan_cooling_layer_time', 'fan_max_speed', 'fan_min_speed', 'filament_cooling_final_speed',
-  'filament_cooling_initial_speed', 'filament_cooling_moves', 'filament_cost', 'filament_density',
-  'filament_deretraction_speed', 'filament_end_gcode', 'filament_flow_ratio', 'filament_ids',
-  'filament_is_support', 'filament_loading_speed', 'filament_loading_speed_start',
-  'filament_long_retractions_when_cut', 'filament_max_volumetric_speed', 'filament_minimal_purge_on_wipe_tower',
-  'filament_multitool_ramming', 'filament_multitool_ramming_flow', 'filament_multitool_ramming_volume',
-  'filament_notes', 'filament_ramming_parameters', 'filament_retract_before_wipe',
-  'filament_retract_lift_above', 'filament_retract_lift_below', 'filament_retract_lift_enforce',
-  'filament_retract_restart_extra', 'filament_retract_when_changing_layer', 'filament_retraction_distances_when_cut',
-  'filament_retraction_length', 'filament_retraction_minimum_travel', 'filament_retraction_speed',
-  'filament_settings_id', 'filament_shrink', 'filament_shrinkage_compensation_z', 'filament_soluble',
-  'filament_stamping_distance', 'filament_stamping_loading_speed', 'filament_start_gcode',
-  'filament_toolchange_delay', 'filament_unloading_speed', 'filament_unloading_speed_start',
-  'filament_vendor', 'filament_wipe', 'filament_wipe_distance', 'filament_z_hop', 'filament_z_hop_types',
-  'full_fan_speed_layer', 'head_wrap_detect_zone', 'hot_plate_temp', 'hot_plate_temp_initial_layer',
-  'idle_temperature', 'internal_bridge_fan_speed', 'ironing_fan_speed', 'nozzle_temperature',
-  'nozzle_temperature_initial_layer', 'nozzle_temperature_range_high', 'nozzle_temperature_range_low',
-  'overhang_fan_speed', 'overhang_fan_threshold', 'pellet_flow_coefficient', 'pressure_advance',
-  'reduce_fan_stop_start_freq', 'required_nozzle_HRC', 'slow_down_for_layer_cooling', 'slow_down_layer_time',
-  'slow_down_min_speed', 'supertack_plate_temp', 'supertack_plate_temp_initial_layer',
-  'support_material_interface_fan_speed', 'temperature_vitrification', 'textured_cool_plate_temp',
-  'textured_cool_plate_temp_initial_layer', 'textured_plate_temp', 'textured_plate_temp_initial_layer',
+  'activate_air_filtration',
+  'activate_chamber_temp_control',
+  'adaptive_pressure_advance',
+  'adaptive_pressure_advance_bridges',
+  'adaptive_pressure_advance_model',
+  'adaptive_pressure_advance_overhangs',
+  'additional_cooling_fan_speed',
+  'chamber_temperature',
+  'close_fan_the_first_x_layers',
+  'complete_print_exhaust_fan_speed',
+  'cool_plate_temp',
+  'cool_plate_temp_initial_layer',
+  'default_filament_colour',
+  'dont_slow_down_outer_wall',
+  'during_print_exhaust_fan_speed',
+  'enable_overhang_bridge_fan',
+  'enable_pressure_advance',
+  'eng_plate_temp',
+  'eng_plate_temp_initial_layer',
+  'fan_cooling_layer_time',
+  'fan_max_speed',
+  'fan_min_speed',
+  'filament_cooling_final_speed',
+  'filament_cooling_initial_speed',
+  'filament_cooling_moves',
+  'filament_cost',
+  'filament_density',
+  'filament_deretraction_speed',
+  'filament_end_gcode',
+  'filament_flow_ratio',
+  'filament_ids',
+  'filament_is_support',
+  'filament_loading_speed',
+  'filament_loading_speed_start',
+  'filament_long_retractions_when_cut',
+  'filament_max_volumetric_speed',
+  'filament_minimal_purge_on_wipe_tower',
+  'filament_multitool_ramming',
+  'filament_multitool_ramming_flow',
+  'filament_multitool_ramming_volume',
+  'filament_notes',
+  'filament_ramming_parameters',
+  'filament_retract_before_wipe',
+  'filament_retract_lift_above',
+  'filament_retract_lift_below',
+  'filament_retract_lift_enforce',
+  'filament_retract_restart_extra',
+  'filament_retract_when_changing_layer',
+  'filament_retraction_distances_when_cut',
+  'filament_retraction_length',
+  'filament_retraction_minimum_travel',
+  'filament_retraction_speed',
+  'filament_settings_id',
+  'filament_shrink',
+  'filament_shrinkage_compensation_z',
+  'filament_soluble',
+  'filament_stamping_distance',
+  'filament_stamping_loading_speed',
+  'filament_start_gcode',
+  'filament_toolchange_delay',
+  'filament_unloading_speed',
+  'filament_unloading_speed_start',
+  'filament_vendor',
+  'filament_wipe',
+  'filament_wipe_distance',
+  'filament_z_hop',
+  'filament_z_hop_types',
+  'full_fan_speed_layer',
+  'head_wrap_detect_zone',
+  'hot_plate_temp',
+  'hot_plate_temp_initial_layer',
+  'idle_temperature',
+  'internal_bridge_fan_speed',
+  'ironing_fan_speed',
+  'nozzle_temperature',
+  'nozzle_temperature_initial_layer',
+  'nozzle_temperature_range_high',
+  'nozzle_temperature_range_low',
+  'overhang_fan_speed',
+  'overhang_fan_threshold',
+  'pellet_flow_coefficient',
+  'pressure_advance',
+  'reduce_fan_stop_start_freq',
+  'required_nozzle_HRC',
+  'slow_down_for_layer_cooling',
+  'slow_down_layer_time',
+  'slow_down_min_speed',
+  'supertack_plate_temp',
+  'supertack_plate_temp_initial_layer',
+  'support_material_interface_fan_speed',
+  'temperature_vitrification',
+  'textured_cool_plate_temp',
+  'textured_cool_plate_temp_initial_layer',
+  'textured_plate_temp',
+  'textured_plate_temp_initial_layer',
   // Also preserve colors and types from 3MF
-  'filament_colour', 'filament_type',
+  'filament_colour',
+  'filament_type'
 ])
 
 /**
@@ -171,7 +245,7 @@ function buildCompleteConfig(): Record<string, any> {
   const rawConfig = {
     ...printerConfig,
     ...filamentConfig,
-    ...processConfig,
+    ...processConfig
   }
 
   // Filter out filament array keys to preserve 3MF values
@@ -185,7 +259,9 @@ function buildCompleteConfig(): Record<string, any> {
     config[key] = value
   }
 
-  console.log(`  Total merged config: ${Object.keys(config).length} keys (excluded ${excludedCount} filament array keys to preserve 3MF values)`)
+  console.log(
+    `  Total merged config: ${Object.keys(config).length} keys (excluded ${excludedCount} filament array keys to preserve 3MF values)`
+  )
   return config
 }
 
@@ -199,7 +275,7 @@ async function main() {
   console.log('')
 
   const startTime = Date.now()
-  const TIMEOUT_SEC = 120  // Increased timeout for profile resolution
+  const TIMEOUT_SEC = 120 // Increased timeout for profile resolution
 
   // Set a hard timeout to kill the process if it hangs
   const timeoutId = setTimeout(() => {
@@ -239,7 +315,7 @@ async function main() {
       transferPrinterCustomizations: true,
       transferFilamentCustomizations: true,
       transferProcessCustomizations: true,
-      transferProjectOverrides: true,
+      transferProjectOverrides: true
     })
 
     clearTimeout(timeoutId)
@@ -276,7 +352,7 @@ async function main() {
       const violations: string[] = []
       let maxX = 0
       let maxY = 0
-      let inPrintingSection = false  // Only validate after first LAYER_CHANGE
+      let inPrintingSection = false // Only validate after first LAYER_CHANGE
 
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim()
@@ -375,7 +451,9 @@ async function main() {
 
       // 4. Check project_settings.config for preserved colors
       try {
-        const configJson = execSync(`unzip -p "${output3mf}" "Metadata/project_settings.config"`, { encoding: 'utf-8' })
+        const configJson = execSync(`unzip -p "${output3mf}" "Metadata/project_settings.config"`, {
+          encoding: 'utf-8'
+        })
         const config = JSON.parse(configJson)
 
         if (config.filament_colour && Array.isArray(config.filament_colour)) {
@@ -406,7 +484,11 @@ async function main() {
         }
 
         // 6. Check prime tower is enabled
-        if (config.enable_prime_tower === 1 || config.enable_prime_tower === '1' || config.enable_prime_tower === true) {
+        if (
+          config.enable_prime_tower === 1 ||
+          config.enable_prime_tower === '1' ||
+          config.enable_prime_tower === true
+        ) {
           console.log('enable_prime_tower: enabled')
           console.log('PASS: Prime tower is enabled for multi-color printing')
         } else {
@@ -434,19 +516,17 @@ async function main() {
       } else {
         console.log('\nPASS: All multi-color validations passed')
       }
-
     } else {
       console.log('\nWARN: G-code file not found, skipping coordinate verification')
     }
 
     process.exit(0)
-
   } catch (err: any) {
     clearTimeout(timeoutId)
     const elapsed = Date.now() - startTime
     console.log(`\nOperation failed after ${elapsed}ms`)
     console.log('Error:', err.message)
-    
+
     // A failure is still acceptable - it means the addon didn't hang
     if (elapsed < TIMEOUT_SEC * 1000) {
       console.log('\nPASS: Addon returned error (did not hang)')
@@ -459,4 +539,3 @@ async function main() {
 }
 
 main()
-

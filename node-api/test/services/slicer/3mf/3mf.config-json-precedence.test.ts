@@ -87,7 +87,7 @@ describe('slicer/3mf - Config JSON Precedence (Automated Validation)', function 
 
     const body = {
       filePath: input3mf,
-      output: outTarget,
+      // output: outTarget, // REMOVED: output path is now managed by the server for security
       plate: 1,
       // NAO passamos profiles - usamos apenas o config JSON sobre o 3MF
       // A logica e: 3MF ja tem profiles embutidos, mas o config JSON deve sobrescrever

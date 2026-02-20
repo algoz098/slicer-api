@@ -704,6 +704,44 @@ bool apply_generic_fallback_config(Slic3r::DynamicPrintConfig& config,
     std::cout << "DEBUG: Applying generic fallback config for on-the-fly slicing..." << std::endl;
 
     try {
+        // CRITICAL: Preserve 3MF process settings BEFORE applying fallback defaults
+        // These settings are essential for special modes like vase/spiral mode
+        // and should NOT be overwritten by fallback defaults
+        struct PreservedSetting {
+            std::string key;
+            Slic3r::ConfigOption* value;
+        };
+        std::vector<PreservedSetting> preserved_settings;
+
+        // List of keys to preserve from 3MF (process-level settings that affect slicing behavior)
+        const std::vector<std::string> keys_to_preserve = {
+            "spiral_mode",
+            "spiral_mode_smooth",
+            "spiral_mode_max_xy_smoothing",
+            "wall_loops",
+            "top_shell_layers",
+            "bottom_shell_layers",
+            "sparse_infill_density",
+            "sparse_infill_pattern",
+            "enable_support",
+            "layer_height",
+            "initial_layer_print_height",
+            "seam_position",
+            "ironing_type",
+            "detect_thin_wall",
+        };
+
+        // Save current values from 3MF config
+        for (const auto& key : keys_to_preserve) {
+            if (const auto* opt = config.optptr(key)) {
+                preserved_settings.push_back({key, opt->clone()});
+            }
+        }
+
+        if (!preserved_settings.empty()) {
+            std::cout << "DEBUG: Preserving " << preserved_settings.size() << " 3MF process settings before fallback" << std::endl;
+        }
+
         // Set minimal printer configuration for generic slicing
         // These values are based on fdm_machine_common.json from OrcaSlicer
 
@@ -839,6 +877,15 @@ bool apply_generic_fallback_config(Slic3r::DynamicPrintConfig& config,
             "M140 S0 ; Turn off bed\n"
             "M84 ; Disable motors\n"
         ));
+
+        // CRITICAL: Restore preserved 3MF process settings AFTER applying fallback defaults
+        // This ensures that special modes like vase/spiral mode are honored
+        for (auto& ps : preserved_settings) {
+            if (ps.value) {
+                config.set_key_value(ps.key, ps.value);
+                std::cout << "DEBUG: Restored 3MF setting: " << ps.key << " = " << ps.value->serialize() << std::endl;
+            }
+        }
 
         std::cout << "DEBUG: Generic fallback config applied successfully" << std::endl;
         return true;

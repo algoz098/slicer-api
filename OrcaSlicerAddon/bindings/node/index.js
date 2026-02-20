@@ -35,7 +35,7 @@ function wrapAsMiddleware(native) {
 
 log("__dirname=", __dirname, "node=", process.versions && process.versions.node);
 
-// 0) Prefer prebuilt artifact bundled in npm: prebuilds/<platform>-<arch>/orcaslicer_node.node
+// 0) Prebuilt artifact bundled in npm: prebuilds/<platform>-<arch>/orcaslicer_node.node
 const prebuilt = path.join(__dirname, "prebuilds", `${process.platform}-${process.arch}`, "orcaslicer_node.node");
 
 // 1) cmake-js default output during local dev
@@ -45,11 +45,13 @@ const mod1b = path.join(__dirname, "build", "bindings", "node", "orcaslicer_node
 // 2) top-level CMake output copied next to addon by src/CMakeLists during mono-repo builds
 const mod2 = path.join(__dirname, "../../build/bindings/node/orcaslicer_node.node");
 
-// Allow dev override to prefer local build ahead of prebuilt
-const preferLocal = process.env.ORCACLI_PREFER_LOCAL === "1";
+// In this monorepo we default to local-first to avoid stale prebuild binaries
+// producing outdated behavior (for example invalid .3mf output format).
+// Set ORCACLI_PREFER_PREBUILT=1 to force prebuilt-first resolution.
+const preferPrebuilt = process.env.ORCACLI_PREFER_PREBUILT === "1";
 const candidatesLocalFirst = [mod1, mod1b, mod2, prebuilt];
 const candidatesDefault = [prebuilt, mod1, mod1b, mod2];
-const candidatePaths = preferLocal ? candidatesLocalFirst : candidatesDefault;
+const candidatePaths = preferPrebuilt ? candidatesDefault : candidatesLocalFirst;
 
 for (const p of candidatePaths) {
   if (fs.existsSync(p)) {

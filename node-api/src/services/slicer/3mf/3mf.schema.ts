@@ -55,7 +55,15 @@ export const slicer3MfDataSchema = Type.Object(
     transferProjectOverrides: Type.Optional(Type.Boolean()),
     // Opcional: overrides de configuração
     options: Type.Optional(
-      Type.Record(Type.String(), Type.Union([Type.String(), Type.Number(), Type.Boolean()]))
+      Type.Record(
+        Type.String(),
+        Type.Union([
+          Type.String(),
+          Type.Number(),
+          Type.Boolean(),
+          Type.Array(Type.Union([Type.String(), Type.Number(), Type.Boolean()]))
+        ])
+      )
     ),
     // Opcional: configuracao completa via JSON (tem precedencia sobre options e profiles)
     // Permite enviar todas as configuracoes de impressora/filamento/processo como JSON
@@ -70,9 +78,8 @@ export const slicer3MfDataSchema = Type.Object(
           Type.Array(Type.Union([Type.String(), Type.Number(), Type.Boolean()]))
         ])
       )
-    ),
-    // Opcional: caminho de saída; recomenda-se terminar com .gcode.3mf
-    output: Type.Optional(Type.String())
+    )
+    // Removed output field for security reasons. Users cannot specify output path.
   },
   { $id: 'Slicer3MfData', additionalProperties: false }
 )

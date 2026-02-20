@@ -100,19 +100,54 @@ bool load_3mf_project(
     Semver file_version;
 
     // Read model+config from 3MF (per-plate)
-    Model loaded = Model::read_from_file(
-        filename,
-        &config,
-        &config_substitutions,
-        LoadStrategy::LoadModel | LoadStrategy::LoadConfig,
-        &plate_data_src,
-        &project_presets,
-        &is_bbl_3mf,
-        &file_version,
-        nullptr,
-        nullptr,
-        nullptr,
-        plate_id);
+    // If loading a specific plate returns empty (broken plate metadata in re-saved 3MFs),
+    // retry without plate filter to load all objects — matching OrcaSlicer GUI behavior.
+    Model loaded;
+    try {
+        loaded = Model::read_from_file(
+            filename,
+            &config,
+            &config_substitutions,
+            LoadStrategy::LoadModel | LoadStrategy::LoadConfig,
+            &plate_data_src,
+            &project_presets,
+            &is_bbl_3mf,
+            &file_version,
+            nullptr,
+            nullptr,
+            nullptr,
+            plate_id);
+    } catch (const std::exception& e) {
+        std::string msg = e.what();
+        // Check if this is the "empty" error for a plate-filtered load
+        if (plate_id > 0 && (msg.find("empty") != std::string::npos || msg.find("Empty") != std::string::npos)) {
+            std::cout << "WARN: [ModelIO] Plate " << plate_id
+                      << " returned empty model, retrying without plate filter..." << std::endl;
+            // Reset state for retry
+            config_substitutions = ConfigSubstitutionContext{ForwardCompatibilitySubstitutionRule::Enable};
+            project_presets.clear();
+            is_bbl_3mf = false;
+            plate_data_src.clear();
+
+            loaded = Model::read_from_file(
+                filename,
+                &config,
+                &config_substitutions,
+                LoadStrategy::LoadModel | LoadStrategy::LoadConfig,
+                &plate_data_src,
+                &project_presets,
+                &is_bbl_3mf,
+                &file_version,
+                nullptr,
+                nullptr,
+                nullptr,
+                0); // plate_id = 0 loads all objects
+            std::cout << "INFO: [ModelIO] Retry succeeded, loaded "
+                      << loaded.objects.size() << " object(s) without plate filter" << std::endl;
+        } else {
+            throw; // Re-throw non-empty errors
+        }
+    }
 
     // CRITICAL: Capture the raw config from 3MF BEFORE any preset operations
     // This is needed because when different_settings_to_system is empty,
@@ -342,13 +377,85 @@ bool load_3mf_project(
         } catch (...) {}
 
         // Build print_cfg_overrides from raw 3MF config values (not current config which may have been modified)
+        //
+        // BACKGROUND: The 3MF format stores configuration in multiple places:
+        //   1. project_settings.config - Global project-level settings (stored in Metadata/project_settings.config)
+        //   2. slice_info.config - Per-plate settings including plate-specific overrides (stored in Metadata/slice_info.config)
+        //
+        // The "different_settings_to_system" field in project_settings.config contains keys that differ from
+        // the system defaults. However, some plate-specific settings like "spiral_mode" (vase mode) are stored
+        // ONLY in slice_info.config (plate_data.config) and NOT in project_settings.config.
+        //
+        // This caused spiral_mode to be ignored because print_cfg_overrides was built only from
+        // project_settings.config, missing the plate-specific settings.
+        //
         print_cfg_overrides = DynamicPrintConfig();
         for (const auto& k : print_overrides_keys) {
             // Prefer raw 3MF config value, fallback to current config
             if (const auto* opt = raw_3mf_config.optptr(k)) {
                 print_cfg_overrides.set_key_value(k, opt->clone());
+                std::cout << "DEBUG: [ModelIO] print_cfg_overrides[" << k << "] = " << opt->serialize() << " (from raw 3MF)" << std::endl;
             } else if (const auto* opt = config.optptr(k)) {
                 print_cfg_overrides.set_key_value(k, opt->clone());
+                std::cout << "DEBUG: [ModelIO] print_cfg_overrides[" << k << "] = " << opt->serialize() << " (from config)" << std::endl;
+            } else {
+                std::cout << "WARN: [ModelIO] Key '" << k << "' not found in raw 3MF config or config" << std::endl;
+            }
+        }
+
+        // ============================================================================
+        // MERGE PLATE-SPECIFIC SETTINGS INTO print_cfg_overrides
+        // ============================================================================
+        //
+        // WHY: OrcaSlicer stores some per-plate settings (like spiral_mode, curr_bed_type, print_sequence)
+        //      in plate_data.config (from Metadata/slice_info.config), NOT in project_settings.config.
+        //      These settings were being ignored because print_cfg_overrides was built only from
+        //      project_settings.config.
+        //
+        // WHAT: We merge the plate-specific settings from plate_data_src[plate_id].config into
+        //       print_cfg_overrides so they are applied along with other process customizations.
+        //
+        // SAFETY: This is safe because:
+        //   - In the API context, we always slice a single specific plate
+        //   - The settings in plate_data.config (spiral_mode, curr_bed_type, print_sequence, etc.)
+        //     are all relevant to the slicing process
+        //   - This maintains the priority order: Profiles -> 3MF customizations -> API custom_settings
+        //   - Settings from plate_data.config can still be overridden by API custom_settings later
+        //
+        if (!plate_data_src.empty()) {
+            int idx = plate_id;
+            if (idx < 0) idx = 0;
+            int max_idx = static_cast<int>(plate_data_src.size()) - 1;
+            if (idx > max_idx) idx = max_idx;
+
+            PlateData* pd = plate_data_src[static_cast<size_t>(idx)];
+            if (pd && !pd->config.empty()) {
+                std::cout << "DEBUG: [ModelIO] Merging plate_data.config (plate " << (idx + 1) << ") into print_cfg_overrides" << std::endl;
+
+                // List of known plate-specific settings that should be merged
+                // These are settings stored in slice_info.config, not project_settings.config
+                static const std::vector<std::string> plate_specific_keys = {
+                    "spiral_mode",                      // Vase mode / spiral vase
+                    "curr_bed_type",                    // Bed type (PEI, textured, etc.)
+                    "print_sequence",                   // Print sequence (by layer, by object)
+                    "first_layer_print_sequence",       // First layer print order
+                    "other_layers_print_sequence",      // Other layers print order
+                    "other_layers_print_sequence_nums"  // Sequence numbers
+                };
+
+                for (const auto& key : plate_specific_keys) {
+                    if (pd->config.has(key)) {
+                        const auto* opt = pd->config.optptr(key);
+                        if (opt) {
+                            print_cfg_overrides.set_key_value(key, opt->clone());
+                            // Track the key if not already in print_overrides_keys
+                            if (std::find(print_overrides_keys.begin(), print_overrides_keys.end(), key) == print_overrides_keys.end()) {
+                                print_overrides_keys.push_back(key);
+                            }
+                            std::cout << "DEBUG: [ModelIO] print_cfg_overrides[" << key << "] = " << opt->serialize() << " (from plate_data.config)" << std::endl;
+                        }
+                    }
+                }
             }
         }
 

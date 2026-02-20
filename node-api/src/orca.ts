@@ -1,5 +1,11 @@
 import * as path from 'node:path'
 
+// Default local-first addon resolution in monorepo.
+// Can be overridden by ORCACLI_PREFER_PREBUILT=1.
+if (!process.env.ORCACLI_PREFER_PREBUILT && !process.env.ORCACLI_PREFER_LOCAL) {
+  process.env.ORCACLI_PREFER_LOCAL = '1'
+}
+
 const addonDir =
   process.env.ORCACLI_ADDON_DIR || path.resolve(__dirname, '../../OrcaSlicerAddon/bindings/node')
 

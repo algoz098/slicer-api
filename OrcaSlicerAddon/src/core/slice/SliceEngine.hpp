@@ -28,6 +28,13 @@ void reapply_project_overrides(
     const Slic3r::DynamicPrintConfig& project_cfg_after_3mf,
     const std::vector<std::string>& keys_to_apply);
 
+// Helper: apply project-level overrides excluding keys already set by API custom_settings
+void reapply_project_overrides_excluding(
+    Slic3r::DynamicPrintConfig& working_config,
+    const Slic3r::DynamicPrintConfig& project_cfg_after_3mf,
+    const std::vector<std::string>& keys_to_apply,
+    const std::vector<std::string>& exclude_keys);
+
 // Helper: apply 3MF print-level (dirty) overrides on top of selected profiles
 void reapply_print_overrides(
     Slic3r::DynamicPrintConfig& working_config,

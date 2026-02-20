@@ -37,16 +37,18 @@ app.use(async (ctx, next) => {
     return next()
   }
   await next()
-  const res = ctx.body.path
+  const res = ctx.body && ctx.body.path
 
-  // res is a path for a file
-  ctx.set('Content-Type', 'application/octet-stream')
-  ctx.set('Content-Disposition', `attachment; filename=${path.basename(res)}`)
+  if (res) {
+    // res is a path for a file
+    ctx.set('Content-Type', 'application/octet-stream')
+    ctx.set('Content-Disposition', `attachment; filename=${path.basename(res)}`)
 
-  // stream the file back
-  ctx.body = fs.createReadStream(res)
-  ctx.status = 200
-  ctx.respond = true
+    // stream the file back
+    ctx.body = fs.createReadStream(res)
+    ctx.status = 200
+    ctx.respond = true
+  }
 })
 
 // Static files (homepage)

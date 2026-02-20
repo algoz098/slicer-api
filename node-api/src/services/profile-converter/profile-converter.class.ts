@@ -157,7 +157,7 @@ function resolveExamplePresetPath(
       candidates.push(path.join(dir, name))
       if (!hasExt) candidates.push(path.join(dir, `${name}.json`))
     } else if (kind === 'printer') {
-      const dir = path.join(baseDir, 'priter_profiles')
+      const dir = path.join(baseDir, 'printer_profiles')
       candidates.push(path.join(dir, name))
       if (!hasExt) candidates.push(path.join(dir, `${name}.orca_printer`))
     } else {

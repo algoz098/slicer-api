@@ -285,6 +285,29 @@ static bool ensure_engine_loaded(std::string* err_out) {
     dlclose(g_ffi.lib); g_ffi = FFI{}; return false;
 #endif
   }
+
+  // Auto-initialize the engine after creation to ensure AddonCore is ready for use
+  // This allows slice() to work without requiring an explicit initialize() call
+  if (g_ffi.initialize) {
+    ADDON_DEBUGF("DEBUG: [addon] ensure_engine_loaded: auto-initializing engine...\n");
+    auto r = g_ffi.initialize(g_ffi.inst, nullptr);  // nullptr = use default resources path
+    ADDON_DEBUGF("DEBUG: [addon] ensure_engine_loaded: initialize returned success=%d msg_ptr=%p\n", (int)r.success, (void*)r.message);
+    if (!r.success) {
+      std::string msg = "Auto-initialization failed";
+      if (r.message) { msg += ": "; msg += r.message; }
+      if (r.error_details) { msg += " — "; msg += r.error_details; }
+      if (err_out) *err_out = msg;
+      // Clean up on failure
+      if (g_ffi.destroy) g_ffi.destroy(g_ffi.inst);
+#if defined(_WIN32)
+      FreeLibrary((HMODULE)g_ffi.lib); g_ffi = FFI{}; return false;
+#else
+      dlclose(g_ffi.lib); g_ffi = FFI{}; return false;
+#endif
+    }
+    ADDON_DEBUGF("DEBUG: [addon] ensure_engine_loaded: auto-initialization successful\n");
+  }
+
   return true;
 }
 
@@ -660,6 +683,8 @@ static napi_value Slice(napi_env env, napi_callback_info info) {
   bool has=false; napi_value map;
   napi_has_named_property(env, obj, "options", &has); if (has) { napi_get_named_property(env, obj, "options", &map); collect_kv(map); }
   napi_has_named_property(env, obj, "custom", &has);  if (has) { napi_get_named_property(env, obj, "custom",  &map); collect_kv(map); }
+  // Also support "customSettings" as an alias for "custom" (used by weslicer API)
+  napi_has_named_property(env, obj, "customSettings", &has); if (has) { napi_get_named_property(env, obj, "customSettings", &map); collect_kv(map); }
 
   if (work->p.verbose) {
     ADDON_DEBUGF("DEBUG: [addon] Slice() scheduling: input='%s' output='%s' plate=%d opts=%zu\n",

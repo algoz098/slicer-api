@@ -1,11 +1,12 @@
-// For more information about this file see https://dove.feathersjs.com/guides/cli/service.class.html#custom-services
 import type { Id, NullableId, Params, ServiceInterface } from '@feathersjs/feathers'
-
 import type { Application } from '../../declarations'
 import type { Medias, MediasData, MediasPatch, MediasQuery } from './medias.schema'
 
 export type { Medias, MediasData, MediasPatch, MediasQuery }
 import * as fs from 'node:fs'
+import * as path from 'node:path'
+import * as os from 'node:os'
+import { BadRequest, NotFound, MethodNotAllowed } from '@feathersjs/errors'
 
 export interface MediasServiceOptions {
   app: Application
@@ -19,55 +20,55 @@ export class MediasService<ServiceParams extends MediasParams = MediasParams>
 {
   constructor(public options: MediasServiceOptions) {}
 
-  async find(_params?: ServiceParams): Promise<any> {
-    const { path } = _params?.query || {}
-    if (!path) throw new Error('Missing query params')
-    //check if file exists
-    if (!fs.existsSync(path)) throw new Error('File not found')
-    return { path }
+  async find(_params?: ServiceParams): Promise<Medias[]> {
+    const { path: reqPath } = _params?.query || {}
+    if (!reqPath) throw new BadRequest('Missing query param: path')
+
+    const safePath = path.resolve(reqPath)
+
+    // Allowlist of directories
+    const allowedDirs = [
+      os.tmpdir(),
+      path.resolve(this.options.app.get('public') ?? 'public'),
+      path.resolve('output_files') // Common output directory
+    ]
+
+    const isAllowed = allowedDirs.some(dir => safePath.startsWith(dir))
+
+    if (!isAllowed) {
+      // Log attempt?
+      throw new BadRequest('Access denied: path not allowed')
+    }
+
+    if (!fs.existsSync(safePath)) {
+      throw new NotFound('File not found')
+    }
+
+    // Return array as expected by find()
+    return [{ path: safePath }]
   }
 
   async get(id: Id, _params?: ServiceParams): Promise<Medias> {
-    return {
-      id: 0,
-      text: `A new message with ID: ${id}!`
-    }
+    throw new MethodNotAllowed()
   }
 
   async create(data: MediasData, params?: ServiceParams): Promise<Medias>
   async create(data: MediasData[], params?: ServiceParams): Promise<Medias[]>
   async create(data: MediasData | MediasData[], params?: ServiceParams): Promise<Medias | Medias[]> {
-    if (Array.isArray(data)) {
-      return Promise.all(data.map(current => this.create(current, params)))
-    }
-
-    return {
-      id: 0,
-      ...data
-    }
+    throw new MethodNotAllowed()
   }
 
   // This method has to be added to the 'methods' option to make it available to clients
   async update(id: NullableId, data: MediasData, _params?: ServiceParams): Promise<Medias> {
-    return {
-      id: 0,
-      ...data
-    }
+    throw new MethodNotAllowed()
   }
 
   async patch(id: NullableId, data: MediasPatch, _params?: ServiceParams): Promise<Medias> {
-    return {
-      id: 0,
-      text: `Fallback for ${id}`,
-      ...data
-    }
+    throw new MethodNotAllowed()
   }
 
   async remove(id: NullableId, _params?: ServiceParams): Promise<Medias> {
-    return {
-      id: 0,
-      text: 'removed'
-    }
+    throw new MethodNotAllowed()
   }
 }
 

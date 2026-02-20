@@ -76,6 +76,66 @@ namespace {
     static int             s_saved_stdout = -1;
     static int             s_saved_stderr = -1;
     static int             s_devnull_fd   = -1;
+
+    // Lightweight ZIP sanity check for generated .3mf files.
+    // Verifies PK signature and End Of Central Directory presence.
+    static bool is_valid_3mf_zip(const std::string& file_path, std::string* reason = nullptr)
+    {
+        std::ifstream in(file_path, std::ios::binary);
+        if (!in.is_open()) {
+            if (reason) *reason = "cannot open output file";
+            return false;
+        }
+
+        in.seekg(0, std::ios::end);
+        const auto end_pos = in.tellg();
+        if (end_pos <= 0) {
+            if (reason) *reason = "empty output file";
+            return false;
+        }
+
+        const std::uint64_t file_size = static_cast<std::uint64_t>(end_pos);
+        if (file_size < 22) { // minimum EOCD size
+            if (reason) *reason = "file too small to be a ZIP archive";
+            return false;
+        }
+
+        // ZIP local header signature should start with PK.
+        in.seekg(0, std::ios::beg);
+        unsigned char sig[4] = {0, 0, 0, 0};
+        in.read(reinterpret_cast<char*>(sig), 4);
+        if (!in || sig[0] != 0x50 || sig[1] != 0x4B) {
+            if (reason) *reason = "missing PK signature at file start";
+            return false;
+        }
+
+        // EOCD can be located in the last 65,557 bytes (22 + max comment 65,535).
+        const std::uint64_t tail_size = std::min<std::uint64_t>(file_size, 65557);
+        std::vector<unsigned char> tail(static_cast<size_t>(tail_size));
+        in.seekg(static_cast<std::streamoff>(file_size - tail_size), std::ios::beg);
+        in.read(reinterpret_cast<char*>(tail.data()), static_cast<std::streamsize>(tail.size()));
+        if (!in) {
+            if (reason) *reason = "failed to read ZIP tail";
+            return false;
+        }
+
+        bool found_eocd = false;
+        for (std::size_t i = tail.size(); i >= 4; --i) {
+            const std::size_t j = i - 4;
+            if (tail[j] == 0x50 && tail[j + 1] == 0x4B && tail[j + 2] == 0x05 && tail[j + 3] == 0x06) {
+                found_eocd = true;
+                break;
+            }
+            if (j == 0) break;
+        }
+
+        if (!found_eocd) {
+            if (reason) *reason = "can't find end of central directory";
+            return false;
+        }
+
+        return true;
+    }
 }
 
 void OrcaSlicerCli::AddonCore::setLoggingSilenced(bool silent) {
@@ -682,12 +742,12 @@ public:
              
              // Update bounding boxes
              for (auto* obj : model->objects) obj->invalidate_bounding_box();
-             
+
              // Reset plate origin to 0 since we centered absolutely on bed
              print->set_plate_origin(Slic3r::Vec3d(0,0,0));
-             
-             // Re-apply config
-             print->apply(*model, *config);
+
+             // Note: We don't call print->apply() here - it will be called by validateAndAutoRealign
+             // with proper error handling for config type mismatches
              return true;
 
         } catch (const std::exception& e) {
@@ -703,13 +763,31 @@ public:
        LOG_WARNING(msg);
        if (auto_realign_if_needed) {
            if (simpleReposition()) {
+               // After repositioning, we need to re-apply the model to the print object
+               // to update the print objects with the new positions
+               try {
+                   print->apply(*model, *config);
+               } catch (const std::exception& e) {
+                   // If apply fails due to config type mismatch, try with a minimal config
+                   LOG_WARNING(std::string("Re-apply after reposition failed: ") + e.what() + ", trying minimal re-apply");
+                   try {
+                       // Create a minimal config that only updates geometry, not parameters
+                       Slic3r::DynamicPrintConfig minimal_cfg;
+                       minimal_cfg.apply(*config, false); // copy all
+                       print->apply(*model, minimal_cfg);
+                   } catch (const std::exception& e2) {
+                       LOG_WARNING(std::string("Minimal re-apply also failed: ") + e2.what() + ", continuing anyway");
+                       // Continue anyway - the model positions were updated
+                   }
+               }
+
                if (!checkOutside(msg)) {
                    LOG_INFO("Auto-realign successful");
                    return true;
                }
            }
        }
-       
+
        error_msg = msg;
        return false;
     }
@@ -789,10 +867,7 @@ public:
             const bool export_3mf = (out_ext == ".3mf");
 
             if (export_3mf) {
-                // WORKAROUND: OrcaSlicer's 3MF export has bugs that cause segfaults
-                // For Klipper, we only need the .gcode file anyway
-                // So we just export .gcode and rename it to .3mf if requested
-                LOG_DEBUG("Exporting GCode (3MF export disabled due to OrcaSlicer bugs) to: " + output_file);
+                LOG_DEBUG("Exporting 3MF (ZIP package with embedded G-code) to: " + output_file);
 
                 // Prepare temp G-code path: use stem (without any extensions) + ".gcode"
                 // Example: "/tmp/orca-xxx.gcode.3mf" -> "/tmp/orca-xxx.gcode"
@@ -1274,19 +1349,21 @@ public:
                 sp.plate_data_list = pd_list;
                 sp.export_plate_idx = 0; // Always 0 since we only have one plate in the list
 
-                // Strategy: Generate 3MF with G-code only (no 3D model)
-                // SkipModel: Skip embedding the 3D model mesh in the 3MF (only include G-code, thumbnails, metadata)
+                // Strategy: Generate 3MF with embedded G-code only (no original 3D model)
                 // WithGcode: Include G-code file in the 3MF
+                // SkipModel: Do not embed original 3D meshes/objects in resulting package
                 // Silence: Suppress verbose logging
                 // SplitModel: Save objects per file (Production Extension)
                 // UseLoadedId: Use loaded IDs for identify_id
                 // ShareMesh: Share mesh between objects
+                // WithSliceInfo: Include slice statistics metadata
                 sp.strategy = Slic3r::SaveStrategy::Silence |
                               Slic3r::SaveStrategy::WithGcode |
                               Slic3r::SaveStrategy::SkipModel |
                               Slic3r::SaveStrategy::SplitModel |
                               Slic3r::SaveStrategy::UseLoadedId |
-                              Slic3r::SaveStrategy::ShareMesh;
+                              Slic3r::SaveStrategy::ShareMesh |
+                              Slic3r::SaveStrategy::WithSliceInfo;
 
                 // Embed project presets (print, filament, printer) for Bambu compatibility
                 try {
@@ -1429,6 +1506,14 @@ public:
                 } catch (const std::exception &e) {
                     last_error = std::string("3MF packaging failed: ") + e.what();
                     ok3mf = false;
+                }
+
+                if (ok3mf) {
+                    std::string zip_reason;
+                    if (!is_valid_3mf_zip(output_file, &zip_reason)) {
+                        last_error = std::string("3MF packaging produced invalid ZIP: ") + zip_reason;
+                        ok3mf = false;
+                    }
                 }
 
                 // Clean up temp G-code
@@ -2038,18 +2123,20 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
     }
 
 #if HAVE_LIBSLIC3R
-    // Re-apply 3MF project parameter overrides with highest priority
+    // Re-apply 3MF project parameter overrides (but NOT for keys set by API custom_settings)
+    // Priority order: Profiles -> 3MF customizations -> API custom_settings (highest)
     if (params.transfer_project_overrides) {
         {
             std::vector<std::string> keys_to_apply = m_impl->project_overrides_keys;
             if (keys_to_apply.empty()) keys_to_apply = m_impl->project_cfg_after_3mf.keys();
-            // FIX: Pass __used_override_keys to exclude them from project overrides
+            // Pass __used_override_keys to exclude them from project overrides
             // This ensures that if the API user provides a custom setting (e.g. layer_height),
             // it is NOT overwritten by the project value in the 3MF.
-            OrcaSlicerCli::slice::reapply_project_overrides(
+            OrcaSlicerCli::slice::reapply_project_overrides_excluding(
                 *m_impl->config,
                 m_impl->project_cfg_after_3mf,
-                keys_to_apply);
+                keys_to_apply,
+                __used_override_keys);
         }
     }
 

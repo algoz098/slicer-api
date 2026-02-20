@@ -39,7 +39,7 @@ async function main() {
     // The 3MF has objects at positions that will be outside 180x180mm
     const smallBedOptions = {
       printable_area: ['0x0', '180x0', '180x180', '0x180'],
-      printable_height: '180',
+      printable_height: '180'
     }
 
     console.log('\nCalling orca.slice() with smaller bed (180x180mm)...')
@@ -55,7 +55,7 @@ async function main() {
       transferPrinterCustomizations: true,
       transferFilamentCustomizations: true,
       transferProcessCustomizations: true,
-      transferProjectOverrides: true,
+      transferProjectOverrides: true
     })
 
     clearTimeout(timeoutId)
@@ -70,11 +70,11 @@ async function main() {
       const log = fs.readFileSync(logFile, 'utf-8')
       const hasRealign = log.includes('simple_reposition') || log.includes('is_outside=true')
       const hasCheckOutside = log.includes('check_outside')
-      
+
       console.log('\n=== Realignment Check ===')
       console.log('check_outside called:', hasCheckOutside ? 'YES' : 'NO')
       console.log('Realignment triggered:', hasRealign ? 'YES' : 'NO')
-      
+
       if (hasRealign) {
         console.log('\nPASS: Auto-realign was triggered for objects outside bed')
       } else if (hasCheckOutside) {
@@ -90,22 +90,23 @@ async function main() {
     // Verify G-code coordinates are within the smaller bed
     const { execSync } = require('child_process')
     const gcodeFile = '/tmp/test-realign-output-extracted.gcode'
-    
+
     if (fs.existsSync(OUTPUT_FILE)) {
       try {
         execSync(`unzip -p "${OUTPUT_FILE}" "Metadata/plate_1.gcode" > "${gcodeFile}"`)
         console.log('\nExtracted G-code from 3MF')
-        
+
         const gcode = fs.readFileSync(gcodeFile, 'utf-8')
         const lines = gcode.split('\n')
-        
-        let maxX = 0, maxY = 0
+
+        let maxX = 0,
+          maxY = 0
         let inPrintingSection = false
-        
+
         for (const line of lines) {
           if (line.includes('LAYER_CHANGE')) inPrintingSection = true
           if (!inPrintingSection) continue
-          
+
           if (/^G1\s/.test(line) && line.includes('E') && !line.includes('E-')) {
             const xMatch = line.match(/X([-\d.]+)/)
             const yMatch = line.match(/Y([-\d.]+)/)
@@ -113,10 +114,10 @@ async function main() {
             if (yMatch) maxY = Math.max(maxY, parseFloat(yMatch[1]))
           }
         }
-        
+
         console.log(`\nMax X coordinate (extrusion moves): ${maxX.toFixed(2)}mm`)
         console.log(`Max Y coordinate (extrusion moves): ${maxY.toFixed(2)}mm`)
-        
+
         if (maxX <= 180 && maxY <= 180) {
           console.log('\nPASS: All extrusion coordinates are within 180x180mm bed')
         } else {
@@ -131,7 +132,6 @@ async function main() {
 
     console.log('\nTest completed successfully')
     process.exit(0)
-
   } catch (err: any) {
     clearTimeout(timeoutId)
     console.error('Error:', err.message)
@@ -140,4 +140,3 @@ async function main() {
 }
 
 main()
-

@@ -4,6 +4,8 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import * as os from 'node:os'
 import { randomUUID } from 'node:crypto'
+import JSZip from 'jszip'
+import { sanitizeBblGcodeTemplates } from './gcode-sanitizer'
 
 import type { Application } from '../../../declarations'
 import type { Slicer3Mf, Slicer3MfData, Slicer3MfPatch, Slicer3MfQuery } from './3mf.schema'
@@ -14,12 +16,11 @@ export interface Slicer3MfServiceOptions {
   app: Application
 }
 
-export interface Slicer3MfParams extends Params<Slicer3MfQuery> {}
+export interface Slicer3MfParams extends Params<Slicer3MfQuery> { }
 
 export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfParams>
-  implements ServiceInterface<Slicer3Mf, Slicer3MfData, ServiceParams, Slicer3MfPatch>
-{
-  constructor(public options: Slicer3MfServiceOptions) {}
+  implements ServiceInterface<Slicer3Mf, Slicer3MfData, ServiceParams, Slicer3MfPatch> {
+  constructor(public options: Slicer3MfServiceOptions) { }
 
   async find(_params?: ServiceParams): Promise<Slicer3Mf[]> {
     return []
@@ -43,7 +44,10 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
       return Promise.all(data.map(current => this.create(current, params)))
     }
 
-    const orca = await this.options.app.get('orca')
+    const orca = this.options.app.get('orca')
+    if (!orca) {
+      throw new Error('OrcaSlicer addon not loaded')
+    }
 
     const { options, printerProfileName, filamentProfileName, processProfileName, center, bedType } =
       data ?? {
@@ -77,9 +81,48 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
       throw new Error('Nenhum arquivo recebido. Envie um multipart field "file" ou informe "filePath".')
     }
 
-    // Define caminho de saída padrão com extensão .gcode.3mf
-    const defaultOut = path.join(os.tmpdir(), `orca-${randomUUID()}.gcode.3mf`)
-    const outPath = data.output ?? defaultOut
+    if (!fs.existsSync(inputPath)) {
+      throw new BadRequest('Input file not found')
+    }
+
+    const inputStats = fs.statSync(inputPath)
+    console.log(`[3MF] Input file: ${inputPath}, Size: ${inputStats.size} bytes`)
+    if (inputStats.size === 0) {
+      console.error('[3MF] Check: Input file is empty!')
+    }
+
+    // Força o caminho de saída para ser no diretório temporário para segurança
+    // Ignora data.output enviado pelo usuário para evitar Arbitrary File Write
+    const outputFilename = `orca-${randomUUID()}.gcode.3mf`
+    const outPath = path.join(os.tmpdir(), outputFilename)
+
+    // Validate input file is a valid ZIP/3MF
+    try {
+      const fileContent = fs.readFileSync(inputPath)
+      const zip = await JSZip.loadAsync(fileContent)
+      console.log('[3MF] Input file is a valid ZIP. Contents:')
+      const files = Object.keys(zip.files)
+
+      for (const f of files) {
+        const fileData = zip.files[f]
+        // Log size for .model files or config
+        if (f.endsWith('.model') || f.endsWith('.config')) {
+          const content = await fileData.async('nodebuffer')
+          console.log(`  - ${f} (Size: ${content.length} bytes)`)
+          if (content.length === 0) {
+            console.error(`[3MF] WARNING: Internal file ${f} is empty!`)
+          }
+        } else {
+          console.log(`  - ${f}`)
+        }
+      }
+
+      if (files.length === 0) {
+        console.error('[3MF] Input ZIP is empty!')
+      }
+    } catch (err: any) {
+      console.error('[3MF] Input file is NOT a valid ZIP:', err.message)
+    }
 
     // NOTE: Nao carregamos vendors/profiles aqui.
     // O addon funciona em modo on-the-fly puro:
@@ -98,6 +141,12 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
     const configOverrides = (data as any).config ?? {}
     const finalOptions = { ...options, ...configOverrides }
     finalOptions.curr_bed_type = bedType ?? 'High Temp Plate'
+
+    // Sanitize BBL-proprietary G-code template variables before passing to OrcaSlicer.
+    // BBL profiles reference variables like flush_volumetric_speeds and flush_temperatures
+    // that don't exist in this OrcaSlicer fork, and use previous_extruder (which starts at -1)
+    // as a vector index. This prevents PlaceholderParser errors during export_gcode.
+    sanitizeBblGcodeTemplates(finalOptions)
 
     // Remove flush_volumes_matrix from overrides if it doesn't match the filament count
     // This prevents "Flush volumes matrix do not match to the correct size" errors
@@ -124,13 +173,18 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
     // Guarda as chaves de options para validacao posterior
     const optionsKeys = new Set(Object.keys(options ?? {}))
 
+    // Create a safe copy of the input file to ensure access and simple path
+    const safeInputPath = path.join(os.tmpdir(), `safe_input_${randomUUID()}.3mf`)
+    fs.copyFileSync(inputPath, safeInputPath)
+    console.log(`[3MF] Copied input to safe path: ${safeInputPath} (Size: ${fs.statSync(safeInputPath).size})`)
+
     try {
-      // TEMPORARILY DISABLE SILENCING TO DEBUG "Comparing incompatible types" error
-      ;(orca as any).setLoggingSilenced(false)
+      // Silencia logs por padrao para evitar spam no terminal
+      ; (orca as any).setLoggingSilenced(true)
       let res: any
       try {
         res = await orca.slice({
-          input: inputPath,
+          input: safeInputPath,
           output: outPath,
           plate: data.plate,
           options: finalOptions,
@@ -146,7 +200,7 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
           transferProjectOverrides: data.transferProjectOverrides ?? true
         })
       } finally {
-        ;(orca as any).setLoggingSilenced(false)
+        ; (orca as any).setLoggingSilenced(false)
       }
       output = res.output
 
@@ -177,6 +231,15 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
       ) {
         throw new BadRequest(`Invalid override option(s): ${msg}`)
       }
+
+      // Model empty (no objects found for the requested plate / broken plate metadata)
+      if (lower.includes('empty')) {
+        throw new BadRequest(
+          `No printable objects found for the requested plate. The 3MF plate metadata may be invalid.`,
+          { code: 'MODEL_EMPTY' }
+        )
+      }
+
       // Always throw a proper Error instance to avoid "error: undefined" logs
       throw new Error(msg || 'Slice failed')
     }
@@ -194,6 +257,26 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
     }
 
     const content = await fs.promises.readFile(output)
+
+    // Validação defensiva: .3mf deve ser um ZIP válido com pelo menos um G-code embutido.
+    // Isso evita retornar arquivos inválidos quando um binário antigo do addon exporta
+    // G-code puro com extensão .3mf.
+    try {
+      const zip = await JSZip.loadAsync(content)
+      const fileNames = Object.keys(zip.files)
+      const hasEmbeddedGcode = fileNames.some(
+        name => /(^|\/)Metadata\/.+\.gcode$/i.test(name) || /\.gcode$/i.test(name)
+      )
+      if (!hasEmbeddedGcode) {
+        throw new Error('3MF sem G-code embutido (Metadata/*.gcode não encontrado)')
+      }
+    } catch (zipErr: any) {
+      const details = String(zipErr?.message ?? zipErr ?? 'erro desconhecido')
+      throw new Error(
+        `3MF inválido gerado pelo addon: ${details}. ` +
+        'Verifique se o runtime está carregando o binário local atualizado do OrcaSlicerAddon.'
+      )
+    }
     // const dataBase64 = content.toString('base64')
 
     return {

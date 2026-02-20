@@ -228,6 +228,9 @@ MODELIO:FILEPATH=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.pla
 //The directory containing a CMake configuration file for NLopt.
 NLopt_DIR:PATH=NLopt_DIR-NOTFOUND
 
+//Path to a library.
+NLopt_LIBS:FILEPATH=NLopt_LIBS-NOTFOUND
+
 //Build Node.js addon (.node) linking orcacli_core
 ORCACLI_BUILD_NODE_ADDON:BOOL=OFF
 
@@ -415,6 +418,8 @@ CMAKE_VERBOSE_MAKEFILE-ADVANCED:INTERNAL=1
 FIND_PACKAGE_MESSAGE_DETAILS_Threads:INTERNAL=[TRUE][v()]
 //Details about finding ZLIB
 FIND_PACKAGE_MESSAGE_DETAILS_ZLIB:INTERNAL=[/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk/usr/lib/libz.tbd][/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk/usr/include][c ][v1.2.12()]
+//ADVANCED property for variable: NLopt_LIBS
+NLopt_LIBS-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: ZLIB_INCLUDE_DIR
 ZLIB_INCLUDE_DIR-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: ZLIB_LIBRARY_DEBUG

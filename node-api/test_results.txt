@@ -1,0 +1,14 @@
+[test-setup] ORCACLI_ENGINE_PATH= /Users/maosone/Documents/slicer-api/OrcaSlicerAddon/build/bindings/node/liborcacli_engine.dylib
+DEBUG: [addon-js] __dirname= /Users/maosone/Documents/slicer-api/OrcaSlicerAddon/bindings/node node= 24.7.0
+DEBUG: [addon-js] trying /Users/maosone/Documents/slicer-api/OrcaSlicerAddon/bindings/node/build/bindings/node/orcaslicer_node.node
+DEBUG: [addon] Init loaded (module_dir=/Users/maosone/Documents/slicer-api/OrcaSlicerAddon/bindings/node/build/bindings/node, built=Feb 18 2026 19:32:57)
+DEBUG: [addon-js] loaded /Users/maosone/Documents/slicer-api/OrcaSlicerAddon/bindings/node/build/bindings/node/orcaslicer_node.node
+DEBUG: [addon-js] exporting middleware wrapper with API names: [
+  'initialize',
+  'shutdown',
+  'version',
+  'getModelInfo',
+  'slice',
+  'setLoggingSilenced'
+]
+[Orca] Initializing addon...

@@ -15,6 +15,9 @@ export type {
   ProfileConverterPatch
 } from './services/profile-converter/profile-converter.shared'
 
+import { profilesClient } from './services/profiles/profiles.shared'
+export type { Profiles, ProfilesData, ProfilesQuery } from './services/profiles/profiles.shared'
+
 import { slicer3MfClient } from './services/slicer/3mf/3mf.shared'
 export type {
   Slicer3Mf,
@@ -61,5 +64,6 @@ export const createClient = <Configuration = any>(
   client.configure(slicer3MfClient)
   client.configure(profileConverterClient)
   client.configure(mediasClient)
+  client.configure(profilesClient)
   return client
 }

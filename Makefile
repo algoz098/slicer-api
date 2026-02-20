@@ -5,15 +5,8 @@
 	deps-push-local core-push-local addon-base-push-local addon-slim-push-local addon-push-local push-all-local
 
 # ---- Configuracao ----
-# Pode sobrescrever via ambiente: make OWNER=me ORCASLICER_SUFFIX=c
-# Resolve suffix with precedence: env > .env > VERSION_SUFFIX (KEY=VAL or raw) > 'c'
-ORCASLICER_SUFFIX ?= $(shell \
-	if [ -n "$$ORCASLICER_SUFFIX" ]; then echo "$$ORCASLICER_SUFFIX"; \
-	elif [ -f .env ] && grep -q '^ORCASLICER_SUFFIX=' .env; then . ./.env >/dev/null 2>&1; echo "$$ORCASLICER_SUFFIX"; \
-	elif [ -f VERSION_SUFFIX ]; then \
-	  if grep -q '=' VERSION_SUFFIX; then . ./VERSION_SUFFIX >/dev/null 2>&1; echo "$$ORCASLICER_SUFFIX"; \
-	  else cat VERSION_SUFFIX; fi; \
-	else echo c; fi)
+# Suffix comes strictly from VERSION_SUFFIX
+ORCASLICER_SUFFIX ?= $(shell tr -d '[:space:]' < VERSION_SUFFIX)
 REGISTRY ?= ghcr.io
 # Tenta deduzir o owner a partir do git remote
 OWNER ?= $(shell git config --get remote.origin.url | awk -F'[/:]' '{print $$(NF-1)}')
