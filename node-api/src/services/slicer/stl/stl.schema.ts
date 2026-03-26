@@ -13,7 +13,9 @@ export const slicerStlSchema = Type.Object(
     id: Type.String(),
     filename: Type.Optional(Type.String()),
     outputPath: Type.String(),
-    gcode: Type.String()
+    gcode: Type.String(),
+    estimatedTimeSec: Type.Optional(Type.Number()),
+    filamentUsedGrams: Type.Optional(Type.Number())
   },
   { $id: 'SlicerStl', additionalProperties: false }
 )

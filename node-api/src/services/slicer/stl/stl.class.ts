@@ -116,6 +116,8 @@ export class SlicerStlService<ServiceParams extends SlicerStlParams = SlicerStlP
     // Executa fatiamento via N-API
     let output: string
     let ignoredOptions: string[] = []
+    let estimatedTimeSec: number | undefined
+    let filamentUsedGrams: number | undefined
     try {
       orcaAny.setLoggingSilenced(true)
       let res: any
@@ -133,6 +135,8 @@ export class SlicerStlService<ServiceParams extends SlicerStlParams = SlicerStlP
       }
       output = res.output
       ignoredOptions = res.ignoredOptions ?? []
+      estimatedTimeSec = res.estimatedTimeSec
+      filamentUsedGrams = res.filamentUsedGrams
     } catch (err: any) {
       const msg = String(err?.message ?? err ?? '')
       const lower = msg.toLowerCase()
@@ -161,7 +165,9 @@ export class SlicerStlService<ServiceParams extends SlicerStlParams = SlicerStlP
       id: randomUUID(),
       filename: originalFilename,
       outputPath: output,
-      gcode
+      gcode,
+      estimatedTimeSec,
+      filamentUsedGrams
     }
   }
 
