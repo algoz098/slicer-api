@@ -52,8 +52,18 @@ if(NOT TARGET orcacli_core AND NOT ORCACLI_SKIP_CORE_BUILD)
             endif()
         endif()
     endif()
-    # Help downstream find deps installed prefix from OrcaSlicer build
-    set(CMAKE_PREFIX_PATH "${ORCASLICER_BUILD_DIR}/deps/usr/local" ${CMAKE_PREFIX_PATH})
+    # Help downstream find deps installed prefix from OrcaSlicer build.
+    # Multiple candidate paths cover different platform/build layouts:
+    #   - Linux (build_linux.sh -dsi): deps/build/destdir/usr/local
+    #   - Windows (workflow cmake): deps/build/x64/OrcaSlicer_dep/usr/local
+    #   - Legacy / macOS: deps/build/OrcaSlicer_dep/usr/local
+    #   - Arch-specific subdir inside build dir (set above): build/x64/deps/usr/local
+    set(CMAKE_PREFIX_PATH
+        "${ORCASLICER_BUILD_DIR}/deps/usr/local"
+        "${ORCASLICER_ROOT_DIR}/deps/build/x64/OrcaSlicer_dep/usr/local"
+        "${ORCASLICER_ROOT_DIR}/deps/build/destdir/usr/local"
+        "${ORCASLICER_ROOT_DIR}/deps/build/OrcaSlicer_dep/usr/local"
+        ${CMAKE_PREFIX_PATH})
 
     # Ensure common dependencies expected by core are available
     find_package(Threads REQUIRED)

@@ -114,6 +114,7 @@ list(APPEND CMAKE_MODULE_PATH "${ORCASLICER_ROOT_DIR}/cmake/modules")
 # Support both old (destdir) and new (OrcaSlicer_dep) dependency paths
 set(CMAKE_PREFIX_PATH
     "${ORCASLICER_BUILD_DIR}/deps/usr/local"
+    "${ORCASLICER_ROOT_DIR}/deps/build/x64/OrcaSlicer_dep/usr/local"
     "${ORCASLICER_ROOT_DIR}/deps/build/OrcaSlicer_dep/usr/local"
     "${ORCASLICER_ROOT_DIR}/deps/build/destdir/usr/local"
     ${CMAKE_PREFIX_PATH})

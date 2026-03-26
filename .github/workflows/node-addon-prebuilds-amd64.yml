@@ -13,6 +13,9 @@ jobs:
     name: Prebuild Linux (amd64)
     runs-on: ubuntu-22.04
     timeout-minutes: 360
+    permissions:
+      contents: read
+      actions: read
     steps:
       - name: Checkout (with submodules + LFS)
         uses: actions/checkout@v4
@@ -48,23 +51,13 @@ jobs:
           VER=$(node -p "require('./OrcaSlicerAddon/bindings/node/package.json').version")
           echo "version=$VER" >> $GITHUB_OUTPUT
 
-      - name: Try download existing prebuild (linux, unversioned)
+      - name: Try download existing prebuild (linux, versioned)
         uses: dawidd6/action-download-artifact@v6
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: node-addon-prebuilds-amd64.yml
           workflow_conclusion: success
-          name: prebuild-linux
-          path: prebuild-linux
-          search_artifacts: true
-          if_no_artifact_found: ignore
-
-
-      - name: Try fallback download legacy prebuild (linux)
-        uses: dawidd6/action-download-artifact@v6
-        with:
-          workflow: node-addon-prebuilds-amd64.yml
-          workflow_conclusion: success
-          name: prebuild-linux
+          name: prebuild-linux-${{ steps.pkg.outputs.version }}
           path: prebuild-linux
           search_artifacts: true
           if_no_artifact_found: ignore
@@ -225,7 +218,7 @@ jobs:
         if: steps.check_prebuilt.outputs.found == 'false'
         uses: actions/upload-artifact@v4
         with:
-          name: prebuild-linux
+          name: prebuild-linux-${{ steps.pkg.outputs.version }}
           path: |
             OrcaSlicerAddon/bindings/node/prebuilds/**
           if-no-files-found: error
@@ -816,11 +809,35 @@ jobs:
         if: steps.check_prebuilt.outputs.found == 'false'
         shell: bash
         env:
-          ORCACLI_REQUIRE_LIBS: 'ON'
+          # Force cmake-js to use the same Visual Studio generator used for OrcaSlicer itself
+          CMAKE_GENERATOR: "Visual Studio 17 2022"
+          CMAKE_GENERATOR_PLATFORM: x64
         run: |
           cd OrcaSlicerAddon/bindings/node
           npm ci
-          npm run prebuild:all
+          # Compute absolute forward-slash paths for CMake (avoids \a escape issues and relative-path fragility)
+          export ORCA_ROOT="${GITHUB_WORKSPACE//\\//}/OrcaSlicer"
+          export DEPS_PREFIX="${GITHUB_WORKSPACE//\\//}/OrcaSlicer/deps/build/x64/OrcaSlicer_dep/usr/local"
+          echo "ORCA_ROOT: $ORCA_ROOT"
+          echo "DEPS_PREFIX: $DEPS_PREFIX"
+          node -e "
+            (async () => {
+              const { CMake } = require('cmake-js');
+              const cm = new CMake({
+                runtime: 'node',
+                arch: 'x64',
+                CMakeOptions: [
+                  '-DORCACLI_BUILD_NODE_ADDON=ON',
+                  '-DORCACLI_REQUIRE_LIBS=ON',
+                  '-DORCASLICER_ROOT_DIR=' + process.env.ORCA_ROOT,
+                  '-DCMAKE_PREFIX_PATH=' + process.env.DEPS_PREFIX,
+                  '-DCMAKE_BUILD_TYPE=Release',
+                  '-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded',
+                ]
+              });
+              await cm.compile();
+            })()
+          "
           npm run prebuild:stage
 
       - name: List staged prebuilds
