@@ -139,6 +139,10 @@ typedef void                 (*PF_orcacli_set_logging_silenced)(bool);
 typedef void                 (*PF_orcacli_free_string)(const char*);
 typedef void                 (*PF_orcacli_free_model_info)(orcacli_model_info*);
 typedef void                 (*PF_orcacli_free_result)(orcacli_operation_result*);
+typedef orcacli_operation_result (*PF_orcacli_load_vendor)(orcacli_handle, const char*);
+typedef orcacli_operation_result (*PF_orcacli_load_printer_profile)(orcacli_handle, const char*);
+typedef orcacli_operation_result (*PF_orcacli_load_filament_profile)(orcacli_handle, const char*);
+typedef orcacli_operation_result (*PF_orcacli_load_process_profile)(orcacli_handle, const char*);
 
 struct FFI {
   void* lib = nullptr;
@@ -154,6 +158,10 @@ struct FFI {
   PF_orcacli_free_string free_string = nullptr;
   PF_orcacli_free_model_info free_model_info = nullptr;
   PF_orcacli_free_result free_result = nullptr;
+  PF_orcacli_load_vendor load_vendor = nullptr;
+  PF_orcacli_load_printer_profile load_printer_profile = nullptr;
+  PF_orcacli_load_filament_profile load_filament_profile = nullptr;
+  PF_orcacli_load_process_profile load_process_profile = nullptr;
   // state
   orcacli_handle inst = nullptr;
 };
@@ -251,7 +259,11 @@ static bool ensure_engine_loaded(std::string* err_out) {
   g_ffi.set_logging_silenced = reinterpret_cast<PF_orcacli_set_logging_silenced>(load_sym(g_ffi.lib, "orcacli_set_logging_silenced"));
   g_ffi.free_string    = reinterpret_cast<PF_orcacli_free_string>(load_sym(g_ffi.lib, "orcacli_free_string"));
   g_ffi.free_model_info= reinterpret_cast<PF_orcacli_free_model_info>(load_sym(g_ffi.lib, "orcacli_free_model_info"));
-  g_ffi.free_result    = reinterpret_cast<PF_orcacli_free_result>(load_sym(g_ffi.lib, "orcacli_free_result"));
+  g_ffi.free_result         = reinterpret_cast<PF_orcacli_free_result>(load_sym(g_ffi.lib, "orcacli_free_result"));
+  g_ffi.load_vendor         = reinterpret_cast<PF_orcacli_load_vendor>(load_sym(g_ffi.lib, "orcacli_load_vendor"));
+  g_ffi.load_printer_profile  = reinterpret_cast<PF_orcacli_load_printer_profile>(load_sym(g_ffi.lib, "orcacli_load_printer_profile"));
+  g_ffi.load_filament_profile = reinterpret_cast<PF_orcacli_load_filament_profile>(load_sym(g_ffi.lib, "orcacli_load_filament_profile"));
+  g_ffi.load_process_profile  = reinterpret_cast<PF_orcacli_load_process_profile>(load_sym(g_ffi.lib, "orcacli_load_process_profile"));
   // Relaxed symbol requirements: require core create/destroy; others optional for dev
   if (!g_ffi.create || !g_ffi.destroy) {
     if (err_out) *err_out = "Missing required core symbols in engine library (create/destroy)";
@@ -274,6 +286,10 @@ static bool ensure_engine_loaded(std::string* err_out) {
   log_missing("orcacli_free_model_info", (void*)g_ffi.free_model_info);
   log_missing("orcacli_free_result", (void*)g_ffi.free_result);
   log_missing("orcacli_set_logging_silenced", (void*)g_ffi.set_logging_silenced);
+  log_missing("orcacli_load_vendor", (void*)g_ffi.load_vendor);
+  log_missing("orcacli_load_printer_profile", (void*)g_ffi.load_printer_profile);
+  log_missing("orcacli_load_filament_profile", (void*)g_ffi.load_filament_profile);
+  log_missing("orcacli_load_process_profile", (void*)g_ffi.load_process_profile);
   ADDON_DEBUGF("DEBUG: [addon] ensure_engine_loaded: calling create()...\n");
   g_ffi.inst = g_ffi.create();
   ADDON_DEBUGF("DEBUG: [addon] ensure_engine_loaded: create() => %p\n", g_ffi.inst);
@@ -700,7 +716,86 @@ static napi_value Slice(napi_env env, napi_callback_info info) {
   return promise;
 }
 
-// loadVendor(vendorId: string)
+// loadVendor(vendorId: string): void
+static napi_value LoadVendor(napi_env env, napi_callback_info info) {
+  size_t argc = 1; napi_value args[1]; napi_value thisArg; void* data;
+  NAPI_CALL(env, napi_get_cb_info(env, info, &argc, args, &thisArg, &data));
+  if (argc < 1) { napi_throw_type_error(env, nullptr, "vendorId is required"); return nullptr; }
+  std::string vendorId = get_string(env, args[0]);
+  std::lock_guard<std::mutex> lk(g_mutex);
+  std::string err;
+  if (!ensure_engine_loaded(&err)) { napi_throw_error(env, nullptr, err.c_str()); return nullptr; }
+  if (!g_ffi.load_vendor) { napi_throw_error(env, nullptr, "loadVendor not available in this engine build"); return nullptr; }
+  auto r = g_ffi.load_vendor(g_ffi.inst, vendorId.c_str());
+  if (!r.success) {
+    std::string msg = r.message ? r.message : "loadVendor failed";
+    if (g_ffi.free_result) g_ffi.free_result(&r);
+    napi_throw_error(env, nullptr, msg.c_str()); return nullptr;
+  }
+  if (g_ffi.free_result) g_ffi.free_result(&r);
+  napi_value undef; NAPI_CALL(env, napi_get_undefined(env, &undef)); return undef;
+}
+
+// loadPrinterProfile(name: string): void
+static napi_value LoadPrinterProfile(napi_env env, napi_callback_info info) {
+  size_t argc = 1; napi_value args[1]; napi_value thisArg; void* data;
+  NAPI_CALL(env, napi_get_cb_info(env, info, &argc, args, &thisArg, &data));
+  if (argc < 1) { napi_throw_type_error(env, nullptr, "name is required"); return nullptr; }
+  std::string name = get_string(env, args[0]);
+  std::lock_guard<std::mutex> lk(g_mutex);
+  std::string err;
+  if (!ensure_engine_loaded(&err)) { napi_throw_error(env, nullptr, err.c_str()); return nullptr; }
+  if (!g_ffi.load_printer_profile) { napi_throw_error(env, nullptr, "loadPrinterProfile not available in this engine build"); return nullptr; }
+  auto r = g_ffi.load_printer_profile(g_ffi.inst, name.c_str());
+  if (!r.success) {
+    std::string msg = r.message ? r.message : "loadPrinterProfile failed";
+    if (g_ffi.free_result) g_ffi.free_result(&r);
+    napi_throw_error(env, nullptr, msg.c_str()); return nullptr;
+  }
+  if (g_ffi.free_result) g_ffi.free_result(&r);
+  napi_value undef; NAPI_CALL(env, napi_get_undefined(env, &undef)); return undef;
+}
+
+// loadFilamentProfile(name: string): void
+static napi_value LoadFilamentProfile(napi_env env, napi_callback_info info) {
+  size_t argc = 1; napi_value args[1]; napi_value thisArg; void* data;
+  NAPI_CALL(env, napi_get_cb_info(env, info, &argc, args, &thisArg, &data));
+  if (argc < 1) { napi_throw_type_error(env, nullptr, "name is required"); return nullptr; }
+  std::string name = get_string(env, args[0]);
+  std::lock_guard<std::mutex> lk(g_mutex);
+  std::string err;
+  if (!ensure_engine_loaded(&err)) { napi_throw_error(env, nullptr, err.c_str()); return nullptr; }
+  if (!g_ffi.load_filament_profile) { napi_throw_error(env, nullptr, "loadFilamentProfile not available in this engine build"); return nullptr; }
+  auto r = g_ffi.load_filament_profile(g_ffi.inst, name.c_str());
+  if (!r.success) {
+    std::string msg = r.message ? r.message : "loadFilamentProfile failed";
+    if (g_ffi.free_result) g_ffi.free_result(&r);
+    napi_throw_error(env, nullptr, msg.c_str()); return nullptr;
+  }
+  if (g_ffi.free_result) g_ffi.free_result(&r);
+  napi_value undef; NAPI_CALL(env, napi_get_undefined(env, &undef)); return undef;
+}
+
+// loadProcessProfile(name: string): void
+static napi_value LoadProcessProfile(napi_env env, napi_callback_info info) {
+  size_t argc = 1; napi_value args[1]; napi_value thisArg; void* data;
+  NAPI_CALL(env, napi_get_cb_info(env, info, &argc, args, &thisArg, &data));
+  if (argc < 1) { napi_throw_type_error(env, nullptr, "name is required"); return nullptr; }
+  std::string name = get_string(env, args[0]);
+  std::lock_guard<std::mutex> lk(g_mutex);
+  std::string err;
+  if (!ensure_engine_loaded(&err)) { napi_throw_error(env, nullptr, err.c_str()); return nullptr; }
+  if (!g_ffi.load_process_profile) { napi_throw_error(env, nullptr, "loadProcessProfile not available in this engine build"); return nullptr; }
+  auto r = g_ffi.load_process_profile(g_ffi.inst, name.c_str());
+  if (!r.success) {
+    std::string msg = r.message ? r.message : "loadProcessProfile failed";
+    if (g_ffi.free_result) g_ffi.free_result(&r);
+    napi_throw_error(env, nullptr, msg.c_str()); return nullptr;
+  }
+  if (g_ffi.free_result) g_ffi.free_result(&r);
+  napi_value undef; NAPI_CALL(env, napi_get_undefined(env, &undef)); return undef;
+}
+
 // shutdown(): cleans up engine state deterministically
 static napi_value Shutdown(napi_env env, napi_callback_info info) {
   (void)info;
@@ -742,6 +837,10 @@ static napi_value Init(napi_env env, napi_value exports) {
     {"getModelInfo", 0, GetModelInfo, 0, 0, 0, napi_default, 0},
     {"slice",      0, Slice,      0, 0, 0, napi_default, 0},
     {"setLoggingSilenced", 0, SetLoggingSilenced, 0, 0, 0, napi_default, 0},
+    {"loadVendor",          0, LoadVendor,          0, 0, 0, napi_default, 0},
+    {"loadPrinterProfile",  0, LoadPrinterProfile,  0, 0, 0, napi_default, 0},
+    {"loadFilamentProfile", 0, LoadFilamentProfile, 0, 0, 0, napi_default, 0},
+    {"loadProcessProfile",  0, LoadProcessProfile,  0, 0, 0, napi_default, 0},
   };
   NAPI_CALL(env, napi_define_properties(env, exports, sizeof(props)/sizeof(props[0]), props));
   return exports;

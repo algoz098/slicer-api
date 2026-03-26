@@ -52,9 +52,8 @@ export function version(): string;
 export function getModelInfo(file: string): Promise<ModelInfo>;
 export function slice(params: SliceParams): Promise<{ output: string; usedOptions?: string[]; ignoredOptions?: string[]; estimatedTimeSec?: number; filamentUsedGrams?: number }>;
 
-// Lazy loading controls (synchronous)
+// Lazy profile/vendor loading controls (synchronous, must call after initialize)
 export function loadVendor(vendorId: string): void;
-export function loadVendorBundle(bundle: VendorBundle): void;
 export function loadPrinterProfile(name: string): void;
 export function loadFilamentProfile(name: string): void;
 export function loadProcessProfile(name: string): void;

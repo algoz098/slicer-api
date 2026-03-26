@@ -72,6 +72,12 @@ orcacli_operation_result orcacli_load_model(orcacli_handle h, const char* filena
 orcacli_model_info       orcacli_get_model_info(orcacli_handle h);
 orcacli_operation_result orcacli_slice(orcacli_handle h, const orcacli_slice_params* params);
 
+// Profile/vendor lazy loading (must be called after orcacli_initialize)
+orcacli_operation_result orcacli_load_vendor(orcacli_handle h, const char* vendor_id);
+orcacli_operation_result orcacli_load_printer_profile(orcacli_handle h, const char* name);
+orcacli_operation_result orcacli_load_filament_profile(orcacli_handle h, const char* name);
+orcacli_operation_result orcacli_load_process_profile(orcacli_handle h, const char* name);
+
 // Metadata
 const char* orcacli_version(); // static string, no free required
 

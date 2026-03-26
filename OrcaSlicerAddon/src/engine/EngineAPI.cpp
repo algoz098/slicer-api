@@ -4,12 +4,12 @@
 #include <memory>
 #include <cstdlib>
 
-#include <iostream>
 #include <algorithm>
 #include <cctype>
 #include <cstring>
 
 #include "core/AddonCore.hpp"
+#include "utils/Logger.hpp"
 #ifdef HAVE_LIBSLIC3R
 namespace Slic3r { unsigned int level_string_to_boost(std::string level); void set_logging_level(unsigned int level); }
 #endif
@@ -33,19 +33,15 @@ static char* dup_cstr(const std::string& s) {
 extern "C" {
 
 orcacli_handle orcacli_create() {
-    std::cout << "========================================" << std::endl;
-    std::cout << "🚀 ORCACLI_CREATE() - Multi-color fix version!" << std::endl;
-    std::cout << "📅 Build: " << __DATE__ << " " << __TIME__ << std::endl;
-    std::cout << "========================================" << std::endl;
     try {
         Engine* engine = new Engine();
-        std::cout << "✅ Engine created successfully at " << (void*)engine << std::endl;
+        LOG_DEBUG("orcacli_create: engine created");
         return engine;
     } catch (const std::exception& e) {
-        std::cout << "❌ Failed to create engine: " << e.what() << std::endl;
+        LOG_ERROR(std::string("orcacli_create: failed: ") + e.what());
         return nullptr;
     } catch (...) {
-        std::cout << "❌ Failed to create engine: unknown error" << std::endl;
+        LOG_ERROR("orcacli_create: failed: unknown error");
         return nullptr;
     }
 }
@@ -69,7 +65,7 @@ static orcacli_operation_result make_result(const OrcaSlicerCli::AddonCore::Oper
 }
 
 orcacli_operation_result orcacli_initialize(orcacli_handle h, const char* resources_path) {
-    std::cout << "DEBUG: [C API] orcacli_initialize(resources_path=" << (resources_path?resources_path:"(null)") << ")" << std::endl;
+    LOG_DEBUG(std::string("orcacli_initialize: resources_path=") + (resources_path ? resources_path : "(null)"));
 
     if (!h) {
         return orcacli_operation_result{false, dup_cstr("invalid handle"), nullptr};
@@ -99,13 +95,11 @@ orcacli_operation_result orcacli_initialize(orcacli_handle h, const char* resour
     } catch (...) { /* ignore logging setup errors */ }
 #endif
 
-
     Engine* e = static_cast<Engine*>(h);
     auto res = e->core.initialize(resources_path ? std::string(resources_path) : std::string());
-    std::cout << "DEBUG: [C API] orcacli_initialize result success=" << (res.success?1:0) << ", msg='" << res.message << "'" << std::endl;
+    LOG_DEBUG(std::string("orcacli_initialize: success=") + (res.success ? "1" : "0") + " msg='" + res.message + "'");
 
     return make_result(res);
-
 }
 
 orcacli_operation_result orcacli_load_model(orcacli_handle h, const char* filename) {
@@ -132,17 +126,15 @@ orcacli_model_info orcacli_get_model_info(orcacli_handle h) {
 }
 
 orcacli_operation_result orcacli_slice(orcacli_handle h, const orcacli_slice_params* params) {
-    // Early diagnostic logging to catch pre-core crashes
-    if (params && params->verbose) {
-        try {
-            const char* in = (params && params->input_file) ? params->input_file : "(null)";
-            int plate = params ? params->plate_index : -1;
-            std::cout << "DEBUG: [C API] orcacli_slice enter: input='" << in << "' plate=" << plate << std::endl;
-        } catch (...) { /* ignore logging failures */ }
-    }
     if (!h || !params) {
         return orcacli_operation_result{false, dup_cstr("invalid args"), nullptr};
     }
+
+    if (params->verbose) {
+        LOG_DEBUG(std::string("orcacli_slice: input='") + (params->input_file ? params->input_file : "(null)") +
+                  "' plate=" + std::to_string(params->plate_index));
+    }
+
     Engine* e = static_cast<Engine*>(h);
     AddonCore::SlicingParams p;
     if (params->input_file)   p.input_file = params->input_file;
@@ -164,27 +156,48 @@ orcacli_operation_result orcacli_slice(orcacli_handle h, const orcacli_slice_par
     // Behavior flags
     p.center_on_bed = params->center_on_bed;
     p.auto_realign_if_needed = params->auto_realign_if_needed;
-    // Forward overrides into SlicingParams.custom_settings; validation will happen inside AddonCore::slice()
+    // Forward overrides into SlicingParams.custom_settings
     if (params->overrides && params->overrides_count > 0) {
         if (params->verbose) {
-            try {
-                std::cout << "DEBUG: [C API] overrides_count=" << params->overrides_count << std::endl;
-            } catch (...) {}
+            LOG_DEBUG(std::string("orcacli_slice: overrides_count=") + std::to_string(params->overrides_count));
         }
         for (int32_t i = 0; i < params->overrides_count; ++i) {
             const orcacli_kv& kv = params->overrides[i];
             if (kv.key && kv.value) {
                 if (params->verbose) {
-                    try { std::cout << "DEBUG: [C API] override[" << i << "]: '" << kv.key << "'='" << kv.value << "'" << std::endl; } catch (...) {}
+                    LOG_DEBUG(std::string("orcacli_slice: override[") + std::to_string(i) + "]: '" + kv.key + "'='" + kv.value + "'");
                 }
                 p.custom_settings[std::string(kv.key)] = std::string(kv.value);
             }
         }
-    } else if (params && params->verbose) {
-        try { std::cout << "DEBUG: [C API] overrides_count=0 or overrides=null" << std::endl; } catch (...) {}
     }
+
     auto res = e->core.slice(p);
     return make_result(res);
+}
+
+orcacli_operation_result orcacli_load_vendor(orcacli_handle h, const char* vendor_id) {
+    if (!h || !vendor_id) return orcacli_operation_result{false, dup_cstr("invalid args"), nullptr};
+    Engine* e = static_cast<Engine*>(h);
+    return make_result(e->core.loadVendor(vendor_id));
+}
+
+orcacli_operation_result orcacli_load_printer_profile(orcacli_handle h, const char* name) {
+    if (!h || !name) return orcacli_operation_result{false, dup_cstr("invalid args"), nullptr};
+    Engine* e = static_cast<Engine*>(h);
+    return make_result(e->core.loadPrinterProfile(name));
+}
+
+orcacli_operation_result orcacli_load_filament_profile(orcacli_handle h, const char* name) {
+    if (!h || !name) return orcacli_operation_result{false, dup_cstr("invalid args"), nullptr};
+    Engine* e = static_cast<Engine*>(h);
+    return make_result(e->core.loadFilamentProfile(name));
+}
+
+orcacli_operation_result orcacli_load_process_profile(orcacli_handle h, const char* name) {
+    if (!h || !name) return orcacli_operation_result{false, dup_cstr("invalid args"), nullptr};
+    Engine* e = static_cast<Engine*>(h);
+    return make_result(e->core.loadProcessProfile(name));
 }
 
 #ifndef ORCACLI_VERSION_STRING
@@ -225,4 +238,3 @@ void orcacli_free_result(orcacli_operation_result* r) {
 }
 
 } // extern "C"
-

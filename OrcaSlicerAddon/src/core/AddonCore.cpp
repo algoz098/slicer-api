@@ -58,14 +58,6 @@
 
 #if HAVE_LIBSLIC3R
 
-
-// Global silent switch (shared with JS env)
-static bool addon_is_silent() {
-    const char* v = std::getenv("ORCA_ADDON_LOG");
-    const char* s = std::getenv("ORCACLI_SILENT");
-    return (v && std::string(v) == "off") || (s && std::string(s) == "1");
-}
-
 // Runtime-configurable global IO silencer. Does NOT touch orcaslicer/ sources.
 // It redirects both C++ iostreams and POSIX fds to/from /dev/null and can be toggled on/off.
 namespace {
@@ -182,21 +174,17 @@ void OrcaSlicerCli::AddonCore::setLoggingSilenced(bool silent) {
 #include "libslic3r/Config.hpp"
 #include "libslic3r/Format/STL.hpp"
 #include "libslic3r/Format/3mf.hpp"
-
 #include "libslic3r/libslic3r.h"
 #include "libslic3r/Utils.hpp"
 #include "libslic3r/PresetBundle.hpp"
 #include "libslic3r/AppConfig.hpp"
-    #include "libslic3r/Geometry.hpp"
-    #include "libslic3r/BuildVolume.hpp"
-
+#include "libslic3r/Geometry.hpp"
+#include "libslic3r/BuildVolume.hpp"
 #include "libslic3r/Preset.hpp"
 #include "libslic3r/GCode/ThumbnailData.hpp"
 #include "libslic3r/ProjectTask.hpp"
 #include "libslic3r/Layer.hpp"
 
-#endif
-#if HAVE_LIBSLIC3R
 #include "core/plate/PlateCentering.hpp"
 #include "core/init/Initialization.hpp"
 #include "core/model/ModelIO.hpp"
@@ -204,20 +192,9 @@ void OrcaSlicerCli::AddonCore::setLoggingSilenced(bool silent) {
 #include "core/slice/SliceEngine.hpp"
 #include "core/util/Utilities.hpp"
 using OrcaSlicerCli::util::dbg_log;
-#if HAVE_LIBSLIC3R
 using OrcaSlicerCli::util::bed_temp_key_for;
-#endif
 
-
-#endif
-
-
-#if HAVE_LIBSLIC3R
-// bed_temp_key_for centralized in core/util/Utilities
-#endif
-
-
-// dbg_log centralized in core/util/Utilities
+#endif  // HAVE_LIBSLIC3R
 
 // Helper: Sanitize a DynamicPrintConfig to ensure all options have compatible types.
 // This prevents "Comparing incompatible types" errors when print->apply() compares configs.
@@ -256,14 +233,13 @@ static void sanitize_config_types(Slic3r::DynamicPrintConfig& cfg) {
                       ") value='" + serialized + "'");
 
             // Create new option with correct type and deserialize
-            Slic3r::ConfigOption* new_opt = opt_def->create_default_option();
+            std::unique_ptr<Slic3r::ConfigOption> new_opt(opt_def->create_default_option());
             if (new_opt) {
                 try {
                     new_opt->deserialize(serialized, Slic3r::ForwardCompatibilitySubstitutionRule::Enable);
-                    cfg.set_key_value(key, new_opt);
+                    cfg.set_key_value(key, new_opt.release()); // set_key_value takes ownership
                 } catch (...) {
-                    delete new_opt;
-                    // If conversion fails, erase the key
+                    // new_opt still held by unique_ptr if deserialize threw; released otherwise
                     cfg.erase(key);
                     LOG_DEBUG("sanitize_config_types: removed key '" + key + "' (conversion failed)");
                 }
@@ -350,7 +326,7 @@ public:
 #endif
 
     Impl() = default;
-    ~Impl() = default; // Cleanup is performed explicitly via AddonCore::shutdown()
+    ~Impl() { cleanup(); } // Ensure RAII cleanup even if shutdown() was not called
 
 
     #if HAVE_LIBSLIC3R
@@ -412,7 +388,7 @@ public:
         }
 
         std::filesystem::path file_path(filename);
-        std::cout << "DEBUG: loadModelFromFile: '" << filename << "' ext='" << file_path.extension().string() << "' plate_id=" << plate_id << std::endl;
+        LOG_DEBUG(std::string("loadModelFromFile: '") + filename + "' ext='" + file_path.extension().string() + "' plate_id=" + std::to_string(plate_id));
         std::string extension = file_path.extension().string();
         std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
 
@@ -469,9 +445,9 @@ public:
 
             // GUI parity: do not normalize instances here. Use only plate_origin for plate-local coordinates.
             // Keep instances in assembly space and apply the offset only during G-code export.
-            std::cout << "DEBUG: 3MF project preset names captured: printer='" << project_printer_preset
-                      << "', print='" << project_print_preset
-                      << "', filament='" << project_filament_preset << "'" << std::endl;
+            LOG_DEBUG(std::string("3MF project preset names: printer='") + project_printer_preset +
+                      "', print='" + project_print_preset +
+                      "', filament='" + project_filament_preset + "'");
 
             // Ensure model has objects and default instances
             if (!OrcaSlicerCli::model::ensure_default_instances(*model, last_error)) {
@@ -479,13 +455,9 @@ public:
             }
 
             return true;
-
-	        }
-
-        catch (const std::exception& e) {
+        } catch (const std::exception& e) {
             last_error = std::string("Error loading model: ") + e.what();
             return false;
-
         }
 #else
 
@@ -553,7 +525,11 @@ public:
                     stride_y = bed_d * 1.2;
                 }
             }
-        } catch (...) {}
+        } catch (const std::exception& e) {
+            LOG_WARNING(std::string("configurePlateOrigin: failed to compute bed shape: ") + e.what());
+        } catch (...) {
+            LOG_WARNING("configurePlateOrigin: failed to compute bed shape (unknown error)");
+        }
 
         if (center_on_bed) {
             bool is_bbl = false; try { is_bbl = preset_bundle.is_bbl_vendor(); } catch (...) {}
@@ -667,7 +643,7 @@ public:
                 Slic3r::BoundingBoxf3 bb = obj->instance_bounding_box(*inst);
                 Slic3r::BoundingBoxf3 bb_local(bb.min + shift_xy, bb.max + shift_xy);
                 auto state = build_volume.volume_state_bbox(bb_local, true);
-                if (state != Slic3r::BuildVolume::ObjectState::Inside) {
+                if (state == Slic3r::BuildVolume::ObjectState::Outside) {
                    msg = "Elements outside printable area: '" + (obj->name.empty() ? "object" : obj->name) + "'";
                    return true;
                 }
@@ -683,7 +659,7 @@ public:
              Slic3r::Vec3d pt(double(wtx), double(wty), 0.0);
              Slic3r::BoundingBoxf3 wtbb(pt, pt);
              auto state = build_volume.volume_state_bbox(wtbb, true);
-             if (state != Slic3r::BuildVolume::ObjectState::Inside) {
+             if (state == Slic3r::BuildVolume::ObjectState::Outside) {
                  msg = "Prime Tower outside printable area";
                  return true;
              }
@@ -901,8 +877,7 @@ public:
                     if (flush_matrix) {
                         size_t current_size = flush_matrix->values.size();
                         if (current_size != expected_matrix_size) {
-                            std::cout << "DEBUG: [BEFORE EXPORT] Resizing flush_volumes_matrix from " << current_size
-                                      << " to " << expected_matrix_size << std::endl;
+                            LOG_DEBUG(std::string("[BEFORE EXPORT] Resizing flush_volumes_matrix from ") + std::to_string(current_size) + " to " + std::to_string(expected_matrix_size));
                             // Create a proper matrix: diagonal = 0 (same filament), off-diagonal = 280 (default purge)
                             std::vector<double> new_matrix(expected_matrix_size, 280.0);
                             for (size_t h = 0; h < heads_count; ++h) {
@@ -916,7 +891,7 @@ public:
                         }
                     } else if (filament_count > 0) {
                         // flush_matrix doesn't exist, create it
-                        std::cout << "DEBUG: [BEFORE EXPORT] Creating flush_volumes_matrix with size " << expected_matrix_size << std::endl;
+                        LOG_DEBUG(std::string("[BEFORE EXPORT] Creating flush_volumes_matrix with size ") + std::to_string(expected_matrix_size));
                         std::vector<double> new_matrix(expected_matrix_size, 280.0);
                         for (size_t h = 0; h < heads_count; ++h) {
                             for (size_t i = 0; i < filament_count; ++i) {
@@ -932,13 +907,12 @@ public:
                     if (flush_vector) {
                         size_t current_size = flush_vector->values.size();
                         if (current_size != expected_vector_size) {
-                            std::cout << "DEBUG: [BEFORE EXPORT] Resizing flush_volumes_vector from " << current_size
-                                      << " to " << expected_vector_size << std::endl;
+                            LOG_DEBUG(std::string("[BEFORE EXPORT] Resizing flush_volumes_vector from ") + std::to_string(current_size) + " to " + std::to_string(expected_vector_size));
                             std::vector<double> new_vector(expected_vector_size, 140.0);
                             flush_vector->values = new_vector;
                         }
                     } else if (filament_count > 0) {
-                        std::cout << "DEBUG: [BEFORE EXPORT] Creating flush_volumes_vector with size " << expected_vector_size << std::endl;
+                        LOG_DEBUG(std::string("[BEFORE EXPORT] Creating flush_volumes_vector with size ") + std::to_string(expected_vector_size));
                         std::vector<double> new_vector(expected_vector_size, 140.0);
                         fpc.set_key_value("flush_volumes_vector", new Slic3r::ConfigOptionFloats(new_vector));
                     }
@@ -958,12 +932,11 @@ public:
                         // Only clear if it's the default malformed value (single point at 0,0)
                         if (bed_exclude->values.size() == 1 &&
                             bed_exclude->values[0].x() == 0.0 && bed_exclude->values[0].y() == 0.0) {
-                            std::cout << "DEBUG: Clearing malformed bed_exclude_area (default [0x0]) to prevent OrcaSlicer crash" << std::endl;
+                            LOG_DEBUG("Clearing malformed bed_exclude_area (default [0x0]) to prevent OrcaSlicer crash");
                             bed_exclude->values.clear();
                         } else if (bed_exclude->values.size() % 4 != 0) {
                             // If not a multiple of 4 points, clear it (malformed)
-                            std::cout << "DEBUG: Clearing malformed bed_exclude_area (size " << bed_exclude->values.size()
-                                      << " is not a multiple of 4) to prevent OrcaSlicer crash" << std::endl;
+                            LOG_DEBUG(std::string("Clearing malformed bed_exclude_area (size ") + std::to_string(bed_exclude->values.size()) + " is not a multiple of 4) to prevent OrcaSlicer crash");
                             bed_exclude->values.clear();
                         }
                     }
@@ -983,16 +956,16 @@ public:
                     size_t expected_matrix_size = filament_count * filament_count * heads_count;
                     size_t actual_matrix_size = flush_matrix ? flush_matrix->values.size() : 0;
 
-                    std::cout << "DEBUG: [VERIFICATION] filament_count=" << filament_count
-                              << ", heads_count=" << heads_count
-                              << ", expected_matrix=" << expected_matrix_size
-                              << ", actual_matrix=" << actual_matrix_size << std::endl;
+                    LOG_DEBUG(std::string("[VERIFICATION] filament_count=") + std::to_string(filament_count) +
+                              ", heads_count=" + std::to_string(heads_count) +
+                              ", expected_matrix=" + std::to_string(expected_matrix_size) +
+                              ", actual_matrix=" + std::to_string(actual_matrix_size));
 
                     if (actual_matrix_size != expected_matrix_size && filament_count > 1) {
-                        std::cout << "ERROR: flush_volumes_matrix size mismatch! Will cause error in append_full_config" << std::endl;
+                        LOG_ERROR("flush_volumes_matrix size mismatch! Will cause error in append_full_config");
                     }
                 } catch (const std::exception& e) {
-                    std::cout << "WARN: Failed to verify flush_volumes_matrix: " << e.what() << std::endl;
+                    LOG_WARNING(std::string("Failed to verify flush_volumes_matrix: ") + e.what());
                 }
 
                 // Export raw G-code first
@@ -1000,7 +973,7 @@ public:
                 LOG_DEBUG("Exporting intermediate G-code to: " + tmp_gcode.string());
                 try {
                     auto po = print->get_plate_origin();
-                    std::cout << "DEBUG: plate_origin at export => (" << po(0) << "," << po(1) << ")" << std::endl;
+                    LOG_DEBUG(std::string("plate_origin at export => (") + std::to_string(po(0)) + "," + std::to_string(po(1)) + ")");
                     // Export using current config/model; GUI exporter derives plate-local values itself
                     std::string gcode_path = print->export_gcode(tmp_gcode.string(), &proc_result, nullptr);
                     (void)gcode_path;
@@ -1100,15 +1073,15 @@ public:
                                 config->set_key_value("different_settings_to_system", diff_opt_cfg);
                             }
                         } catch (const std::exception& e) {
-                            std::cout << "WARN: Failed to copy overrides into main config: " << e.what() << std::endl;
+                            LOG_WARNING(std::string("Failed to copy overrides into main config: ") + e.what());
                         } catch (...) {
-                            std::cout << "WARN: Failed to copy overrides into main config (unknown error)" << std::endl;
+                            LOG_WARNING("Failed to copy overrides into main config (unknown error)");
                         }
                     }
                 } catch (const std::exception& e) {
-                    std::cout << "WARN: Failed to populate plate.config with overrides: " << e.what() << std::endl;
+                    LOG_WARNING(std::string("Failed to populate plate.config with overrides: ") + e.what());
                 } catch (...) {
-                    std::cout << "WARN: Failed to populate plate.config with overrides (unknown error)" << std::endl;
+                    LOG_WARNING("Failed to populate plate.config with overrides (unknown error)");
                 }
 
                 // Fill additional plate metadata required by Bambu slice_info.config
@@ -1186,11 +1159,10 @@ public:
                     if (bed_exclude_cfg && !bed_exclude_cfg->values.empty()) {
                         if (bed_exclude_cfg->values.size() == 1 &&
                             bed_exclude_cfg->values[0].x() == 0.0 && bed_exclude_cfg->values[0].y() == 0.0) {
-                            std::cout << "DEBUG: Clearing malformed bed_exclude_area in sp.config (default [0x0])" << std::endl;
+                            LOG_DEBUG("Clearing malformed bed_exclude_area in sp.config (default [0x0])");
                             bed_exclude_cfg->values.clear();
                         } else if (bed_exclude_cfg->values.size() % 4 != 0) {
-                            std::cout << "DEBUG: Clearing malformed bed_exclude_area in sp.config (size "
-                                      << bed_exclude_cfg->values.size() << " is not a multiple of 4)" << std::endl;
+                            LOG_DEBUG(std::string("Clearing malformed bed_exclude_area in sp.config (size ") + std::to_string(bed_exclude_cfg->values.size()) + " is not a multiple of 4)");
                             bed_exclude_cfg->values.clear();
                         }
                     }
@@ -1210,8 +1182,7 @@ public:
                             needs_fix = true;
                         }
                         if (needs_fix) {
-                            std::cout << "DEBUG: Fixing malformed printable_area (was size "
-                                      << printable_area_cfg->values.size() << ") to default 256x256" << std::endl;
+                            LOG_DEBUG(std::string("Fixing malformed printable_area (was size ") + std::to_string(printable_area_cfg->values.size()) + ") to default 256x256");
                             printable_area_cfg->values.clear();
                             printable_area_cfg->values.push_back(Slic3r::Vec2d(0, 0));
                             printable_area_cfg->values.push_back(Slic3r::Vec2d(256, 0));
@@ -1232,7 +1203,7 @@ public:
                         if (extruder_offset_cfg->values.size() == 1 &&
                             extruder_offset_cfg->values[0].x() == 0.0 && extruder_offset_cfg->values[0].y() == 0.0) {
                             // This is actually valid (no offset for single extruder), leave it
-                            std::cout << "DEBUG: extruder_offset is [0x0] - valid for single extruder" << std::endl;
+                            LOG_DEBUG("extruder_offset is [0x0] - valid for single extruder");
                         }
                     }
                 } catch (...) {
@@ -1273,8 +1244,7 @@ public:
                         for (size_t i = 0; i < used_filament_count; ++i) {
                             filament_ids.push_back(custom_filament_profile_name);
                         }
-                        std::cout << "DEBUG: Applied custom filament profile '" << custom_filament_profile_name
-                                  << "' to " << used_filament_count << " filament slots" << std::endl;
+                        LOG_DEBUG(std::string("Applied custom filament profile '") + custom_filament_profile_name + "' to " + std::to_string(used_filament_count) + " filament slots");
                     }
 
                     // Priority 2: Project presets from loaded 3MF
@@ -1336,7 +1306,7 @@ public:
                         LOG_DEBUG("Set filament_settings_id with " + std::to_string(filament_ids.size()) + " entries: " + ids_str);
                     }
                 } catch (const std::exception& e) {
-                    std::cout << "WARN: Failed to propagate preset IDs: " << e.what() << std::endl;
+                    LOG_WARNING(std::string("Failed to propagate preset IDs: ") + e.what());
                 } catch (...) {
                     // best-effort
                 }
@@ -1551,15 +1521,14 @@ public:
                     size_t heads_count = flush_multiplier ? flush_multiplier->values.size() : 1;
                     size_t expected_matrix_size = filament_count * filament_count * heads_count;
 
-                    std::cout << "DEBUG: [BEFORE GCODE EXPORT] Synchronizing flush_volumes_matrix - filament_count=" << filament_count
-                              << ", heads_count=" << heads_count
-                              << ", expected_matrix_size=" << expected_matrix_size << std::endl;
+                    LOG_DEBUG(std::string("[BEFORE GCODE EXPORT] Synchronizing flush_volumes_matrix: filament_count=") + std::to_string(filament_count) +
+                              ", heads_count=" + std::to_string(heads_count) +
+                              ", expected_matrix_size=" + std::to_string(expected_matrix_size));
 
                     if (flush_matrix) {
                         size_t current_size = flush_matrix->values.size();
                         if (current_size != expected_matrix_size) {
-                            std::cout << "DEBUG: [BEFORE GCODE EXPORT] Resizing flush_volumes_matrix from " << current_size
-                                      << " to " << expected_matrix_size << std::endl;
+                            LOG_DEBUG(std::string("[BEFORE GCODE EXPORT] Resizing flush_volumes_matrix from ") + std::to_string(current_size) + " to " + std::to_string(expected_matrix_size));
                             // Create a proper matrix: diagonal = 0 (same filament), off-diagonal = 280 (default purge)
                             std::vector<double> new_matrix(expected_matrix_size, 280.0);
                             for (size_t h = 0; h < heads_count; ++h) {
@@ -1573,7 +1542,7 @@ public:
                         }
                     } else if (filament_count > 0) {
                         // flush_matrix doesn't exist, create it
-                        std::cout << "DEBUG: [BEFORE GCODE EXPORT] Creating flush_volumes_matrix with size " << expected_matrix_size << std::endl;
+                        LOG_DEBUG(std::string("[BEFORE GCODE EXPORT] Creating flush_volumes_matrix with size ") + std::to_string(expected_matrix_size));
                         std::vector<double> new_matrix(expected_matrix_size, 280.0);
                         for (size_t h = 0; h < heads_count; ++h) {
                             for (size_t i = 0; i < filament_count; ++i) {
@@ -1589,13 +1558,12 @@ public:
                     if (flush_vector) {
                         size_t current_size = flush_vector->values.size();
                         if (current_size != expected_vector_size) {
-                            std::cout << "DEBUG: [BEFORE GCODE EXPORT] Resizing flush_volumes_vector from " << current_size
-                                      << " to " << expected_vector_size << std::endl;
+                            LOG_DEBUG(std::string("[BEFORE GCODE EXPORT] Resizing flush_volumes_vector from ") + std::to_string(current_size) + " to " + std::to_string(expected_vector_size));
                             std::vector<double> new_vector(expected_vector_size, 140.0);
                             flush_vector->values = new_vector;
                         }
                     } else if (filament_count > 0) {
-                        std::cout << "DEBUG: [BEFORE GCODE EXPORT] Creating flush_volumes_vector with size " << expected_vector_size << std::endl;
+                        LOG_DEBUG(std::string("[BEFORE GCODE EXPORT] Creating flush_volumes_vector with size ") + std::to_string(expected_vector_size));
                         std::vector<double> new_vector(expected_vector_size, 140.0);
                         fpc.set_key_value("flush_volumes_vector", new Slic3r::ConfigOptionFloats(new_vector));
                     }
@@ -1615,31 +1583,30 @@ public:
                         // Only clear if it's the default malformed value (single point at 0,0)
                         if (bed_exclude->values.size() == 1 &&
                             bed_exclude->values[0].x() == 0.0 && bed_exclude->values[0].y() == 0.0) {
-                            std::cout << "DEBUG: Clearing malformed bed_exclude_area (default [0x0]) to prevent OrcaSlicer crash" << std::endl;
+                            LOG_DEBUG("Clearing malformed bed_exclude_area (default [0x0]) to prevent OrcaSlicer crash");
                             bed_exclude->values.clear();
                         } else if (bed_exclude->values.size() % 4 != 0) {
                             // If not a multiple of 4 points, clear it (malformed)
-                            std::cout << "DEBUG: Clearing malformed bed_exclude_area (size " << bed_exclude->values.size()
-                                      << " is not a multiple of 4) to prevent OrcaSlicer crash" << std::endl;
+                            LOG_DEBUG(std::string("Clearing malformed bed_exclude_area (size ") + std::to_string(bed_exclude->values.size()) + " is not a multiple of 4) to prevent OrcaSlicer crash");
                             bed_exclude->values.clear();
                         }
                     }
                 } catch (const std::exception& e) {
-                    std::cout << "WARN: Failed to synchronize flush_volumes_matrix: " << e.what() << std::endl;
+                    LOG_WARNING(std::string("Failed to synchronize flush_volumes_matrix: ") + e.what());
                 }
 
                 try {
 
 
-                    std::cout << "DEBUG: Attempting direct G-code export..." << std::endl;
+                    LOG_DEBUG("Attempting direct G-code export...");
                     // Log current plate_origin that will be applied by GCode
                     {
                         auto po = print->get_plate_origin();
-                        std::cout << "DEBUG: plate_origin at export => (" << po(0) << "," << po(1) << ")" << std::endl;
+                        LOG_DEBUG(std::string("plate_origin at export => (") + std::to_string(po(0)) + "," + std::to_string(po(1)) + ")");
                     }
                     Slic3r::GCodeProcessorResult proc_result; // provide valid result storage to avoid null deref in export path
                     std::string gcode_path = print->export_gcode(output_file, &proc_result, nullptr);
-                    std::cout << "DEBUG: Direct G-code export completed successfully" << std::endl;
+                    LOG_DEBUG("Direct G-code export completed successfully");
                     // Capture native statistics from proc_result
                     try {
                         float pred_secs = proc_result.print_statistics.modes[static_cast<size_t>(Slic3r::PrintEstimatedStatistics::ETimeMode::Normal)].time;
@@ -1656,16 +1623,16 @@ public:
                     } catch (...) { /* best-effort */ }
                     export_successful = true;
                 } catch (const std::exception& e) {
-                    std::cout << "DEBUG: Direct export failed with exception: " << e.what() << std::endl;
+                    LOG_DEBUG(std::string("Direct export failed with exception: ") + e.what());
                     export_successful = false;
                 } catch (...) {
-                    std::cout << "DEBUG: Direct export failed with unknown exception" << std::endl;
+                    LOG_DEBUG("Direct export failed with unknown exception");
                     export_successful = false;
                 }
 
                 // If export failed, do not create any fallback file
                 if (!export_successful) {
-                    std::cout << "DEBUG: G-code export failed, no fallback file will be created" << std::endl;
+                    LOG_DEBUG("G-code export failed, no fallback file will be created");
                     last_error = "G-code export failed";
                     return false;
                 }
@@ -1673,25 +1640,25 @@ public:
                 // Check if export was successful
                 if (export_successful && std::filesystem::exists(output_file)) {
                     auto file_size = std::filesystem::file_size(output_file);
-                    std::cout << "DEBUG: G-code file size: " << file_size << " bytes" << std::endl;
+                    LOG_DEBUG(std::string("G-code file size: ") + std::to_string(file_size) + " bytes");
 
                     if (file_size > 1000) {  // Expect at least 1KB for a real G-code file
-                        std::cout << "DEBUG: G-code export successful" << std::endl;
+                        LOG_DEBUG("G-code export successful");
                         return true;
                     } else {
-                        std::cout << "DEBUG: G-code file too small (" << file_size << " bytes)" << std::endl;
+                        LOG_DEBUG(std::string("G-code file too small (") + std::to_string(file_size) + " bytes)");
                         last_error = "G-code file too small (" + std::to_string(file_size) + " bytes)";
                         return false;
                     }
                 } else {
-                    std::cout << "DEBUG: G-code export failed" << std::endl;
+                    LOG_DEBUG("G-code export failed");
                     last_error = "G-code export failed";
                     return false;
                 }
             }
         } catch (const std::exception& e) {
             last_error = std::string("Slicing failed: ") + e.what();
-            std::cout << "DEBUG: Exception caught: " << e.what() << std::endl;
+            LOG_DEBUG(std::string("Exception caught: ") + e.what());
             return false;
         }
 #else
@@ -1772,32 +1739,23 @@ public:
 // AddonCore implementation
 
 AddonCore::AddonCore() : m_impl(std::make_unique<Impl>()) {
-    OrcaSlicerCli::AddonCore::setLoggingSilenced(addon_is_silent());
-    std::cout << "========================================" << std::endl;
-    std::cout << "🚀 ORCASLICER ADDON LOADED - VERSION WITH MULTI-COLOR FIX" << std::endl;
-    std::cout << "🎨 Multi-color support: ENABLED" << std::endl;
-    std::cout << "📅 Build date: " << __DATE__ << " " << __TIME__ << std::endl;
-    std::cout << "========================================" << std::endl;
 }
 
 AddonCore::~AddonCore() = default;
 
 AddonCore::OperationResult AddonCore::initialize(const std::string& resources_path) {
-    OrcaSlicerCli::AddonCore::setLoggingSilenced(addon_is_silent());
-    std::cout << "🔧 AddonCore::initialize() called with resources_path: " << resources_path << std::endl;
+    LOG_DEBUG(std::string("AddonCore::initialize() resources_path='") + resources_path + "'");
 
     if (m_impl->initialized) {
-        std::cout << "⚠️  Already initialized, skipping" << std::endl;
         return OperationResult(true, "Already initialized");
     }
 
-    std::cout << "🔄 Initializing Slic3r..." << std::endl;
     if (m_impl->initializeSlic3r(resources_path)) {
         m_impl->initialized = true;
-        std::cout << "✅ AddonCore initialized successfully" << std::endl;
+        LOG_DEBUG("AddonCore initialized successfully");
         return OperationResult(true, "AddonCore initialized successfully");
     } else {
-        std::cout << "❌ Initialization failed: " << m_impl->last_error << std::endl;
+        LOG_ERROR(std::string("Initialization failed: ") + m_impl->last_error);
         return OperationResult(false, "Initialization failed", m_impl->last_error);
     }
 }
@@ -1851,11 +1809,64 @@ AddonCore::ModelInfo AddonCore::getModelInfo() const {
     return m_impl->getModelInformation();
 }
 
-AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
-    std::cout << "🎯 AddonCore::slice() CALLED - Multi-color fix version active!" << std::endl;
+AddonCore::OperationResult AddonCore::loadVendor(const std::string& vendor_id) {
+    if (!m_impl->initialized) return OperationResult(false, "AddonCore not initialized");
+#if HAVE_LIBSLIC3R
+    if (OrcaSlicerCli::config::load_vendor_from_resources(
+            m_impl->resources_path, vendor_id,
+            m_impl->preset_bundle, m_impl->app_config,
+            m_impl->loaded_vendors, m_impl->last_error)) {
+        return OperationResult(true, "Vendor loaded: " + vendor_id);
+    }
+    return OperationResult(false, "Failed to load vendor: " + vendor_id, m_impl->last_error);
+#else
+    return OperationResult(false, "libslic3r not available");
+#endif
+}
 
+AddonCore::OperationResult AddonCore::loadPrinterProfile(const std::string& printer_name) {
+    if (!m_impl->initialized) return OperationResult(false, "AddonCore not initialized");
+#if HAVE_LIBSLIC3R
+    if (OrcaSlicerCli::config::load_printer_profile(
+            m_impl->resources_path, printer_name,
+            m_impl->preset_bundle, m_impl->app_config,
+            *m_impl->config, m_impl->last_error)) {
+        return OperationResult(true, "Printer profile loaded: " + printer_name);
+    }
+    return OperationResult(false, "Failed to load printer profile: " + printer_name, m_impl->last_error);
+#else
+    return OperationResult(false, "libslic3r not available");
+#endif
+}
+
+AddonCore::OperationResult AddonCore::loadFilamentProfile(const std::string& filament_name) {
+    if (!m_impl->initialized) return OperationResult(false, "AddonCore not initialized");
+#if HAVE_LIBSLIC3R
+    if (OrcaSlicerCli::config::load_filament_profile(
+            filament_name, m_impl->preset_bundle, *m_impl->config, m_impl->last_error)) {
+        return OperationResult(true, "Filament profile loaded: " + filament_name);
+    }
+    return OperationResult(false, "Failed to load filament profile: " + filament_name, m_impl->last_error);
+#else
+    return OperationResult(false, "libslic3r not available");
+#endif
+}
+
+AddonCore::OperationResult AddonCore::loadProcessProfile(const std::string& process_name) {
+    if (!m_impl->initialized) return OperationResult(false, "AddonCore not initialized");
+#if HAVE_LIBSLIC3R
+    if (OrcaSlicerCli::config::load_process_profile(
+            process_name, m_impl->preset_bundle, *m_impl->config, m_impl->last_error)) {
+        return OperationResult(true, "Process profile loaded: " + process_name);
+    }
+    return OperationResult(false, "Failed to load process profile: " + process_name, m_impl->last_error);
+#else
+    return OperationResult(false, "libslic3r not available");
+#endif
+}
+
+AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
     if (!m_impl->initialized) {
-        std::cout << "❌ AddonCore not initialized!" << std::endl;
         return OperationResult(false, "AddonCore not initialized");
     }
 
@@ -1864,16 +1875,14 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
     m_impl->transfer_filament_customizations = params.transfer_filament_customizations;
     m_impl->transfer_process_customizations  = params.transfer_process_customizations;
     m_impl->transfer_project_overrides       = params.transfer_project_overrides;
-    // Behavior flags - SEMPRE ATIVOS para garantir que objetos cabem na mesa
-    // Ignora parametros e força centralizacao + realinhamento automatico
-    m_impl->center_on_bed = true;
-    m_impl->auto_realign_if_needed = true;
+    // Behavior flags: respect caller params
+    m_impl->center_on_bed = params.center_on_bed;
+    m_impl->auto_realign_if_needed = params.auto_realign_if_needed;
 
-    std::cout << "DEBUG: Entering slice(): input='" << params.input_file
-              << "' plate_index=" << params.plate_index
-              << ", profiles(prn/fil/proc)=('" << params.printer_profile_name << "','"
-              << params.filament_profile_name << "','" << params.process_profile_name << "')"
-              << std::endl;
+    LOG_DEBUG(std::string("slice(): input='") + params.input_file +
+              "' plate_index=" + std::to_string(params.plate_index) +
+              ", profiles(prn/fil/proc)=('" + params.printer_profile_name + "','" +
+              params.filament_profile_name + "','" + params.process_profile_name + "')");
 
     // Load model if not already loaded
     if (!params.input_file.empty()) {
@@ -1898,7 +1907,7 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
     // being used when slicing for A1 if profiles are not explicitly passed)
 #if HAVE_LIBSLIC3R
     try {
-        std::cout << "DEBUG: Resetting preset bundle to clean state before loading new profiles" << std::endl;
+        LOG_DEBUG("Resetting preset bundle to clean state before loading new profiles");
         // Reset preset selections to defaults
         m_impl->preset_bundle.printers.select_preset(0);  // Select first (default) printer
         m_impl->preset_bundle.prints.select_preset(0);    // Select first (default) print preset
@@ -1918,19 +1927,19 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
         m_impl->custom_filament_profile_name = params.filament_profile_name;
         m_impl->custom_process_profile_name = params.process_profile_name;
         if (!params.printer_profile_name.empty() || !params.filament_profile_name.empty() || !params.process_profile_name.empty()) {
-            std::cout << "DEBUG: Custom profile display names set: printer='" << params.printer_profile_name
-                      << "', filament='" << params.filament_profile_name
-                      << "', process='" << params.process_profile_name << "'" << std::endl;
+            LOG_DEBUG(std::string("Custom profile display names: printer='") + params.printer_profile_name +
+                      "', filament='" + params.filament_profile_name +
+                      "', process='" + params.process_profile_name + "'");
         }
     } catch (const std::exception &e) {
-        std::cout << "WARN: Failed to reset preset bundle: " << e.what() << std::endl;
+        LOG_WARNING(std::string("Failed to reset preset bundle: ") + e.what());
     }
 #endif
 
     // JSON on-the-fly mode: no profile loading, all config via custom_settings
 
 #if HAVE_LIBSLIC3R
-    std::cout << "DEBUG: [SLICE] About to update_compatible and apply presets..." << std::endl;
+    LOG_DEBUG("[SLICE] About to update_compatible and apply presets...");
     try {
         // Check if ALL transfer flags are disabled - if so, use pure defaults + custom_settings
         const bool all_transfer_disabled = !m_impl->transfer_printer_customizations &&
@@ -1941,27 +1950,25 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
         if (all_transfer_disabled) {
             // PURE ON-THE-FLY MODE: Ignore all 3MF configs, use only FullPrintConfig::defaults()
             // This allows slicing with only JSON config without any 3MF contamination
-            std::cout << "DEBUG: ALL transfer flags disabled - resetting to pure FullPrintConfig::defaults()" << std::endl;
+            LOG_DEBUG("ALL transfer flags disabled - resetting to pure FullPrintConfig::defaults()");
             m_impl->config->clear();
             Slic3r::FullPrintConfig full_defaults = Slic3r::FullPrintConfig::defaults();
             m_impl->config->apply(full_defaults, true);
-            std::cout << "DEBUG: Config reset to pure defaults (all 3MF configs ignored)" << std::endl;
+            LOG_DEBUG("Config reset to pure defaults (all 3MF configs ignored)");
 
             // CRITICAL: Disable multi-material processing to avoid infinite loops
             // When in pure on-the-fly mode, we force single-extruder mode to prevent
             // the ToolOrdering algorithm from entering infinite loops in
             // reorder_filaments_for_minimum_flush_volume() and update_filament_maps_to_config()
             try {
-                std::cout << "DEBUG: PURE ON-THE-FLY MODE - Disabling multi-material processing" << std::endl;
+                LOG_DEBUG("PURE ON-THE-FLY MODE - Disabling multi-material processing");
                 m_impl->config->set_key_value("single_extruder_multi_material", new Slic3r::ConfigOptionBool(false));
                 m_impl->config->set_key_value("enable_prime_tower", new Slic3r::ConfigOptionBool(false));
 
                 // PRESERVE 3MF COLORS: Restore filament colors from the 3MF file
                 // This allows objects to keep their original colors even in on-the-fly mode
                 if (!m_impl->saved_filament_colours.empty()) {
-                    std::cout << "DEBUG: PURE ON-THE-FLY MODE - Restoring 3MF filament colors: ";
-                    for (const auto& c : m_impl->saved_filament_colours) std::cout << c << " ";
-                    std::cout << std::endl;
+                    LOG_DEBUG("PURE ON-THE-FLY MODE - Restoring 3MF filament colors");
 
                     size_t num_colors = m_impl->saved_filament_colours.size();
                     m_impl->config->set_key_value("filament_colour", new Slic3r::ConfigOptionStrings(m_impl->saved_filament_colours));
@@ -1975,7 +1982,7 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
                     m_impl->config->set_key_value("nozzle_temperature_initial_layer", new Slic3r::ConfigOptionInts(nozzle_temps));
                     m_impl->config->set_key_value("bed_temperature", new Slic3r::ConfigOptionInts(bed_temps));
                     m_impl->config->set_key_value("bed_temperature_initial_layer", new Slic3r::ConfigOptionInts(bed_temps));
-                    std::cout << "DEBUG: Filament arrays expanded to " << num_colors << " entries to match 3MF colors" << std::endl;
+                    LOG_DEBUG(std::string("Filament arrays expanded to ") + std::to_string(num_colors) + " entries to match 3MF colors");
                 } else {
                     // No saved colors, use single white extruder
                     m_impl->config->set_key_value("filament_type", new Slic3r::ConfigOptionStrings({"PLA"}));
@@ -1989,15 +1996,14 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
                 // PRESERVE 3MF CHANGE_FILAMENT_GCODE: Critical for Bambu AMS multi-color printing
                 // This gcode contains M620/M621 macros that control the AMS filament changes
                 if (!m_impl->saved_change_filament_gcode.empty()) {
-                    std::cout << "DEBUG: PURE ON-THE-FLY MODE - Restoring 3MF change_filament_gcode ("
-                              << m_impl->saved_change_filament_gcode.size() << " chars)" << std::endl;
+                    LOG_DEBUG(std::string("PURE ON-THE-FLY MODE - Restoring 3MF change_filament_gcode (") + std::to_string(m_impl->saved_change_filament_gcode.size()) + " chars)");
                     m_impl->config->set_key_value("change_filament_gcode",
                         new Slic3r::ConfigOptionString(m_impl->saved_change_filament_gcode));
                 }
 
-                std::cout << "DEBUG: Multi-material disabled, extruder colors preserved" << std::endl;
+                LOG_DEBUG("Multi-material disabled, extruder colors preserved");
             } catch (const std::exception& e) {
-                std::cout << "WARN: Failed to configure on-the-fly mode: " << e.what() << std::endl;
+                LOG_WARNING(std::string("Failed to configure on-the-fly mode: ") + e.what());
             }
         } else {
             m_impl->preset_bundle.update_compatible(Slic3r::PresetSelectCompatibleType::Always);
@@ -2016,28 +2022,27 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
                 Slic3r::DynamicPrintConfig preset_config;
                 OrcaSlicerCli::util::safe_build_config(m_impl->preset_bundle, preset_config);
                 m_impl->config->apply(preset_config, true);
-                std::cout << "DEBUG: Applied preset config on top of defaults -> printer='"
-                          << m_impl->preset_bundle.printers.get_selected_preset_name()
-                          << "', print='" << m_impl->preset_bundle.prints.get_selected_preset_name()
-                          << "', filament='" << m_impl->preset_bundle.filaments.get_selected_preset_name()
-                          << "'" << std::endl;
+                LOG_DEBUG(std::string("Applied preset config on top of defaults -> printer='") +
+                          m_impl->preset_bundle.printers.get_selected_preset_name() +
+                          "', print='" + m_impl->preset_bundle.prints.get_selected_preset_name() +
+                          "', filament='" + m_impl->preset_bundle.filaments.get_selected_preset_name() + "'");
             } else {
                 // No specific presets loaded - apply generic fallback config
                 // This enables on-the-fly slicing with custom_settings from the API
-                std::cout << "DEBUG: No specific presets loaded - applying generic fallback config" << std::endl;
+                LOG_DEBUG("No specific presets loaded - applying generic fallback config");
                 OrcaSlicerCli::config::apply_generic_fallback_config(*m_impl->config, m_impl->resources_path);
             }
         }
 
         // Dump key values after syncing working config with selected presets
-        try { if (const auto* o = m_impl->config->optptr("sparse_infill_density")) std::cout << "DEBUG: synced_config[sparse_infill_density]=" << o->serialize() << std::endl; } catch (...) {}
-        try { if (const auto* o = m_impl->config->optptr("top_shell_layers")) std::cout << "DEBUG: synced_config[top_shell_layers]=" << o->serialize() << std::endl; } catch (...) {}
+        try { if (const auto* o = m_impl->config->optptr("sparse_infill_density")) LOG_DEBUG(std::string("synced_config[sparse_infill_density]=") + o->serialize()); } catch (...) {}
+        try { if (const auto* o = m_impl->config->optptr("top_shell_layers")) LOG_DEBUG(std::string("synced_config[top_shell_layers]=") + o->serialize()); } catch (...) {}
 
         // CRITICAL: Clear printer-identifying keys when transfer is disabled
         // This must be done AFTER full_config_secure() is applied, because that function
         // re-applies the preset values (which include the 3MF values from load_config_model)
         if (!m_impl->transfer_printer_customizations && !all_transfer_disabled) {
-            std::cout << "DEBUG: Clearing printer-identifying keys (transfer_printer_customizations=false)" << std::endl;
+            LOG_DEBUG("Clearing printer-identifying keys (transfer_printer_customizations=false)");
             try {
                 m_impl->config->set_key_value("printer_model", new Slic3r::ConfigOptionString(""));
                 m_impl->config->set_key_value("printer_variant", new Slic3r::ConfigOptionString(""));
@@ -2047,31 +2052,28 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
             } catch (...) {}
         }
         if (!m_impl->transfer_process_customizations && !all_transfer_disabled) {
-            std::cout << "DEBUG: Clearing process-identifying keys (transfer_process_customizations=false)" << std::endl;
+            LOG_DEBUG("Clearing process-identifying keys (transfer_process_customizations=false)");
             try {
                 m_impl->config->set_key_value("print_settings_id", new Slic3r::ConfigOptionString(""));
                 m_impl->config->set_key_value("default_print_profile", new Slic3r::ConfigOptionString(""));
             } catch (...) {}
         }
         if (!m_impl->transfer_filament_customizations && !all_transfer_disabled) {
-            std::cout << "DEBUG: Clearing filament-identifying keys (transfer_filament_customizations=false)" << std::endl;
+            LOG_DEBUG("Clearing filament-identifying keys (transfer_filament_customizations=false)");
             try {
                 m_impl->config->set_key_value("filament_settings_id", new Slic3r::ConfigOptionStrings({""}));
                 m_impl->config->set_key_value("default_filament_profile", new Slic3r::ConfigOptionStrings({""}));
             } catch (...) {}
         }
     } catch (const std::exception &e) {
-        std::cout << "WARN: Failed to refresh working config from selected presets: " << e.what() << std::endl;
+        LOG_WARNING(std::string("Failed to refresh working config from selected presets: ") + e.what());
     }
 #endif
 
 #if HAVE_LIBSLIC3R
     // Re-apply 3MF print-level overrides on top of selected profiles
-    std::cout << "TESTE AQUI AGORA >>> About to re-apply print overrides, transfer_process_customizations=" << params.transfer_process_customizations << std::endl;
     if (params.transfer_process_customizations) {
         OrcaSlicerCli::slice::reapply_print_overrides(*m_impl->config, m_impl->print_cfg_overrides, m_impl->print_overrides_keys);
-    } else {
-        std::cout << "TESTE AQUI AGORA >>> Skipping print overrides because transfer_process_customizations=false" << std::endl;
     }
 #endif
 
@@ -2104,19 +2106,6 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
             __ignored_override_keys);
     }
 
-    // DEBUG: Check printable_area immediately after apply_custom_settings
-    try {
-        auto* pa_after_custom = m_impl->config->opt<Slic3r::ConfigOptionPoints>("printable_area", false);
-        if (pa_after_custom) {
-            std::cout << "DEBUG: [AFTER apply_custom_settings] printable_area has " << pa_after_custom->values.size() << " points: ";
-            for (const auto& pt : pa_after_custom->values) {
-                std::cout << "(" << pt(0) << "," << pt(1) << ") ";
-            }
-            std::cout << std::endl;
-        } else {
-            std::cout << "DEBUG: [AFTER apply_custom_settings] printable_area is NULL!" << std::endl;
-        }
-    } catch (...) {}
 
     if (params.dry_run) {
         return OperationResult(true, "Dry run completed - no actual slicing performed");
@@ -2143,20 +2132,13 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
 
     // Ensure 3MF print-level (dirty) overrides take precedence over project-level overrides
     // Some UIs expect per-print edits (shown as orange/dirty) to win. Re-apply them after project overrides.
-    std::cout << "TESTE AQUI AGORA >>> Second re-apply of print overrides (after project overrides)" << std::endl;
     if (params.transfer_process_customizations) {
         OrcaSlicerCli::slice::reapply_print_overrides_excluding(
             *m_impl->config,
             m_impl->print_cfg_overrides,
             m_impl->print_overrides_keys,
             __used_override_keys);
-    } else {
-        std::cout << "TESTE AQUI AGORA >>> Skipping second re-apply because transfer_process_customizations=false" << std::endl;
     }
-
-    // NOTE: Multi-material configuration is now applied AFTER print->apply() in performSlicing()
-    // This ensures we use the ACTUAL extruders from the model, not the detected count from config
-    std::cout << "🔍 [TRACE 29] Multi-material config will be applied after print->apply() in performSlicing()" << std::endl;
 
     // Enable single_extruder_multi_material and prime tower if multi-material detected
     // BUT NOT in pure on-the-fly mode (all transfer flags disabled) - this can cause infinite loops
@@ -2166,16 +2148,14 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
                                                !m_impl->transfer_project_overrides;
 
     if (m_impl->detected_extruders > 1 && !all_transfer_disabled_for_mm) {
-        std::cout << "🔍 Detected multi-material model (" << m_impl->detected_extruders << " colors in 3MF)" << std::endl;
+        LOG_DEBUG(std::string("Detected multi-material model (") + std::to_string(m_impl->detected_extruders) + " colors in 3MF)");
         m_impl->config->set_key_value("single_extruder_multi_material", new Slic3r::ConfigOptionBool(true));
         m_impl->config->set_key_value("enable_prime_tower", new Slic3r::ConfigOptionBool(true));
 
         // Restore 3MF colors
         auto* fil_colour = m_impl->config->opt<Slic3r::ConfigOptionStrings>("filament_colour", false);
         if (!m_impl->saved_filament_colours.empty() && fil_colour) {
-            std::cout << "🔍 Restoring 3MF colors: ";
-            for (const auto& c : m_impl->saved_filament_colours) std::cout << c << " ";
-            std::cout << std::endl;
+            LOG_DEBUG("Restoring 3MF filament colors");
             fil_colour->values = m_impl->saved_filament_colours;
         }
 
@@ -2199,23 +2179,17 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
         {
             bool gcode_overridden = std::find(__used_override_keys.begin(), __used_override_keys.end(),
                                               "change_filament_gcode") != __used_override_keys.end();
-            std::cout << "DEBUG: gcode_overridden=" << (gcode_overridden ? "true" : "false")
-                      << ", __used_override_keys.size()=" << __used_override_keys.size() << std::endl;
             if (!m_impl->saved_change_filament_gcode.empty() && !gcode_overridden) {
-                std::cout << "🔍 Restoring 3MF change_filament_gcode ("
-                          << m_impl->saved_change_filament_gcode.size() << " chars)" << std::endl;
+                LOG_DEBUG(std::string("Restoring 3MF change_filament_gcode (") + std::to_string(m_impl->saved_change_filament_gcode.size()) + " chars)");
                 m_impl->config->set_key_value("change_filament_gcode",
                     new Slic3r::ConfigOptionString(m_impl->saved_change_filament_gcode));
-            } else if (gcode_overridden) {
-                std::cout << "🔍 Keeping config JSON change_filament_gcode (override from custom_settings)" << std::endl;
             }
         }
     } else if (m_impl->detected_extruders > 1 && all_transfer_disabled_for_mm) {
         // PURE ON-THE-FLY MODE with multi-material: Enable SEMM but disable problematic features
         // We need to enable single_extruder_multi_material to respect object extruder assignments
         // but disable features that can cause infinite loops
-        std::cout << "🔍 PURE ON-THE-FLY MODE: Enabling multi-material (" << m_impl->detected_extruders
-                  << " colors in 3MF) with safe settings" << std::endl;
+        LOG_DEBUG(std::string("PURE ON-THE-FLY MODE: Enabling multi-material (") + std::to_string(m_impl->detected_extruders) + " colors in 3MF) with safe settings");
         m_impl->config->set_key_value("single_extruder_multi_material", new Slic3r::ConfigOptionBool(true));
         m_impl->config->set_key_value("enable_prime_tower", new Slic3r::ConfigOptionBool(false));
         // Disable features that can cause infinite loops in ToolOrdering
@@ -2226,9 +2200,7 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
         // Restore 3MF colors in on-the-fly mode
         auto* fil_colour = m_impl->config->opt<Slic3r::ConfigOptionStrings>("filament_colour", false);
         if (!m_impl->saved_filament_colours.empty() && fil_colour) {
-            std::cout << "🔍 Restoring 3MF colors in on-the-fly mode: ";
-            for (const auto& c : m_impl->saved_filament_colours) std::cout << c << " ";
-            std::cout << std::endl;
+            LOG_DEBUG("Restoring 3MF filament colors (on-the-fly mode)");
             fil_colour->values = m_impl->saved_filament_colours;
         }
 
@@ -2252,12 +2224,9 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
             bool gcode_overridden = std::find(__used_override_keys.begin(), __used_override_keys.end(),
                                               "change_filament_gcode") != __used_override_keys.end();
             if (!m_impl->saved_change_filament_gcode.empty() && !gcode_overridden) {
-                std::cout << "🔍 Restoring 3MF change_filament_gcode in on-the-fly mode ("
-                          << m_impl->saved_change_filament_gcode.size() << " chars)" << std::endl;
+                LOG_DEBUG(std::string("Restoring 3MF change_filament_gcode in on-the-fly mode (") + std::to_string(m_impl->saved_change_filament_gcode.size()) + " chars)");
                 m_impl->config->set_key_value("change_filament_gcode",
                     new Slic3r::ConfigOptionString(m_impl->saved_change_filament_gcode));
-            } else if (gcode_overridden) {
-                std::cout << "🔍 Keeping config JSON change_filament_gcode in on-the-fly mode (override from custom_settings)" << std::endl;
             }
         }
     }
@@ -2275,15 +2244,14 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
         size_t heads_count = flush_multiplier ? flush_multiplier->values.size() : 1;
         size_t expected_matrix_size = filament_count * filament_count * heads_count;
 
-        std::cout << "DEBUG: Synchronizing flush_volumes_matrix - filament_count=" << filament_count
-                  << ", heads_count=" << heads_count
-                  << ", expected_matrix_size=" << expected_matrix_size << std::endl;
+        LOG_DEBUG(std::string("Synchronizing flush_volumes_matrix: filament_count=") + std::to_string(filament_count) +
+                  ", heads_count=" + std::to_string(heads_count) +
+                  ", expected_matrix_size=" + std::to_string(expected_matrix_size));
 
         if (flush_matrix) {
             size_t current_size = flush_matrix->values.size();
             if (current_size != expected_matrix_size) {
-                std::cout << "DEBUG: Resizing flush_volumes_matrix from " << current_size
-                          << " to " << expected_matrix_size << std::endl;
+                LOG_DEBUG(std::string("Resizing flush_volumes_matrix from ") + std::to_string(current_size) + " to " + std::to_string(expected_matrix_size));
                 // Create a proper matrix: diagonal = 0 (same filament), off-diagonal = 280 (default purge)
                 std::vector<double> new_matrix(expected_matrix_size, 280.0);
                 for (size_t h = 0; h < heads_count; ++h) {
@@ -2302,8 +2270,7 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
         if (flush_vector) {
             size_t current_size = flush_vector->values.size();
             if (current_size != expected_vector_size) {
-                std::cout << "DEBUG: Resizing flush_volumes_vector from " << current_size
-                          << " to " << expected_vector_size << std::endl;
+                LOG_DEBUG(std::string("Resizing flush_volumes_vector from ") + std::to_string(current_size) + " to " + std::to_string(expected_vector_size));
                 std::vector<double> new_vector(expected_vector_size, 140.0);  // Default purge volume
                 flush_vector->values = new_vector;
             }
@@ -2322,8 +2289,8 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
         dump_one("bottom_surface_pattern");
         dump_one("internal_solid_infill_pattern");
 
-        // CRITICAL: Check multi-material settings before slicing
-        std::cout << "🔍 [TRACE 30] BEFORE performSlicing() - checking multi-material config:" << std::endl;
+        // Check multi-material settings before slicing
+        LOG_DEBUG("[TRACE 30] BEFORE performSlicing() - checking multi-material config:");
         dump_one("single_extruder_multi_material");
         dump_one("enable_prime_tower");
         dump_one("filament_colour");
@@ -2406,13 +2373,13 @@ AddonCore::OperationResult AddonCore::setConfigOption(const std::string& key, co
             for (char& c : normalized_value) {
                 if (c == ';') c = ',';
             }
-            std::cout << "DEBUG: Normalized " << key << " from '" << value << "' to '" << normalized_value << "'" << std::endl;
+            LOG_DEBUG(std::string("Normalized ") + key + " from '" + value + "' to '" + normalized_value + "'");
         }
 
         // Use set_deserialize to let libslic3r parse and validate the value
         Slic3r::ConfigSubstitutionContext ctx{Slic3r::ForwardCompatibilitySubstitutionRule::Enable};
         m_impl->config->set_deserialize(key, normalized_value, ctx, /*append=*/false);
-        std::cout << "DEBUG: Override applied: " << key << "=" << normalized_value << std::endl;
+        LOG_DEBUG(std::string("Override applied: ") + key + "=" + normalized_value);
         return OperationResult(true, "Config option set: " + key);
     } catch (const std::exception& e) {
         return OperationResult(false, std::string("Failed to set config option: ") + key, e.what());

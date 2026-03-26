@@ -278,9 +278,9 @@ jobs:
 
 
       - name: Setup CMake 3.31.x
-        uses: lukka/get-cmake@latest
+        uses: lukka/get-cmake@v3.31.6
         with:
-          cmakeVersion: "~3.31.0"
+          cmakeVersion: "3.31.6"
 
       - name: Show CMake version
         shell: bash

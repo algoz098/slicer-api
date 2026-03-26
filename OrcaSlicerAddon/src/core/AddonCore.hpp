@@ -192,6 +192,34 @@ public:
     ModelInfo validateModel(const std::string& filename) const;
 
     /**
+     * @brief Load a vendor's system presets from resources
+     * @param vendor_id Vendor identifier (e.g. "BBL")
+     * @return Operation result
+     */
+    OperationResult loadVendor(const std::string& vendor_id);
+
+    /**
+     * @brief Load a printer profile by name and select it
+     * @param printer_name Name of the printer profile
+     * @return Operation result
+     */
+    OperationResult loadPrinterProfile(const std::string& printer_name);
+
+    /**
+     * @brief Load a filament profile by name and select it
+     * @param filament_name Name of the filament profile
+     * @return Operation result
+     */
+    OperationResult loadFilamentProfile(const std::string& filament_name);
+
+    /**
+     * @brief Load a process (print) profile by name and select it
+     * @param process_name Name of the process profile
+     * @return Operation result
+     */
+    OperationResult loadProcessProfile(const std::string& process_name);
+
+    /**
      * @brief Get version information
      * @return Version string
      */

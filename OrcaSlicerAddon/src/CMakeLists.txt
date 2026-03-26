@@ -64,7 +64,7 @@ set_property(TARGET orcacli_core PROPERTY POSITION_INDEPENDENT_CODE ON)
 # Compile this single file with -O1 to keep memory low without affecting the rest.
 # Also silence Eigen deprecated-copy warnings on this TU to avoid spurious build failures under -Werror on some toolchains.
 set_source_files_properties(core/AddonCore.cpp PROPERTIES
-    COMPILE_OPTIONS "-O1;$<$<CXX_COMPILER_ID:GNU>:-Wno-deprecated-copy>;$<$<CXX_COMPILER_ID:Clang>:-Wno-deprecated-copy;-Wno-deprecated-copy-with-user-provided-copy>"
+    COMPILE_OPTIONS "$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-O1>$<$<CXX_COMPILER_ID:MSVC>:/O1>;$<$<CXX_COMPILER_ID:GNU>:-Wno-deprecated-copy>;$<$<CXX_COMPILER_ID:Clang>:-Wno-deprecated-copy;-Wno-deprecated-copy-with-user-provided-copy>"
 )
 
 # Silence Eigen deprecated-copy warnings also for the engine TU that includes libslic3r headers
