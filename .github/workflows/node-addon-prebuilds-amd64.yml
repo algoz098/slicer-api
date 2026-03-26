@@ -52,9 +52,9 @@ jobs:
         uses: dawidd6/action-download-artifact@v6
         with:
           workflow: node-addon-prebuilds-amd64.yml
-          workflow_conclusion: completed
+          workflow_conclusion: success
           name: prebuild-linux
-          path: .
+          path: prebuild-linux
           search_artifacts: true
           if_no_artifact_found: ignore
 
@@ -63,9 +63,9 @@ jobs:
         uses: dawidd6/action-download-artifact@v6
         with:
           workflow: node-addon-prebuilds-amd64.yml
-          workflow_conclusion: completed
+          workflow_conclusion: success
           name: prebuild-linux
-          path: .
+          path: prebuild-linux
           search_artifacts: true
           if_no_artifact_found: ignore
 
@@ -773,7 +773,7 @@ jobs:
           where.exe nmake 2>/dev/null || echo "[warn] where.exe did not find nmake in PATH"
           # Convert DESTDIR to forward slashes to avoid CMake escape issues on Windows
           # (e.g., \a in "slicer-api" being interpreted as an escape sequence)
-          DESTDIR_PATH="${GITHUB_WORKSPACE}/OrcaSlicer/deps/build/x64/destdir"
+          DESTDIR_PATH="${GITHUB_WORKSPACE}/OrcaSlicer/deps/build/x64/OrcaSlicer_dep"
           DESTDIR_PATH="${DESTDIR_PATH//\\//}"
           echo "Using DESTDIR: $DESTDIR_PATH"
           cmake .. -G "Visual Studio 17 2022" -A x64 -DDESTDIR="$DESTDIR_PATH" -DCMAKE_BUILD_TYPE=Release -DDEP_DEBUG=OFF -DORCA_INCLUDE_DEBUG_INFO=OFF
@@ -793,7 +793,7 @@ jobs:
           mkdir -p build/x64
           cd build/x64
           # Convert CMAKE_PREFIX_PATH to forward slashes to avoid CMake escape issues on Windows
-          PREFIX_PATH="${GITHUB_WORKSPACE}/OrcaSlicer/deps/build/x64/destdir/usr/local"
+          PREFIX_PATH="${GITHUB_WORKSPACE}/OrcaSlicer/deps/build/x64/OrcaSlicer_dep/usr/local"
           PREFIX_PATH="${PREFIX_PATH//\\//}"
           echo "Using CMAKE_PREFIX_PATH: $PREFIX_PATH"
           cmake ../.. -G "Visual Studio 17 2022" -A x64 -DBBL_RELEASE_TO_PUBLIC=1 -DORCA_TOOLS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PREFIX_PATH"
