@@ -44,8 +44,10 @@ export class MediasService<ServiceParams extends MediasParams = MediasParams>
       throw new NotFound('File not found')
     }
 
-    // Return array as expected by find()
-    return [{ path: safePath }]
+    // Return path and base64-encoded content so callers on different filesystems can
+    // read the file without needing direct filesystem access to this server's /tmp.
+    const content = fs.readFileSync(safePath)
+    return [{ path: safePath, data: content.toString('base64') }]
   }
 
   async get(id: Id, _params?: ServiceParams): Promise<Medias> {

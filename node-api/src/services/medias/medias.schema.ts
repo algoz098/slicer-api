@@ -10,7 +10,8 @@ import type { MediasService } from './medias.class'
 // Main data model schema
 export const mediasSchema = Type.Object(
   {
-    path: Type.String()
+    path: Type.String(),
+    data: Type.Optional(Type.String()) // base64-encoded file content
   },
   { $id: 'Medias', additionalProperties: false }
 )
