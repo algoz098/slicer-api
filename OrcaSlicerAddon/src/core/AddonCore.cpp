@@ -584,7 +584,12 @@ public:
             }
         }
         size_t max_enc = used_extruders.empty() ? 1 : (*used_extruders.rbegin() + 1);
-        
+        // For painted models, volume->extruder_id() only reflects the base extruder (e.g. 1),
+        // not the paint color slots (which can be up to detected_extruders).
+        // Without this guard, a single-volume painted 4-color model gets max_enc=2 and
+        // filament_colour is trimmed from 4 to 2, producing a 2-color GCode.
+        if (detected_extruders > max_enc) max_enc = detected_extruders;
+
         // Helper to trim check
         auto check_trim = [&](const char* key) {
              if (auto* opt = apply_config.opt<Slic3r::ConfigOptionFloats>(key, false)) {
