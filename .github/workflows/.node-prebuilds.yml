@@ -41,13 +41,13 @@ jobs:
       - name: Check if deps image exists in GHCR
         id: depscheck
         shell: bash
-        run: bash "$GITHUB_WORKSPACE/scripts/ci/check_image_exists.sh" "ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}"
+        run: bash "$GITHUB_WORKSPACE/scripts/ci/check_image_exists.sh" "ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ steps.meta.outputs.orca_version }}-${{ steps.meta.outputs.arch }}"
 
 
       - name: Check if core image exists in GHCR
         id: corecheck
         shell: bash
-        run: bash "$GITHUB_WORKSPACE/scripts/ci/check_image_exists.sh" "ghcr.io/${{ github.repository_owner }}/orcaslicer-core:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}"
+        run: bash "$GITHUB_WORKSPACE/scripts/ci/check_image_exists.sh" "ghcr.io/${{ github.repository_owner }}/orcaslicer-core:${{ steps.meta.outputs.orca_version }}-${{ steps.meta.outputs.arch }}"
 
 
 
@@ -65,11 +65,11 @@ jobs:
 
       - name: Build and push deps image (GHCR)
         if: runner.os == 'Linux' && steps.depscheck.outputs.exists != 'true'
-        run: bash "$GITHUB_WORKSPACE/scripts/ci/build_deps_image.sh" "ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}"
+        run: bash "$GITHUB_WORKSPACE/scripts/ci/build_deps_image.sh" "ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ steps.meta.outputs.orca_version }}-${{ steps.meta.outputs.arch }}"
 
       - name: Build and push core image (GHCR)
         if: runner.os == 'Linux' && steps.corecheck.outputs.exists != 'true'
-        run: bash "$GITHUB_WORKSPACE/scripts/ci/build_core_image.sh" "ghcr.io/${{ github.repository_owner }}/orcaslicer-core:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}" "ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}"
+        run: bash "$GITHUB_WORKSPACE/scripts/ci/build_core_image.sh" "ghcr.io/${{ github.repository_owner }}/orcaslicer-core:${{ steps.meta.outputs.orca_version }}-${{ steps.meta.outputs.arch }}" "ghcr.io/${{ github.repository_owner }}/orcaslicer-build-deps:${{ steps.meta.outputs.orca_version }}-${{ steps.meta.outputs.arch }}"
 
 
 
@@ -102,7 +102,7 @@ jobs:
 
       - name: Linux | Skip (deps image exists in GHCR)
         if: runner.os == 'Linux' && steps.depscheck.outputs.exists == 'true'
-        run: bash "$GITHUB_WORKSPACE/scripts/ci/skip_linux_due_to_existing_deps.sh" "${{ steps.meta.outputs.version }}" "${{ steps.meta.outputs.arch }}" "${{ github.repository_owner }}"
+        run: bash "$GITHUB_WORKSPACE/scripts/ci/skip_linux_due_to_existing_deps.sh" "${{ steps.meta.outputs.orca_version }}" "${{ steps.meta.outputs.arch }}" "${{ github.repository_owner }}"
 
 
 

@@ -49,12 +49,14 @@ esac
 
 # Print for local runs
 echo "version=$version"
+echo "orca_version=$base_version"
 echo "arch=$arch"
 
 # Export for GitHub Actions outputs
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
   {
     echo "version=$version"
+    echo "orca_version=$base_version"
     echo "arch=$arch"
   } >> "$GITHUB_OUTPUT"
 fi

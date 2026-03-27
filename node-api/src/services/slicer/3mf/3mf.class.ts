@@ -136,10 +136,13 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
     let estimatedTimeSec: number | undefined
     let filamentUsedGrams: number | undefined
 
-    // Mescla options e config, onde config tem precedencia
-    // Precedencia: config > options > profiles
+    // Mescla options e config com precedencia correta:
+    // Precedencia: options (usuario) > config (baseline de perfis) > customizacoes do arquivo > profiles
+    // Nota: o profileConfig enviado como 'config' serve apenas como baseline; as customizacoes
+    // embutidas no arquivo 3MF (via transferProjectOverrides/transferProcessCustomizations)
+    // sobrescrevem o config, e os options do usuario sobrescrevem tudo.
     const configOverrides = (data as any).config ?? {}
-    const finalOptions = { ...options, ...configOverrides }
+    const finalOptions = { ...configOverrides, ...options }
     finalOptions.curr_bed_type = bedType ?? 'High Temp Plate'
 
     // Sanitize BBL-proprietary G-code template variables before passing to OrcaSlicer.
