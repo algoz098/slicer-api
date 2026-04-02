@@ -8,6 +8,7 @@ import JSZip from 'jszip'
 import { sanitizeBblGcodeTemplates } from './gcode-sanitizer'
 
 import type { Application } from '../../../declarations'
+import { logger } from '../../../logger'
 import type { Slicer3Mf, Slicer3MfData, Slicer3MfPatch, Slicer3MfQuery } from './3mf.schema'
 import { BadRequest } from '@feathersjs/errors'
 
@@ -16,11 +17,12 @@ export interface Slicer3MfServiceOptions {
   app: Application
 }
 
-export interface Slicer3MfParams extends Params<Slicer3MfQuery> { }
+export interface Slicer3MfParams extends Params<Slicer3MfQuery> {}
 
 export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfParams>
-  implements ServiceInterface<Slicer3Mf, Slicer3MfData, ServiceParams, Slicer3MfPatch> {
-  constructor(public options: Slicer3MfServiceOptions) { }
+  implements ServiceInterface<Slicer3Mf, Slicer3MfData, ServiceParams, Slicer3MfPatch>
+{
+  constructor(public options: Slicer3MfServiceOptions) {}
 
   async find(_params?: ServiceParams): Promise<Slicer3Mf[]> {
     return []
@@ -49,7 +51,7 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
       throw new Error('OrcaSlicer addon not loaded')
     }
 
-    const { options, printerProfileName, filamentProfileName, processProfileName, center, bedType } =
+    const { options } =
       data ?? {
         options: {}
       }
@@ -86,9 +88,9 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
     }
 
     const inputStats = fs.statSync(inputPath)
-    console.log(`[3MF] Input file: ${inputPath}, Size: ${inputStats.size} bytes`)
+    logger.debug(`[3MF] Input file: ${inputPath}, Size: ${inputStats.size} bytes`)
     if (inputStats.size === 0) {
-      console.error('[3MF] Check: Input file is empty!')
+      logger.warn('[3MF] Check: Input file is empty!')
     }
 
     // Força o caminho de saída para ser no diretório temporário para segurança
@@ -100,7 +102,7 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
     try {
       const fileContent = fs.readFileSync(inputPath)
       const zip = await JSZip.loadAsync(fileContent)
-      console.log('[3MF] Input file is a valid ZIP. Contents:')
+      logger.debug('[3MF] Input file is a valid ZIP. Contents:')
       const files = Object.keys(zip.files)
 
       for (const f of files) {
@@ -108,27 +110,27 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
         // Log size for .model files or config
         if (f.endsWith('.model') || f.endsWith('.config')) {
           const content = await fileData.async('nodebuffer')
-          console.log(`  - ${f} (Size: ${content.length} bytes)`)
+          logger.debug(`  - ${f} (Size: ${content.length} bytes)`)
           if (content.length === 0) {
-            console.error(`[3MF] WARNING: Internal file ${f} is empty!`)
+            logger.warn(`[3MF] WARNING: Internal file ${f} is empty!`)
           }
         } else {
-          console.log(`  - ${f}`)
+          logger.debug(`  - ${f}`)
         }
       }
 
       if (files.length === 0) {
-        console.error('[3MF] Input ZIP is empty!')
+        logger.warn('[3MF] Input ZIP is empty!')
       }
     } catch (err: any) {
-      console.error('[3MF] Input file is NOT a valid ZIP:', err.message)
+      logger.error('[3MF] Input file is NOT a valid ZIP: %s', err?.message ?? String(err))
     }
 
     // NOTE: Nao carregamos vendors/profiles aqui.
     // O addon funciona em modo on-the-fly puro:
     // - A configuracao completa e passada via `options` em cada chamada de slice
     // - O addon usa FullPrintConfig::defaults() como fallback
-    console.log('[3MF] On-the-fly mode - configuration passed via options')
+    logger.debug('[3MF] On-the-fly mode - configuration passed via options')
 
     let output: string
     let usedOptions: string[] | undefined
@@ -143,7 +145,7 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
     // sobrescrevem o config, e os options do usuario sobrescrevem tudo.
     const configOverrides = (data as any).config ?? {}
     const finalOptions = { ...configOverrides, ...options }
-    finalOptions.curr_bed_type = bedType ?? 'High Temp Plate'
+    finalOptions.curr_bed_type = 'High Temp Plate'
 
     // Sanitize BBL-proprietary G-code template variables before passing to OrcaSlicer.
     // BBL profiles reference variables like flush_volumetric_speeds and flush_temperatures
@@ -166,7 +168,7 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
         ? finalOptions.flush_volumes_matrix.length
         : 0
       if (actualSize !== expectedSize) {
-        console.log(
+        logger.debug(
           `[3MF] Removing inconsistent flush_volumes_matrix: expected=${expectedSize}, actual=${actualSize}`
         )
         delete finalOptions.flush_volumes_matrix
@@ -179,11 +181,13 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
     // Create a safe copy of the input file to ensure access and simple path
     const safeInputPath = path.join(os.tmpdir(), `safe_input_${randomUUID()}.3mf`)
     fs.copyFileSync(inputPath, safeInputPath)
-    console.log(`[3MF] Copied input to safe path: ${safeInputPath} (Size: ${fs.statSync(safeInputPath).size})`)
+    logger.debug(
+      `[3MF] Copied input to safe path: ${safeInputPath} (Size: ${fs.statSync(safeInputPath).size})`
+    )
 
     try {
       // Silencia logs por padrao para evitar spam no terminal
-      ; (orca as any).setLoggingSilenced(true)
+      ;(orca as any).setLoggingSilenced(true)
       let res: any
       try {
         res = await orca.slice({
@@ -193,17 +197,13 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
           options: finalOptions,
           center: true,
           autoRealignIfNeeded: true,
-          // Display names for profiles in output 3MF (metadata only, does not load any preset)
-          printerProfileName: printerProfileName,
-          filamentProfileName: filamentProfileName,
-          processProfileName: processProfileName,
-          transferPrinterCustomizations: data.transferPrinterCustomizations ?? true,
-          transferFilamentCustomizations: data.transferFilamentCustomizations ?? true,
-          transferProcessCustomizations: data.transferProcessCustomizations ?? true,
-          transferProjectOverrides: data.transferProjectOverrides ?? true
+          transferPrinterCustomizations: true,
+          transferFilamentCustomizations: true,
+          transferProcessCustomizations: true,
+          transferProjectOverrides: true
         })
       } finally {
-        ; (orca as any).setLoggingSilenced(false)
+        ;(orca as any).setLoggingSilenced(false)
       }
       output = res.output
 
@@ -277,7 +277,7 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
       const details = String(zipErr?.message ?? zipErr ?? 'erro desconhecido')
       throw new Error(
         `3MF inválido gerado pelo addon: ${details}. ` +
-        'Verifique se o runtime está carregando o binário local atualizado do OrcaSlicerAddon.'
+          'Verifique se o runtime está carregando o binário local atualizado do OrcaSlicerAddon.'
       )
     }
     // const dataBase64 = content.toString('base64')

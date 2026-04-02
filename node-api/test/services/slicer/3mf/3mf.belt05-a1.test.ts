@@ -10,6 +10,9 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import type { Server } from 'http'
 import axios from 'axios'
+import { fileURLToPath } from 'node:url'
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 describe('slicer/3mf: Belt-05 com A1 config', function () {
   this.timeout(300_000) // 5 minutos
@@ -49,10 +52,6 @@ describe('slicer/3mf: Belt-05 com A1 config', function () {
       console.warn(`Arquivo ${input3mf} nao encontrado, pulando teste`)
       return
     }
-
-    const outDir = path.resolve(__dirname, '../../../../../output_files')
-    fs.mkdirSync(outDir, { recursive: true })
-    const outTarget = path.join(outDir, 'belt05_a1_config.gcode.3mf')
 
     // Config JSON completo da A1
     const bambuA1Config = {
@@ -130,8 +129,8 @@ describe('slicer/3mf: Belt-05 com A1 config', function () {
 
     const body = {
       filePath: input3mf,
-      output: outTarget,
       plate: 1,
+      // Saída agora é gerenciada pelo servidor por questões de segurança
       config: bambuA1Config
     }
 

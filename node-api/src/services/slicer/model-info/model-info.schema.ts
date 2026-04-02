@@ -24,10 +24,9 @@ export type SlicerModelInfo = Static<typeof slicerModelInfoSchema>
 export const slicerModelInfoValidator = getValidator(slicerModelInfoSchema, dataValidator)
 export const slicerModelInfoResolver = resolve<SlicerModelInfo, HookContext<SlicerModelInfoService>>({})
 
-export const slicerModelInfoExternalResolver = resolve<
-  SlicerModelInfo,
-  HookContext<SlicerModelInfoService>
->({})
+export const slicerModelInfoExternalResolver = resolve<SlicerModelInfo, HookContext<SlicerModelInfoService>>(
+  {}
+)
 
 // Schema for creating new entries (request)
 export const slicerModelInfoDataSchema = Type.Object(
@@ -41,10 +40,7 @@ export const slicerModelInfoDataSchema = Type.Object(
 )
 export type SlicerModelInfoData = Static<typeof slicerModelInfoDataSchema>
 export const slicerModelInfoDataValidator = getValidator(slicerModelInfoDataSchema, dataValidator)
-export const slicerModelInfoDataResolver = resolve<
-  SlicerModelInfo,
-  HookContext<SlicerModelInfoService>
->({})
+export const slicerModelInfoDataResolver = resolve<SlicerModelInfo, HookContext<SlicerModelInfoService>>({})
 
 // Schema for updating existing entries (não usado neste serviço)
 export const slicerModelInfoPatchSchema = Type.Partial(slicerModelInfoSchema, {
@@ -52,18 +48,12 @@ export const slicerModelInfoPatchSchema = Type.Partial(slicerModelInfoSchema, {
 })
 export type SlicerModelInfoPatch = Static<typeof slicerModelInfoPatchSchema>
 export const slicerModelInfoPatchValidator = getValidator(slicerModelInfoPatchSchema, dataValidator)
-export const slicerModelInfoPatchResolver = resolve<
-  SlicerModelInfo,
-  HookContext<SlicerModelInfoService>
->({})
+export const slicerModelInfoPatchResolver = resolve<SlicerModelInfo, HookContext<SlicerModelInfoService>>({})
 
 // Schema for allowed query properties (nenhuma por enquanto)
 export const slicerModelInfoQueryProperties = Type.Object({})
 export const slicerModelInfoQuerySchema = Type.Intersect(
-  [
-    querySyntax(slicerModelInfoQueryProperties),
-    Type.Object({}, { additionalProperties: false })
-  ],
+  [querySyntax(slicerModelInfoQueryProperties), Type.Object({}, { additionalProperties: false })],
   { additionalProperties: false }
 )
 export type SlicerModelInfoQuery = Static<typeof slicerModelInfoQuerySchema>

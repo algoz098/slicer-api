@@ -3,6 +3,9 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import FormData from 'form-data'
 import type { Server } from 'http'
+import { fileURLToPath } from 'node:url'
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 // This smoke test validates slicing through the node-api service using the
 // A1/A1M minimal vendor bundle that orca.ts injects. It asserts a successful

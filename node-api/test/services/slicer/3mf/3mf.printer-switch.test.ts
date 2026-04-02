@@ -23,6 +23,9 @@ import FormData from 'form-data'
 import type { Server } from 'http'
 import assert from 'assert'
 import JSZip from 'jszip'
+import { fileURLToPath } from 'node:url'
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 describe.skip('slicer/3mf: Troca de impressora (K2 -> defaults)', function () {
   this.timeout(600_000) // 10 minutos - 3MF grandes podem demorar
@@ -98,13 +101,6 @@ describe.skip('slicer/3mf: Troca de impressora (K2 -> defaults)', function () {
     // Especificar um printer com bed grande (K1 Max = 300x300) para o modelo caber
     form.append('printerProfile', 'Creality K1 Max (0.4 nozzle)')
     form.append('processProfile', '0.20mm Standard @Creality K1')
-
-    // Desabilitar transferencia de customizacoes do 3MF
-    // Isso deve impedir que os metadados do K2 Plus original sejam transferidos
-    form.append('transferPrinterCustomizations', 'false')
-    form.append('transferFilamentCustomizations', 'false')
-    form.append('transferProcessCustomizations', 'false')
-    form.append('transferProjectOverrides', 'false')
 
     // Usar apenas a primeira plate para acelerar o teste
     form.append('plate', '1')

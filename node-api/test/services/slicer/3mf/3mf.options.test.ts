@@ -31,10 +31,6 @@ describe('slicer/3mf service (JSON body with options)', () => {
     const input3mf = path.resolve(__dirname, '../../../../../example_files/3DBenchy.3mf')
     assert.ok(fs.existsSync(input3mf), 'Arquivo de exemplo 3DBenchy.3mf não encontrado')
 
-    const outDir = path.resolve(__dirname, '../../../../../output_files')
-    fs.mkdirSync(outDir, { recursive: true })
-    const outTarget = path.join(outDir, `node_api_3mf_options_plate_1.gcode.3mf`)
-
     // Config JSON on-the-fly com parametros minimos para slicing
     const config = {
       printer_model: 'Bambu Lab X1 Carbon',
@@ -51,7 +47,6 @@ describe('slicer/3mf service (JSON body with options)', () => {
 
     const body = {
       filePath: input3mf,
-      output: outTarget,
       plate: 1,
       config,
       options: { sparse_infill_density: 30, layer_height: 0.24 }

@@ -77,26 +77,6 @@ export const slicer3Mf = (app: Application) => {
             if (Number.isFinite(n)) data.plate = n
           }
 
-          // Coerce multipart 'center' (string) to boolean (accept common truthy/falsey values)
-          if (data?.center != null && typeof data?.center === 'string') {
-            const v = String(data.center).trim().toLowerCase()
-            data.center = v === 'true' || v === '1' || v === 'on' || v === 'yes'
-          }
-
-          // Coerce all transfer* fields from string to boolean
-          const transferFields = [
-            'transferPrinterCustomizations',
-            'transferFilamentCustomizations',
-            'transferProcessCustomizations',
-            'transferProjectOverrides'
-          ] as const
-          for (const field of transferFields) {
-            if (data?.[field] != null && typeof data?.[field] === 'string') {
-              const v = String(data[field]).trim().toLowerCase()
-              data[field] = v !== 'false' && v !== '0' && v !== 'no' && v !== 'off'
-            }
-          }
-
           if (!data) ctx.data = {}
           else ctx.data = data
         },

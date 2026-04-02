@@ -22,8 +22,9 @@ describe('medias service functional tests', () => {
     tempFile = path.join(os.tmpdir(), 'medias-test-temp.txt')
     fs.writeFileSync(tempFile, 'temp content')
 
-    // Create a file in output_files
-    outputDir = path.resolve(__dirname, '../../../../../output_files')
+    // Create a file in output_files. The medias service allowlist usa `path.resolve('output_files')`,
+    // entao criamos o arquivo exatamente nesse diretório para que o acesso seja permitido.
+    outputDir = path.resolve('output_files')
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true })
     }
@@ -43,7 +44,14 @@ describe('medias service functional tests', () => {
       validateStatus: () => true
     })
     assert.strictEqual(resp.status, 200)
-    assert.strictEqual(resp.data, 'temp content')
+
+    // Service retorna um array com `{ path, data }`, onde data é base64 do conteúdo
+    assert.ok(Array.isArray(resp.data), 'Resposta deve ser um array')
+    assert.ok(resp.data.length === 1, 'Deve retornar exatamente um item')
+    const item = resp.data[0]
+    assert.strictEqual(item.path, tempFile)
+    const decoded = Buffer.from(item.data, 'base64').toString('utf8')
+    assert.strictEqual(decoded, 'temp content')
   })
 
   it('allows access to files in output_files', async () => {
@@ -52,7 +60,13 @@ describe('medias service functional tests', () => {
       validateStatus: () => true
     })
     assert.strictEqual(resp.status, 200)
-    assert.strictEqual(resp.data, 'output content')
+
+    assert.ok(Array.isArray(resp.data), 'Resposta deve ser um array')
+    assert.ok(resp.data.length === 1, 'Deve retornar exatamente um item')
+    const item = resp.data[0]
+    assert.strictEqual(item.path, outputFile)
+    const decoded = Buffer.from(item.data, 'base64').toString('utf8')
+    assert.strictEqual(decoded, 'output content')
   })
 
   it('denies access to files outside allowed directories (e.g. /etc/hosts)', async () => {

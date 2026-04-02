@@ -1,4 +1,5 @@
 import * as path from 'node:path'
+import { logger } from './logger'
 
 // Default local-first addon resolution in monorepo.
 // Can be overridden by ORCACLI_PREFER_PREBUILT=1.
@@ -11,8 +12,7 @@ const addonDir =
 
 const orca = require(addonDir)
 
-console.log('[Orca] Initializing addon...')
-;(orca as any).setLoggingSilenced(true)
+logger.debug('[Orca] Initializing addon...')
 const resourcesPath = process.env.ORCACLI_RESOURCES || path.resolve(__dirname, '../../OrcaSlicer/resources')
 
 /**
@@ -26,7 +26,7 @@ const resourcesPath = process.env.ORCACLI_RESOURCES || path.resolve(__dirname, '
  */
 export default function (app: any) {
   try {
-    console.log(`[Orca] Started loading. addonDir=${addonDir} resourcesPath=${resourcesPath}`)
+    logger.debug(`[Orca] Started loading. addonDir=${addonDir} resourcesPath=${resourcesPath}`)
 
     const prevCwd = process.cwd()
     try {
@@ -36,14 +36,21 @@ export default function (app: any) {
         // ignore
       }
 
-      // Inicializa o addon em modo strict (sem auto-loads de env)
-      // JSON on-the-fly mode: no profile loading, all config via options
-      orca.initialize({
-        resourcesPath,
-        verbose: false,
-        strict: true
-      })
-      console.log('[Orca] Initialized')
+      // Silencia output verboso do addon C++ apenas durante a inicializacao
+      ;(orca as any).setLoggingSilenced(true)
+      try {
+        // Inicializa o addon em modo strict (sem auto-loads de env)
+        // JSON on-the-fly mode: no profile loading, all config via options
+        orca.initialize({
+          resourcesPath,
+          verbose: false,
+          strict: true
+        })
+      } finally {
+        // Restaura logging para nao suprimir output do test runner / servidor
+        ;(orca as any).setLoggingSilenced(false)
+      }
+      logger.debug('[Orca] Initialized')
 
       // NOTE: Nao carregamos nenhum vendor bundle na inicializacao.
       // O addon funciona em modo on-the-fly puro:
@@ -51,7 +58,7 @@ export default function (app: any) {
       // - Os perfis sao resolvidos pelo caller (backend/teste) antes de chamar o addon
       // - O addon usa FullPrintConfig::defaults() como fallback para valores nao especificados
 
-      console.log(`[Orca] Addon ready. addonDir=${addonDir} resourcesPath=${resourcesPath}`)
+      logger.debug(`[Orca] Addon ready. addonDir=${addonDir} resourcesPath=${resourcesPath}`)
 
       // Registra o addon no app para uso pelos servicos
       app.set('orca', orca)
@@ -64,7 +71,7 @@ export default function (app: any) {
       }
     }
   } catch (e) {
-    console.error('[Orca] Fail to load:', e)
+    logger.error('[Orca] Fail to load: %o', e)
     throw e
   }
 }

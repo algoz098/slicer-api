@@ -14,6 +14,9 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { execSync } from 'node:child_process'
 import type { Server } from 'http'
+import { fileURLToPath } from 'node:url'
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 describe('slicer/3mf - Config JSON Precedence (Automated Validation)', function () {
   this.timeout(180000)

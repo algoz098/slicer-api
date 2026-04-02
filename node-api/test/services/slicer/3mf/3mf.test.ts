@@ -45,14 +45,6 @@ describe('slicer/3mf service', () => {
       contentType: 'model/3mf'
     })
 
-    // Salvar em output_files seguindo o template, com sufixo .gcode.3mf e prefixo node_api
-    const outDir = path.resolve(__dirname, '../../../../../output_files')
-    fs.mkdirSync(outDir, { recursive: true })
-    const modelBase = path.basename(input3mf, path.extname(input3mf))
-    const plate = 1
-    const outTarget = path.join(outDir, `node_api_${modelBase}_plate_${plate}.gcode.3mf`)
-    form.append('output', outTarget)
-
     // Config JSON on-the-fly com parametros minimos para slicing
     const config = {
       printer_model: 'Bambu Lab X1 Carbon',

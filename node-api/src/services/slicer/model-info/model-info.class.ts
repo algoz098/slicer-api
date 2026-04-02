@@ -22,15 +22,8 @@ export interface SlicerModelInfoServiceOptions {
 
 export interface SlicerModelInfoParams extends Params<SlicerModelInfoQuery> {}
 
-export class SlicerModelInfoService<
-  ServiceParams extends SlicerModelInfoParams = SlicerModelInfoParams
-> implements
-    ServiceInterface<
-      SlicerModelInfo,
-      SlicerModelInfoData,
-      ServiceParams,
-      SlicerModelInfoPatch
-    >
+export class SlicerModelInfoService<ServiceParams extends SlicerModelInfoParams = SlicerModelInfoParams>
+  implements ServiceInterface<SlicerModelInfo, SlicerModelInfoData, ServiceParams, SlicerModelInfoPatch>
 {
   constructor(public options: SlicerModelInfoServiceOptions) {}
 
@@ -56,7 +49,7 @@ export class SlicerModelInfoService<
     params?: ServiceParams
   ): Promise<SlicerModelInfo | SlicerModelInfo[]> {
     if (Array.isArray(data)) {
-      return Promise.all(data.map((current) => this.create(current, params)))
+      return Promise.all(data.map(current => this.create(current, params)))
     }
 
     const orca = this.options.app.get('orca')
@@ -89,9 +82,7 @@ export class SlicerModelInfoService<
     }
 
     if (!inputPath) {
-      throw new BadRequest(
-        'Nenhum arquivo recebido. Envie um multipart field "file" ou informe "filePath".'
-      )
+      throw new BadRequest('Nenhum arquivo recebido. Envie um multipart field "file" ou informe "filePath".')
     }
 
     if (!fs.existsSync(inputPath)) {

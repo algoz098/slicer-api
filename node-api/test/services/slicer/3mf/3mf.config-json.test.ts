@@ -19,6 +19,9 @@ import axios from 'axios'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import type { Server } from 'http'
+import { fileURLToPath } from 'node:url'
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 describe('slicer/3mf service - slicing com JSON config completo (sem profiles)', function () {
   this.timeout(180000)
@@ -138,23 +141,14 @@ describe('slicer/3mf service - slicing com JSON config completo (sem profiles)',
       return
     }
 
-    const outDir = path.resolve(__dirname, '../../../../../output_files')
-    fs.mkdirSync(outDir, { recursive: true })
-    const outTarget = path.join(outDir, 'tdd_3mf_only_json_config.gcode.3mf')
-
     const body = {
       filePath: input3mf,
-      output: outTarget,
       plate: 1,
       // SEM profiles - usando apenas config JSON
       // printerProfile: undefined,
       // filamentProfile: undefined,
       // processProfile: undefined,
       // Desabilitar heranca de configs do 3MF
-      transferPrinterCustomizations: false,
-      transferFilamentCustomizations: false,
-      transferProcessCustomizations: false,
-      transferProjectOverrides: false,
       // Config JSON completo substitui tudo
       config: MINIMAL_COMPLETE_CONFIG
     }
@@ -189,10 +183,6 @@ describe('slicer/3mf service - slicing com JSON config completo (sem profiles)',
       return
     }
 
-    const outDir = path.resolve(__dirname, '../../../../../output_files')
-    fs.mkdirSync(outDir, { recursive: true })
-    const outTarget = path.join(outDir, 'tdd_3mf_layer_height_test.gcode.3mf')
-
     // Config com layer_height especifico
     const config = {
       ...MINIMAL_COMPLETE_CONFIG,
@@ -201,12 +191,7 @@ describe('slicer/3mf service - slicing com JSON config completo (sem profiles)',
 
     const body = {
       filePath: input3mf,
-      output: outTarget,
       plate: 1,
-      transferPrinterCustomizations: false,
-      transferFilamentCustomizations: false,
-      transferProcessCustomizations: false,
-      transferProjectOverrides: false,
       config
     }
 
@@ -237,10 +222,6 @@ describe('slicer/3mf service - slicing com JSON config completo (sem profiles)',
       return
     }
 
-    const outDir = path.resolve(__dirname, '../../../../../output_files')
-    fs.mkdirSync(outDir, { recursive: true })
-    const outTarget = path.join(outDir, 'tdd_3mf_unknown_keys.gcode.3mf')
-
     const config = {
       ...MINIMAL_COMPLETE_CONFIG,
       completely_invalid_key_xyz: 'should_be_ignored',
@@ -249,12 +230,7 @@ describe('slicer/3mf service - slicing com JSON config completo (sem profiles)',
 
     const body = {
       filePath: input3mf,
-      output: outTarget,
       plate: 1,
-      transferPrinterCustomizations: false,
-      transferFilamentCustomizations: false,
-      transferProcessCustomizations: false,
-      transferProjectOverrides: false,
       config
     }
 

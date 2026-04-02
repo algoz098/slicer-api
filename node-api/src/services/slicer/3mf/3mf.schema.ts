@@ -39,20 +39,6 @@ export const slicer3MfDataSchema = Type.Object(
     field: Type.Optional(Type.String()),
     // Opcional: plate quando input tiver múltiplas placas
     plate: Type.Optional(Type.Number({ minimum: 1 })),
-    // Opcional: nomes de exibicao para os perfis no 3MF de saida (metadata apenas, nao carrega perfis)
-    printerProfileName: Type.Optional(Type.String()),
-    filamentProfileName: Type.Optional(Type.String()),
-    processProfileName: Type.Optional(Type.String()),
-    // Novo: centralizar e habilitar suporte (booleanos, default false quando omitido)
-    center: Type.Optional(Type.Boolean()),
-    support: Type.Optional(Type.Boolean()),
-    // Opcional: tipo de bed/placa (ex: "High Temp Plate", "Cool Plate", "Textured PEI Plate")
-    bedType: Type.Optional(Type.String()),
-    // Controle de transferência de customizações do 3MF (default true se omitido)
-    transferPrinterCustomizations: Type.Optional(Type.Boolean()),
-    transferFilamentCustomizations: Type.Optional(Type.Boolean()),
-    transferProcessCustomizations: Type.Optional(Type.Boolean()),
-    transferProjectOverrides: Type.Optional(Type.Boolean()),
     // Opcional: overrides de configuração
     options: Type.Optional(
       Type.Record(
