@@ -36,20 +36,13 @@ export default function (app: any) {
         // ignore
       }
 
-      // Silencia output verboso do addon C++ apenas durante a inicializacao
-      ;(orca as any).setLoggingSilenced(true)
-      try {
-        // Inicializa o addon em modo strict (sem auto-loads de env)
-        // JSON on-the-fly mode: no profile loading, all config via options
-        orca.initialize({
-          resourcesPath,
-          verbose: false,
-          strict: true
-        })
-      } finally {
-        // Restaura logging para nao suprimir output do test runner / servidor
-        ;(orca as any).setLoggingSilenced(false)
-      }
+      // Inicializa o addon em modo strict (sem auto-loads de env)
+      // JSON on-the-fly mode: no profile loading, all config via options
+      orca.initialize({
+        resourcesPath,
+        verbose: false,
+        strict: true
+      })
       logger.debug('[Orca] Initialized')
 
       // NOTE: Nao carregamos nenhum vendor bundle na inicializacao.

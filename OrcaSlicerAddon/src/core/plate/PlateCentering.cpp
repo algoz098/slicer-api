@@ -17,6 +17,10 @@
 namespace OrcaSlicerCli {
 namespace plate {
 
+// TODO: Implementação correta baseada no arquivo OrcaSlicer src/slic3r/GUI/PartPlate.cpp:54 e :3200-3201
+// LOGICAL_PART_PLATE_GAP = 1/5 e formula origin(col * stride, -row * stride) são idênticos ao PartPlate.
+// Esta função é necessária pois o GUI usa PartPlate para manter offsets de assembly; no CLI precisamos
+// reconstruir o plate_origin a partir dos offsets de instância para que o G-code seja plate-local.
 bool compute_and_set_plate_origin_from_model_instances(Slic3r::Model* model,
                                                        Slic3r::Print* print,
                                                        Slic3r::DynamicPrintConfig* config)
@@ -66,6 +70,10 @@ bool compute_and_set_plate_origin_from_model_instances(Slic3r::Model* model,
     }
 }
 
+// TODO: verificar se podemos remover esse codigo
+// OrcaSlicer GUI não usa esta abordagem diretamente (usa center_instances_on_bed_center abaixo ou
+// PartPlate::set_plate_origin). Esta função seta plate_origin em vez de mover as instâncias.
+// Ela não é chamada no caminho principal (AddonCore usa center_instances_on_bed_center para non-BBL).
 bool center_plate_origin_to_bed_center(Slic3r::Model* model,
                                        Slic3r::Print* print,
                                        Slic3r::DynamicPrintConfig* config)
@@ -113,6 +121,10 @@ bool center_plate_origin_to_bed_center(Slic3r::Model* model,
     }
 }
 
+// TODO: Implementação correta baseada no arquivo OrcaSlicer src/libslic3r/Model.cpp:686
+// Model::center_instances_around_point() faz o mesmo: calcula delta entre centro do modelo
+// e o ponto alvo (bed center) e aplica a todas as instâncias. Nossa implementação é equivalente.
+// Necessário pois o GUI chama center_instances_around_point via Plater (AppConfig autocenter).
 bool center_instances_on_bed_center(Slic3r::Model* model,
                                     Slic3r::DynamicPrintConfig* config)
 {
@@ -174,6 +186,10 @@ bool center_instances_on_bed_center(Slic3r::Model* model,
     }
 }
 
+// TODO: Implementação correta baseada no arquivo OrcaSlicer src/slic3r/GUI/PartPlate.cpp:3200-3201
+// Usa a mesma constante LOGICAL_PART_PLATE_GAP = 1/5 e a mesma fórmula de stride que o PartPlate.
+// Necessário pois no GUI o PartPlate mantém os assembly offsets de placa; no CLI precisamos subtrair
+// o offset da placa para que as instâncias fiquem em coordenadas plate-local antes do slicing.
 bool normalize_model_instances_to_plate_local(Slic3r::Model* model,
                                               Slic3r::DynamicPrintConfig* config)
 {

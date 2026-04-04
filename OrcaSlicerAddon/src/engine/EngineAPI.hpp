@@ -42,24 +42,19 @@ typedef struct {
     const char* output_file;
     const char* config_file;      // optional
     const char* preset_name;      // optional
-    // Display names for profiles in output 3MF (metadata only, does not load any preset)
-    const char* printer_profile_name;  // optional - e.g. "My Printer" - sets printer_settings_id
-    const char* filament_profile_name; // optional - e.g. "Generic PLA" - sets filament_settings_id
-    const char* process_profile_name;  // optional - e.g. "High Quality" - sets print_settings_id
     int32_t     plate_index;      // 1-based
     bool        verbose;
     bool        dry_run;
-    // 3MF transfer flags (all default to true if not provided by caller)
-    bool        transfer_printer_customizations;
-    bool        transfer_filament_customizations;
-    bool        transfer_process_customizations;
-    bool        transfer_project_overrides;
     // Behavior flags
     bool        center_on_bed;
     bool        auto_realign_if_needed; // realinha automaticamente na mesa se necess2rio
-    // Optional config overrides (applied after profiles). The memory is owned by caller and must live through the call.
-    const orcacli_kv* overrides;  // optional
-    int32_t     overrides_count;  // number of entries in overrides
+    // Base profile settings (applied before 3MF load; 3MF settings override these).
+    // Use this for process/printer/filament profile defaults sent on-the-fly.
+    const orcacli_kv* profile;        // optional
+    int32_t     profile_count;        // number of entries in profile
+    // Explicit user overrides (applied after 3MF load; highest priority, override 3MF settings).
+    const orcacli_kv* overrides;      // optional
+    int32_t     overrides_count;      // number of entries in overrides
 } orcacli_slice_params;
 
 // Lifecycle
@@ -72,11 +67,8 @@ orcacli_operation_result orcacli_load_model(orcacli_handle h, const char* filena
 orcacli_model_info       orcacli_get_model_info(orcacli_handle h);
 orcacli_operation_result orcacli_slice(orcacli_handle h, const orcacli_slice_params* params);
 
-// Profile/vendor lazy loading (must be called after orcacli_initialize)
+// Vendor lazy loading (must be called after orcacli_initialize)
 orcacli_operation_result orcacli_load_vendor(orcacli_handle h, const char* vendor_id);
-orcacli_operation_result orcacli_load_printer_profile(orcacli_handle h, const char* name);
-orcacli_operation_result orcacli_load_filament_profile(orcacli_handle h, const char* name);
-orcacli_operation_result orcacli_load_process_profile(orcacli_handle h, const char* name);
 
 // Metadata
 const char* orcacli_version(); // static string, no free required

@@ -56,27 +56,5 @@ void apply_custom_settings(
     std::vector<std::string>& used_override_keys,
     std::vector<std::string>& ignored_override_keys);
 
-// Helper: auto-select and apply presets based on 3MF hints and transfer_* flags
-void auto_select_presets_from_3mf(
-    const std::string& input_file,
-    bool transfer_printer_customizations,
-    bool transfer_filament_customizations,
-    bool transfer_process_customizations,
-    bool has_project_embedded_presets,
-    const std::string& project_printer_preset,
-    const std::string& project_print_preset,
-    const std::string& project_filament_preset,
-    const std::string& plate_printer_model_id,
-    const std::string& plate_nozzle_variant,
-    Slic3r::PresetBundle& preset_bundle,
-    Slic3r::AppConfig& app_config,
-    Slic3r::DynamicPrintConfig& config,
-    const std::function<AddonCore::OperationResult(const std::string&)>& load_printer_by_name,
-    const std::function<AddonCore::OperationResult(const std::string&)>& load_filament_by_name,
-    const std::function<AddonCore::OperationResult(const std::string&)>& load_process_by_name,
-    const std::string& user_printer_profile_name,
-    const std::string& user_filament_profile_name,
-    const std::string& user_process_profile_name);
-
 }} // namespace OrcaSlicerCli::slice
 

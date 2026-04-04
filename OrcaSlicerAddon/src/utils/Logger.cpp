@@ -1,5 +1,6 @@
 #include "Logger.hpp"
 
+#include <cstdlib>
 #include <iostream>
 #include <iomanip>
 #include <chrono>
@@ -113,6 +114,15 @@ const std::string Logger::Impl::reset_code = "\033[0m";
 // Logger implementation
 
 Logger::Logger() : m_impl(std::make_unique<Impl>()) {
+    // Allow overriding log level via ORCACLI_LOG_LEVEL env var (e.g. "debug", "5")
+    if (const char* lvl = std::getenv("ORCACLI_LOG_LEVEL")) {
+        std::string s(lvl);
+        for (auto& c : s) c = (char)std::toupper((unsigned char)c);
+        if (s == "DEBUG" || s == "5" || s == "4") m_impl->min_level = LogLevel::Debug;
+        else if (s == "INFO"    || s == "3") m_impl->min_level = LogLevel::Info;
+        else if (s == "WARNING" || s == "2") m_impl->min_level = LogLevel::Warning;
+        else if (s == "ERROR"   || s == "1") m_impl->min_level = LogLevel::Error;
+    }
 }
 
 Logger::~Logger() = default;

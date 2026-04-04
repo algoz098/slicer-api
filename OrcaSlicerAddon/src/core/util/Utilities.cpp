@@ -51,6 +51,12 @@ std::string bed_temp_key_for(Slic3r::BedType type, bool first_layer)
     }
 }
 
+// TODO: Implementação correta baseada no arquivo OrcaSlicer src/libslic3r/PresetBundle.cpp:2113
+// PresetBundle::full_fff_config() usa exatamente a mesma ordem de aplicação:
+//   1) FullPrintConfig::defaults()  2) prints  3) filaments.default_preset  4) printers  5) project_config
+// ATENÇÃO: o OrcaSlicer depois aplica cada filamento individualmente (per-extruder overrides),
+// o que aqui é simplificado usando apenas filaments.default_preset(). Isso pode causar divergência
+// em configurações multi-material onde filamentos têm configs diferentes.
 void safe_build_config(Slic3r::PresetBundle& preset_bundle, Slic3r::DynamicPrintConfig& config)
 {
     try {

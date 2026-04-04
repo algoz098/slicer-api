@@ -86,10 +86,6 @@ bool load_3mf_project(
     Slic3r::t_config_option_keys& project_overrides_keys,
     Slic3r::DynamicPrintConfig& print_cfg_overrides,
     Slic3r::t_config_option_keys& print_overrides_keys,
-    bool transfer_printer_customizations,
-    bool transfer_filament_customizations,
-    bool transfer_process_customizations,
-    bool /*transfer_project_overrides*/,
     std::string& last_error)
 {
     using namespace Slic3r;
@@ -99,6 +95,10 @@ bool load_3mf_project(
     bool is_bbl_3mf = false;
     Semver file_version;
 
+    // TODO: verificar se podemos remover esse codigo (lógica de retry)
+    // OrcaSlicer GUI (Plater.cpp) não tem retry explícito — ele usa load_bbs_3mf internamente
+    // sem plate_id filter e separa os objetos por placa depois. O retry aqui é workaround
+    // para arquivos 3MF re-salvos com metadados de placa quebrados; não existe equivalente no GUI.
     // Read model+config from 3MF (per-plate)
     // If loading a specific plate returns empty (broken plate metadata in re-saved 3MFs),
     // retry without plate filter to load all objects — matching OrcaSlicer GUI behavior.
@@ -149,6 +149,10 @@ bool load_3mf_project(
         }
     }
 
+    // TODO: Implementação correta baseada no arquivo OrcaSlicer src/OrcaSlicer.cpp:1805-1808
+    // OrcaSlicer CLI também lê different_settings_to_system para saber quais chaves foram
+    // customizadas. A captura do raw_3mf_config antes das operações de preset é necessária
+    // para o fallback quando different_settings_to_system está vazio.
     // CRITICAL: Capture the raw config from 3MF BEFORE any preset operations
     // This is needed because when different_settings_to_system is empty,
     // we need to preserve ALL values from project_settings.config as overrides
@@ -226,113 +230,8 @@ bool load_3mf_project(
         if (auto *wt_x = config.opt<ConfigOptionFloats>("wipe_tower_x")) file_wipe_tower_x = *wt_x;
         if (auto *wt_y = config.opt<ConfigOptionFloats>("wipe_tower_y")) file_wipe_tower_y = *wt_y;
 
-        // Backup current preset selections BEFORE loading 3MF config, so we can restore them
-        // if transfer_*_customizations is false
-        std::string backup_printer_name;
-        std::string backup_print_name;
-        std::vector<std::string> backup_filament_names;
-        DynamicPrintConfig backup_printer_config;
-        DynamicPrintConfig backup_print_config;
-        DynamicPrintConfig backup_filament_config;
-
-        // Capture current preset names and configs if we need to restore them
-        if (!transfer_printer_customizations) {
-            backup_printer_name = preset_bundle.printers.get_selected_preset_name();
-            backup_printer_config = preset_bundle.printers.get_edited_preset().config;
-        }
-        if (!transfer_process_customizations) {
-            backup_print_name = preset_bundle.prints.get_selected_preset_name();
-            backup_print_config = preset_bundle.prints.get_edited_preset().config;
-        }
-        if (!transfer_filament_customizations) {
-            for (size_t i = 0; i < preset_bundle.filament_presets.size(); ++i) {
-                backup_filament_names.push_back(preset_bundle.filament_presets[i]);
-            }
-            backup_filament_config = preset_bundle.filaments.get_edited_preset().config;
-        }
-
         // Load project config into bundle (this applies all 3MF configs)
         preset_bundle.load_config_model(filename, config, file_version);
-
-        // Restore backed-up configs when transfer is disabled
-        if (!transfer_printer_customizations && !backup_printer_name.empty()) {
-            try {
-                // Restore printer preset selection
-                preset_bundle.printers.select_preset_by_name(backup_printer_name, true);
-                // Restore printer config values that identify the printer
-                if (auto* opt = backup_printer_config.optptr("printer_model"))
-                    preset_bundle.printers.get_edited_preset().config.set_key_value("printer_model", opt->clone());
-                if (auto* opt = backup_printer_config.optptr("printer_variant"))
-                    preset_bundle.printers.get_edited_preset().config.set_key_value("printer_variant", opt->clone());
-                if (auto* opt = backup_printer_config.optptr("printer_settings_id"))
-                    preset_bundle.printers.get_edited_preset().config.set_key_value("printer_settings_id", opt->clone());
-            } catch (...) {}
-        }
-        if (!transfer_process_customizations && !backup_print_name.empty()) {
-            try {
-                preset_bundle.prints.select_preset_by_name(backup_print_name, true);
-            } catch (...) {}
-        }
-        if (!transfer_filament_customizations && !backup_filament_names.empty()) {
-            try {
-                preset_bundle.filament_presets = backup_filament_names;
-            } catch (...) {}
-        }
-
-        // Clear printer-identifying keys from the config when transfer is disabled
-        // These keys are set by Model::read_from_file and need to be cleared so they don't
-        // appear in the final G-code output. Use the backup values (from before load_config_model)
-        // or empty strings if no backup exists.
-        if (!transfer_printer_customizations) {
-            try {
-                // Use backup config values, or empty strings if no backup
-                if (!backup_printer_config.empty()) {
-                    if (auto* opt = backup_printer_config.optptr("printer_model"))
-                        config.set_key_value("printer_model", opt->clone());
-                    else
-                        config.set_key_value("printer_model", new ConfigOptionString(""));
-                    if (auto* opt = backup_printer_config.optptr("printer_variant"))
-                        config.set_key_value("printer_variant", opt->clone());
-                    else
-                        config.set_key_value("printer_variant", new ConfigOptionString(""));
-                    if (auto* opt = backup_printer_config.optptr("printer_settings_id"))
-                        config.set_key_value("printer_settings_id", opt->clone());
-                    else
-                        config.set_key_value("printer_settings_id", new ConfigOptionString(""));
-                    if (auto* opt = backup_printer_config.optptr("printer_notes"))
-                        config.set_key_value("printer_notes", opt->clone());
-                } else {
-                    // No backup - clear the 3MF values with empty strings
-                    config.set_key_value("printer_model", new ConfigOptionString(""));
-                    config.set_key_value("printer_variant", new ConfigOptionString(""));
-                    config.set_key_value("printer_settings_id", new ConfigOptionString(""));
-                }
-            } catch (...) {}
-        }
-        if (!transfer_process_customizations) {
-            try {
-                if (!backup_print_config.empty()) {
-                    if (auto* opt = backup_print_config.optptr("print_settings_id"))
-                        config.set_key_value("print_settings_id", opt->clone());
-                    else
-                        config.set_key_value("print_settings_id", new ConfigOptionString(""));
-                } else {
-                    config.set_key_value("print_settings_id", new ConfigOptionString(""));
-                }
-            } catch (...) {}
-        }
-        if (!transfer_filament_customizations) {
-            try {
-                if (!backup_filament_config.empty()) {
-                    if (auto* opt = backup_filament_config.optptr("filament_settings_id"))
-                        config.set_key_value("filament_settings_id", opt->clone());
-                    else
-                        config.set_key_value("filament_settings_id", new ConfigOptionStrings({""}));
-                } else {
-                    config.set_key_value("filament_settings_id", new ConfigOptionStrings({""}));
-                }
-            } catch (...) {}
-        }
 
         // Snapshot project-level overrides into project_cfg_after_3mf (robust per-key copy)
         project_cfg_after_3mf = DynamicPrintConfig();
@@ -526,20 +425,7 @@ bool load_3mf_project(
                 fil_ids->values.push_back(fil_ids->values.empty()? std::string("GFL99") : fil_ids->values.back());
     }
 
-    // Filter and load project-embedded presets according to transfer_* flags
     try {
-        if (!transfer_printer_customizations || !transfer_filament_customizations || !transfer_process_customizations) {
-            std::vector<Preset*> filtered;
-            filtered.reserve(project_presets.size());
-            for (Preset* pp : project_presets) {
-                if (!pp) continue;
-                if (pp->type == Preset::TYPE_PRINTER  && !transfer_printer_customizations)  continue;
-                if (pp->type == Preset::TYPE_FILAMENT && !transfer_filament_customizations) continue;
-                if (pp->type == Preset::TYPE_PRINT    && !transfer_process_customizations)  continue;
-                filtered.push_back(pp);
-            }
-            project_presets.swap(filtered);
-        }
         has_project_embedded_presets = !project_presets.empty();
         std::cout << "DEBUG: [ModelIO] About to call load_project_embedded_presets..." << std::endl;
         (void)preset_bundle.load_project_embedded_presets(project_presets, ForwardCompatibilitySubstitutionRule::Enable);

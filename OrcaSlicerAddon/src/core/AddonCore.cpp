@@ -268,11 +268,6 @@ public:
     std::string resources_path;
     int plate_id = 0; // 0-based plate index for .3mf projects
 
-    // Slice-time flags controlling how 3MF customizations are transferred
-    bool transfer_printer_customizations = true;
-    bool transfer_filament_customizations = true;
-    bool transfer_process_customizations = true;
-    bool transfer_project_overrides = true;
     // Behavior flags
     bool center_on_bed = false;
     bool auto_realign_if_needed = false;
@@ -302,11 +297,6 @@ public:
     std::string project_printer_preset;
     std::string project_print_preset;
     std::string project_filament_preset;
-    // Custom display names for profiles in output 3MF (set via SlicingParams)
-    // These override the default/project names for metadata display only
-    std::string custom_printer_profile_name;
-    std::string custom_filament_profile_name;
-    std::string custom_process_profile_name;
         // Snapshot of 3MF project-level parameter overrides and their keys (detected during load)
         Slic3r::DynamicPrintConfig      project_cfg_after_3mf;
         Slic3r::t_config_option_keys    project_overrides_keys;
@@ -429,10 +419,6 @@ public:
                         project_overrides_keys,
                         print_cfg_overrides,
                         print_overrides_keys,
-                        transfer_printer_customizations,
-                        transfer_filament_customizations,
-                        transfer_process_customizations,
-                        transfer_project_overrides,
                         last_error)) {
                     return false;
                 }
@@ -630,12 +616,25 @@ public:
         }
     }
     
+    // TODO: Implementação correta baseada no arquivo OrcaSlicer src/libslic3r/Model.cpp:674
+    // Model::update_print_volume_state() usa BuildVolume::volume_state_bbox da mesma forma.
+    // A diferença é que o GUI chama update_print_volume_state em cada ModelInstance (via PVS flags),
+    // enquanto aqui fazemos a checagem direto no bounding box — logicamente equivalente.
     // Check if objects are outside printable area
     // Returns true if OUTSIDE (error/warning needed)
     bool checkOutside(std::string &msg) {
+        LOG_DEBUG("checkOutside: starting printable area validation");
+
         const auto &pc = print->config();
         Slic3r::BuildVolume build_volume(pc.printable_area.values, pc.printable_height);
-        if (!build_volume.valid()) return false; // Cannot check
+        if (!build_volume.valid()) {
+            LOG_DEBUG("checkOutside: build_volume invalid, skipping check");
+            return false; // Cannot check
+        }
+
+        // Log a bit of high-level state for diagnostics
+        size_t obj_count = model ? model->objects.size() : 0;
+        LOG_DEBUG(std::string("checkOutside: model objects=") + std::to_string(obj_count));
 
         const Slic3r::Vec3d po = print->get_plate_origin();
         const Slic3r::Vec3d shift_xy(-po(0), -po(1), 0.0);
@@ -650,6 +649,8 @@ public:
                 auto state = build_volume.volume_state_bbox(bb_local, true);
                 if (state == Slic3r::BuildVolume::ObjectState::Outside) {
                    msg = "Elements outside printable area: '" + (obj->name.empty() ? "object" : obj->name) + "'";
+                   LOG_DEBUG(std::string("checkOutside: object outside printable area -> '") +
+                             (obj->name.empty() ? "object" : obj->name) + "'");
                    return true;
                 }
             }
@@ -663,15 +664,21 @@ public:
              try { wty = pc.wipe_tower_y.get_at(0); } catch (...) {}
              Slic3r::Vec3d pt(double(wtx), double(wty), 0.0);
              Slic3r::BoundingBoxf3 wtbb(pt, pt);
-             auto state = build_volume.volume_state_bbox(wtbb, true);
-             if (state == Slic3r::BuildVolume::ObjectState::Outside) {
-                 msg = "Prime Tower outside printable area";
-                 return true;
-             }
+                 auto state = build_volume.volume_state_bbox(wtbb, true);
+                 if (state == Slic3r::BuildVolume::ObjectState::Outside) {
+                     msg = "Prime Tower outside printable area";
+                     LOG_DEBUG("checkOutside: prime tower outside printable area");
+                     return true;
+                 }
         }
         return false;
     }
 
+    // TODO: verificar se podemos remover esse codigo
+    // OrcaSlicer GUI usa o sistema de Arrange (src/slic3r/GUI/Plater.cpp via ArrangeJob) para
+    // reposicionar objetos — um algoritmo muito mais sofisticado (bin packing / NFP).
+    // Esta implementação é uma versão simplificada (row layout) sem equivalente direto no OrcaSlicer.
+    // Só é invocada quando auto_realign_if_needed=true, que não existe no GUI (é feature exclusiva do addon).
     bool simpleReposition() {
         LOG_INFO("Attempting simple repositioning...");
         try {
@@ -683,11 +690,16 @@ public:
             double bed_center_x = Slic3r::unscale<double>(bed_center_pt.x());
             double bed_center_y = Slic3r::unscale<double>(bed_center_pt.y());
 
+            LOG_DEBUG(std::string("simpleReposition: bed_width=") + std::to_string(bed_width) +
+                      " bed_height=" + std::to_string(bed_height) +
+                      " center=(" + std::to_string(bed_center_x) + "," + std::to_string(bed_center_y) + ")");
+
             // Collect all instances
             std::vector<Slic3r::ModelInstance*> all_instances;
             for (auto* obj : model->objects) {
                 for (auto* inst : obj->instances) all_instances.push_back(inst);
             }
+            LOG_DEBUG(std::string("simpleReposition: collected instances=") + std::to_string(all_instances.size()));
             if (all_instances.empty()) return true;
 
             // Strategy: Place in row centered on bed
@@ -699,6 +711,10 @@ public:
              total_width -= spacing;
 
              bool fits_in_row = (total_width <= bed_width - 10);
+
+             LOG_DEBUG(std::string("simpleReposition: total_width=") + std::to_string(total_width) +
+                       " spacing=" + std::to_string(spacing) +
+                       " fits_in_row=" + (fits_in_row ? "1" : "0"));
              
              if (fits_in_row) {
                  double current_x = bed_center_x - total_width / 2.0;
@@ -738,23 +754,41 @@ public:
     }
 
     bool validateAndAutoRealign(std::string &error_msg) {
+       LOG_DEBUG("validateAndAutoRealign: begin");
+
        std::string msg;
-       if (!checkOutside(msg)) return true; // All good
+
+       bool outside = false;
+       try {
+           outside = checkOutside(msg);
+       } catch (const std::exception& e) {
+           LOG_ERROR(std::string("validateAndAutoRealign: checkOutside threw: ") + e.what());
+           error_msg = "validateAndAutoRealign: checkOutside exception";
+           return false;
+       }
+
+       LOG_DEBUG(std::string("validateAndAutoRealign: checkOutside result=") + (outside ? "OUTSIDE" : "INSIDE") +
+                 " auto_realign_if_needed=" + (auto_realign_if_needed ? "1" : "0"));
+
+       if (!outside) return true; // All good
 
        LOG_WARNING(msg);
        if (auto_realign_if_needed) {
+           LOG_DEBUG("validateAndAutoRealign: attempting simpleReposition()");
            if (simpleReposition()) {
                // After repositioning, we need to re-apply the model to the print object
-               // to update the print objects with the new positions
+               // to update the print objects with the new positions.
+               // IMPORTANT: use preparePrintConfig() (not raw *config) so that plate-level
+               // overrides (e.g. print_sequence=by object) are preserved.
                try {
-                   print->apply(*model, *config);
+                   print->apply(*model, preparePrintConfig());
                } catch (const std::exception& e) {
                    // If apply fails due to config type mismatch, try with a minimal config
                    LOG_WARNING(std::string("Re-apply after reposition failed: ") + e.what() + ", trying minimal re-apply");
                    try {
                        // Create a minimal config that only updates geometry, not parameters
                        Slic3r::DynamicPrintConfig minimal_cfg;
-                       minimal_cfg.apply(*config, false); // copy all
+                       minimal_cfg.apply(preparePrintConfig(), false); // copy all (with plate overrides)
                        print->apply(*model, minimal_cfg);
                    } catch (const std::exception& e2) {
                        LOG_WARNING(std::string("Minimal re-apply also failed: ") + e2.what() + ", continuing anyway");
@@ -767,9 +801,13 @@ public:
                    return true;
                }
            }
+           else {
+               LOG_WARNING("validateAndAutoRealign: simpleReposition() returned false");
+           }
        }
 
        error_msg = msg;
+       LOG_WARNING("validateAndAutoRealign: objects remain outside printable area after validation/realign");
        return false;
     }
 
@@ -838,6 +876,45 @@ public:
             } catch (...) {
                 LOG_ERROR("Slicing process failed with unknown error");
                 throw;
+            }
+
+            // TODO: FIX para impressão sequencial (ByObject) — problema de arrange_order não inicializado.
+            //
+            // Contexto: quando print_sequence == ByObject, export_gcode() chama internamente
+            // sort_object_instances_by_model_order() (OrcaSlicer/src/libslic3r/GCode.cpp:2060),
+            // que ordena as instâncias pelo campo ModelInstance::arrange_order
+            // (OrcaSlicer/src/libslic3r/GCode.cpp:1781).
+            //
+            // O arrange_order é inicializado dentro de sequential_print_clearance_valid()
+            // (OrcaSlicer/src/libslic3r/Print.cpp:829), que é chamado apenas dentro de
+            // Print::validate() (OrcaSlicer/src/libslic3r/Print.cpp:1078).
+            //
+            // Nosso addon não chama print->validate() — portanto todos os ModelInstances
+            // ficam com arrange_order == 0 (valor padrão em Model.hpp:1250).
+            //
+            // Quando todas as instâncias têm arrange_order == 0, o lower_bound em
+            // GCode.cpp:1793 sempre encontra o mesmo primeiro elemento, e o check
+            // `it->first == model_instance` só passa para a primeira instância.
+            // Resultado: apenas o primeiro objeto é incluído no G-code gerado.
+            //
+            // Solução: inicializar arrange_order manualmente antes do export, replicando
+            // o comportamento do OrcaSlicer GUI (Print.cpp:829 e ModelArrange.hpp:84).
+            {
+                const auto* ps_opt = print->config().option<Slic3r::ConfigOptionEnum<Slic3r::PrintSequence>>("print_sequence");
+                if (ps_opt && ps_opt->value == Slic3r::PrintSequence::ByObject) {
+                    LOG_DEBUG("ByObject mode detected: initializing arrange_order via print->objects() (not model->objects)");
+                    // IMPORTANT: print->model() is an internal *copy* of the original model.
+                    // sort_object_instances_by_model_order() uses print_instance.model_instance
+                    // which points into that copy — so we must set arrange_order through
+                    // print->objects() to reach the same ModelInstance* pointers.
+                    int seq_order = 1;
+                    for (const auto* print_object : print->objects()) {
+                        for (const auto& print_instance : print_object->instances()) {
+                            const_cast<Slic3r::ModelInstance*>(print_instance.model_instance)->arrange_order = seq_order++;
+                        }
+                    }
+                    LOG_DEBUG(std::string("arrange_order initialized for ") + std::to_string(seq_order - 1) + " instance(s) via print->objects()");
+                }
             }
 
             // Decide export target by output extension
@@ -1237,22 +1314,7 @@ public:
                     }
                     LOG_DEBUG(std::string("Final used filament count for profile IDs: ") + std::to_string(used_filament_count));
 
-                    // Priority 1: Custom display names from SlicingParams (highest priority)
-                    if (!custom_printer_profile_name.empty()) {
-                        printer_id = custom_printer_profile_name;
-                    }
-                    if (!custom_process_profile_name.empty()) {
-                        print_id = custom_process_profile_name;
-                    }
-                    // If custom filament profile name is provided, apply to ALL used filaments
-                    if (!custom_filament_profile_name.empty()) {
-                        for (size_t i = 0; i < used_filament_count; ++i) {
-                            filament_ids.push_back(custom_filament_profile_name);
-                        }
-                        LOG_DEBUG(std::string("Applied custom filament profile '") + custom_filament_profile_name + "' to " + std::to_string(used_filament_count) + " filament slots");
-                    }
-
-                    // Priority 2: Project presets from loaded 3MF
+                    // Priority 1: Project presets from loaded 3MF
                     if (printer_id.empty() && !project_printer_preset.empty()) {
                         printer_id = project_printer_preset;
                     }
@@ -1829,67 +1891,39 @@ AddonCore::OperationResult AddonCore::loadVendor(const std::string& vendor_id) {
 #endif
 }
 
-AddonCore::OperationResult AddonCore::loadPrinterProfile(const std::string& printer_name) {
-    if (!m_impl->initialized) return OperationResult(false, "AddonCore not initialized");
-#if HAVE_LIBSLIC3R
-    if (OrcaSlicerCli::config::load_printer_profile(
-            m_impl->resources_path, printer_name,
-            m_impl->preset_bundle, m_impl->app_config,
-            *m_impl->config, m_impl->last_error)) {
-        return OperationResult(true, "Printer profile loaded: " + printer_name);
-    }
-    return OperationResult(false, "Failed to load printer profile: " + printer_name, m_impl->last_error);
-#else
-    return OperationResult(false, "libslic3r not available");
-#endif
-}
-
-AddonCore::OperationResult AddonCore::loadFilamentProfile(const std::string& filament_name) {
-    if (!m_impl->initialized) return OperationResult(false, "AddonCore not initialized");
-#if HAVE_LIBSLIC3R
-    if (OrcaSlicerCli::config::load_filament_profile(
-            filament_name, m_impl->preset_bundle, *m_impl->config, m_impl->last_error)) {
-        return OperationResult(true, "Filament profile loaded: " + filament_name);
-    }
-    return OperationResult(false, "Failed to load filament profile: " + filament_name, m_impl->last_error);
-#else
-    return OperationResult(false, "libslic3r not available");
-#endif
-}
-
-AddonCore::OperationResult AddonCore::loadProcessProfile(const std::string& process_name) {
-    if (!m_impl->initialized) return OperationResult(false, "AddonCore not initialized");
-#if HAVE_LIBSLIC3R
-    if (OrcaSlicerCli::config::load_process_profile(
-            process_name, m_impl->preset_bundle, *m_impl->config, m_impl->last_error)) {
-        return OperationResult(true, "Process profile loaded: " + process_name);
-    }
-    return OperationResult(false, "Failed to load process profile: " + process_name, m_impl->last_error);
-#else
-    return OperationResult(false, "libslic3r not available");
-#endif
-}
-
 AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
     if (!m_impl->initialized) {
         return OperationResult(false, "AddonCore not initialized");
     }
 
-    // Propagate transfer flags into Impl for use in performSlicing()
-    m_impl->transfer_printer_customizations  = params.transfer_printer_customizations;
-    m_impl->transfer_filament_customizations = params.transfer_filament_customizations;
-    m_impl->transfer_process_customizations  = params.transfer_process_customizations;
-    m_impl->transfer_project_overrides       = params.transfer_project_overrides;
     // Behavior flags: respect caller params
     m_impl->center_on_bed = params.center_on_bed;
     m_impl->auto_realign_if_needed = params.auto_realign_if_needed;
 
     LOG_DEBUG(std::string("slice(): input='") + params.input_file +
-              "' plate_index=" + std::to_string(params.plate_index) +
-              ", profiles(prn/fil/proc)=('" + params.printer_profile_name + "','" +
-              params.filament_profile_name + "','" + params.process_profile_name + "')");
+              "' plate_index=" + std::to_string(params.plate_index));
 
-    // Load model if not already loaded
+#if HAVE_LIBSLIC3R
+    try {
+        // Reset preset selections to defaults before each slice
+        m_impl->preset_bundle.printers.select_preset(0);
+        m_impl->preset_bundle.prints.select_preset(0);
+        m_impl->preset_bundle.filaments.select_preset(0);
+        m_impl->preset_bundle.filament_presets.clear();
+        m_impl->preset_bundle.filament_presets.push_back(m_impl->preset_bundle.filaments.get_selected_preset_name());
+        // Clear project preset names from previous slice
+        m_impl->project_printer_preset.clear();
+        m_impl->project_print_preset.clear();
+        m_impl->project_filament_preset.clear();
+        m_impl->plate_printer_model_id.clear();
+        m_impl->plate_nozzle_variant.clear();
+        m_impl->has_project_embedded_presets = false;
+    } catch (const std::exception &e) {
+        LOG_WARNING(std::string("Failed to reset preset bundle: ") + e.what());
+    }
+#endif
+
+    // Load model — 3MF customizations are stored and re-applied after the profile baseline.
     if (!params.input_file.empty()) {
     #if HAVE_LIBSLIC3R
         // NOTE: Model::read_from_file -> load_bbs_3mf expects 1-based plate_id.
@@ -1900,186 +1934,60 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
         if (!load_result.success) {
             return load_result;
         }
-    #if HAVE_LIBSLIC3R
-        // Respect 3MF object/volume overrides even when CLI profiles are provided.
-        // Precedence: 3MF parameter overrides > CLI profile overrides > 3MF presets.
-        // Therefore, do not clear 3MF overrides here.
-    #endif
     }
-
-    // CRITICAL: Reset preset bundle to clean state at the start of each slice
-    // This prevents preset state from persisting between requests (e.g., K2 Plus profiles
-    // being used when slicing for A1 if profiles are not explicitly passed)
-#if HAVE_LIBSLIC3R
-    try {
-        LOG_DEBUG("Resetting preset bundle to clean state before loading new profiles");
-        // Reset preset selections to defaults
-        m_impl->preset_bundle.printers.select_preset(0);  // Select first (default) printer
-        m_impl->preset_bundle.prints.select_preset(0);    // Select first (default) print preset
-        m_impl->preset_bundle.filaments.select_preset(0); // Select first (default) filament
-        m_impl->preset_bundle.filament_presets.clear();
-        // Use selected preset name after select_preset(0)
-        m_impl->preset_bundle.filament_presets.push_back(m_impl->preset_bundle.filaments.get_selected_preset_name());
-        // Clear project preset names from previous 3MF
-        m_impl->project_printer_preset.clear();
-        m_impl->project_print_preset.clear();
-        m_impl->project_filament_preset.clear();
-        m_impl->plate_printer_model_id.clear();
-        m_impl->plate_nozzle_variant.clear();
-        m_impl->has_project_embedded_presets = false;
-        // Capture custom profile display names from SlicingParams
-        m_impl->custom_printer_profile_name = params.printer_profile_name;
-        m_impl->custom_filament_profile_name = params.filament_profile_name;
-        m_impl->custom_process_profile_name = params.process_profile_name;
-        if (!params.printer_profile_name.empty() || !params.filament_profile_name.empty() || !params.process_profile_name.empty()) {
-            LOG_DEBUG(std::string("Custom profile display names: printer='") + params.printer_profile_name +
-                      "', filament='" + params.filament_profile_name +
-                      "', process='" + params.process_profile_name + "'");
-        }
-    } catch (const std::exception &e) {
-        LOG_WARNING(std::string("Failed to reset preset bundle: ") + e.what());
-    }
-#endif
-
-    // JSON on-the-fly mode: no profile loading, all config via custom_settings
 
 #if HAVE_LIBSLIC3R
     LOG_DEBUG("[SLICE] About to update_compatible and apply presets...");
     try {
         // Check if ALL transfer flags are disabled - if so, use pure defaults + custom_settings
-        const bool all_transfer_disabled = !m_impl->transfer_printer_customizations &&
-                                            !m_impl->transfer_filament_customizations &&
-                                            !m_impl->transfer_process_customizations &&
-                                            !m_impl->transfer_project_overrides;
+        m_impl->preset_bundle.update_compatible(Slic3r::PresetSelectCompatibleType::Always);
 
-        if (all_transfer_disabled) {
-            // PURE ON-THE-FLY MODE: Ignore all 3MF configs, use only FullPrintConfig::defaults()
-            // This allows slicing with only JSON config without any 3MF contamination
-            LOG_DEBUG("ALL transfer flags disabled - resetting to pure FullPrintConfig::defaults()");
-            m_impl->config->clear();
-            Slic3r::FullPrintConfig full_defaults = Slic3r::FullPrintConfig::defaults();
-            m_impl->config->apply(full_defaults, true);
-            LOG_DEBUG("Config reset to pure defaults (all 3MF configs ignored)");
+        // Only apply preset config if we have any loaded presets (not just defaults)
+        const bool has_printer = !m_impl->preset_bundle.printers.get_selected_preset_name().empty() &&
+                                  m_impl->preset_bundle.printers.get_selected_preset_name() != "Default Printer";
+        const bool has_filament = !m_impl->preset_bundle.filament_presets.empty() &&
+                                   m_impl->preset_bundle.filament_presets[0] != "Default Filament";
+        const bool has_process = !m_impl->preset_bundle.prints.get_selected_preset_name().empty() &&
+                                  m_impl->preset_bundle.prints.get_selected_preset_name() != "Default Setting";
 
-            // CRITICAL: Disable multi-material processing to avoid infinite loops
-            // When in pure on-the-fly mode, we force single-extruder mode to prevent
-            // the ToolOrdering algorithm from entering infinite loops in
-            // reorder_filaments_for_minimum_flush_volume() and update_filament_maps_to_config()
-            try {
-                LOG_DEBUG("PURE ON-THE-FLY MODE - Disabling multi-material processing");
-                m_impl->config->set_key_value("single_extruder_multi_material", new Slic3r::ConfigOptionBool(false));
-                m_impl->config->set_key_value("enable_prime_tower", new Slic3r::ConfigOptionBool(false));
-
-                // PRESERVE 3MF COLORS: Restore filament colors from the 3MF file
-                // This allows objects to keep their original colors even in on-the-fly mode
-                if (!m_impl->saved_filament_colours.empty()) {
-                    LOG_DEBUG("PURE ON-THE-FLY MODE - Restoring 3MF filament colors");
-
-                    size_t num_colors = m_impl->saved_filament_colours.size();
-                    m_impl->config->set_key_value("filament_colour", new Slic3r::ConfigOptionStrings(m_impl->saved_filament_colours));
-
-                    // Expand filament arrays to match the number of colors
-                    std::vector<std::string> filament_types(num_colors, "PLA");
-                    std::vector<int> nozzle_temps(num_colors, 220);
-                    std::vector<int> bed_temps(num_colors, 55);
-                    m_impl->config->set_key_value("filament_type", new Slic3r::ConfigOptionStrings(filament_types));
-                    m_impl->config->set_key_value("nozzle_temperature", new Slic3r::ConfigOptionInts(nozzle_temps));
-                    m_impl->config->set_key_value("nozzle_temperature_initial_layer", new Slic3r::ConfigOptionInts(nozzle_temps));
-                    m_impl->config->set_key_value("bed_temperature", new Slic3r::ConfigOptionInts(bed_temps));
-                    m_impl->config->set_key_value("bed_temperature_initial_layer", new Slic3r::ConfigOptionInts(bed_temps));
-                    LOG_DEBUG(std::string("Filament arrays expanded to ") + std::to_string(num_colors) + " entries to match 3MF colors");
-                } else {
-                    // No saved colors, use single white extruder
-                    m_impl->config->set_key_value("filament_type", new Slic3r::ConfigOptionStrings({"PLA"}));
-                    m_impl->config->set_key_value("filament_colour", new Slic3r::ConfigOptionStrings({"#FFFFFF"}));
-                    m_impl->config->set_key_value("nozzle_temperature", new Slic3r::ConfigOptionInts({220}));
-                    m_impl->config->set_key_value("nozzle_temperature_initial_layer", new Slic3r::ConfigOptionInts({220}));
-                    m_impl->config->set_key_value("bed_temperature", new Slic3r::ConfigOptionInts({55}));
-                    m_impl->config->set_key_value("bed_temperature_initial_layer", new Slic3r::ConfigOptionInts({55}));
-                }
-
-                // PRESERVE 3MF CHANGE_FILAMENT_GCODE: Critical for Bambu AMS multi-color printing
-                // This gcode contains M620/M621 macros that control the AMS filament changes
-                if (!m_impl->saved_change_filament_gcode.empty()) {
-                    LOG_DEBUG(std::string("PURE ON-THE-FLY MODE - Restoring 3MF change_filament_gcode (") + std::to_string(m_impl->saved_change_filament_gcode.size()) + " chars)");
-                    m_impl->config->set_key_value("change_filament_gcode",
-                        new Slic3r::ConfigOptionString(m_impl->saved_change_filament_gcode));
-                }
-
-                LOG_DEBUG("Multi-material disabled, extruder colors preserved");
-            } catch (const std::exception& e) {
-                LOG_WARNING(std::string("Failed to configure on-the-fly mode: ") + e.what());
-            }
+        if (has_printer || has_filament || has_process) {
+            Slic3r::DynamicPrintConfig preset_config;
+            OrcaSlicerCli::util::safe_build_config(m_impl->preset_bundle, preset_config);
+            m_impl->config->apply(preset_config, true);
+            LOG_DEBUG(std::string("Applied preset config -> printer='") +
+                      m_impl->preset_bundle.printers.get_selected_preset_name() +
+                      "', print='" + m_impl->preset_bundle.prints.get_selected_preset_name() +
+                      "', filament='" + m_impl->preset_bundle.filaments.get_selected_preset_name() + "'");
         } else {
-            m_impl->preset_bundle.update_compatible(Slic3r::PresetSelectCompatibleType::Always);
-
-            // Only apply preset config if we have any loaded presets (not just defaults)
-            // This allows slicing with only JSON options when no profiles are loaded
-            const bool has_printer = !m_impl->preset_bundle.printers.get_selected_preset_name().empty() &&
-                                      m_impl->preset_bundle.printers.get_selected_preset_name() != "Default Printer";
-            const bool has_filament = !m_impl->preset_bundle.filament_presets.empty() &&
-                                       m_impl->preset_bundle.filament_presets[0] != "Default Filament";
-            const bool has_process = !m_impl->preset_bundle.prints.get_selected_preset_name().empty() &&
-                                      m_impl->preset_bundle.prints.get_selected_preset_name() != "Default Setting";
-
-            if (has_printer || has_filament || has_process) {
-                // Apply preset config on top of existing defaults using safe_build_config
-                Slic3r::DynamicPrintConfig preset_config;
-                OrcaSlicerCli::util::safe_build_config(m_impl->preset_bundle, preset_config);
-                m_impl->config->apply(preset_config, true);
-                LOG_DEBUG(std::string("Applied preset config on top of defaults -> printer='") +
-                          m_impl->preset_bundle.printers.get_selected_preset_name() +
-                          "', print='" + m_impl->preset_bundle.prints.get_selected_preset_name() +
-                          "', filament='" + m_impl->preset_bundle.filaments.get_selected_preset_name() + "'");
-            } else {
-                // No specific presets loaded - apply generic fallback config
-                // This enables on-the-fly slicing with custom_settings from the API
-                LOG_DEBUG("No specific presets loaded - applying generic fallback config");
-                OrcaSlicerCli::config::apply_generic_fallback_config(*m_impl->config, m_impl->resources_path);
-            }
+            LOG_DEBUG("No specific presets loaded - applying generic fallback config");
+            OrcaSlicerCli::config::apply_generic_fallback_config(*m_impl->config, m_impl->resources_path);
         }
 
         // Dump key values after syncing working config with selected presets
         try { if (const auto* o = m_impl->config->optptr("sparse_infill_density")) LOG_DEBUG(std::string("synced_config[sparse_infill_density]=") + o->serialize()); } catch (...) {}
         try { if (const auto* o = m_impl->config->optptr("top_shell_layers")) LOG_DEBUG(std::string("synced_config[top_shell_layers]=") + o->serialize()); } catch (...) {}
 
-        // CRITICAL: Clear printer-identifying keys when transfer is disabled
-        // This must be done AFTER full_config_secure() is applied, because that function
-        // re-applies the preset values (which include the 3MF values from load_config_model)
-        if (!m_impl->transfer_printer_customizations && !all_transfer_disabled) {
-            LOG_DEBUG("Clearing printer-identifying keys (transfer_printer_customizations=false)");
-            try {
-                m_impl->config->set_key_value("printer_model", new Slic3r::ConfigOptionString(""));
-                m_impl->config->set_key_value("printer_variant", new Slic3r::ConfigOptionString(""));
-                m_impl->config->set_key_value("printer_settings_id", new Slic3r::ConfigOptionString(""));
-                // Also clear related fields that may contain printer-specific references
-                m_impl->config->set_key_value("print_compatible_printers", new Slic3r::ConfigOptionStrings({}));
-            } catch (...) {}
-        }
-        if (!m_impl->transfer_process_customizations && !all_transfer_disabled) {
-            LOG_DEBUG("Clearing process-identifying keys (transfer_process_customizations=false)");
-            try {
-                m_impl->config->set_key_value("print_settings_id", new Slic3r::ConfigOptionString(""));
-                m_impl->config->set_key_value("default_print_profile", new Slic3r::ConfigOptionString(""));
-            } catch (...) {}
-        }
-        if (!m_impl->transfer_filament_customizations && !all_transfer_disabled) {
-            LOG_DEBUG("Clearing filament-identifying keys (transfer_filament_customizations=false)");
-            try {
-                m_impl->config->set_key_value("filament_settings_id", new Slic3r::ConfigOptionStrings({""}));
-                m_impl->config->set_key_value("default_filament_profile", new Slic3r::ConfigOptionStrings({""}));
-            } catch (...) {}
-        }
     } catch (const std::exception &e) {
         LOG_WARNING(std::string("Failed to refresh working config from selected presets: ") + e.what());
+    }
+
+    // Apply on-the-fly profile settings on top of fallback/presets.
+    // Priority: fallback < profile_settings < 3MF < custom_settings (options).
+    if (!params.profile_settings.empty()) {
+        LOG_DEBUG(std::string("Applying profile_settings (") + std::to_string(params.profile_settings.size()) + " keys) as on-the-fly profile baseline");
+        for (const auto& kv : params.profile_settings) {
+            try {
+                setConfigOption(kv.first, kv.second);
+            } catch (const std::exception& e) {
+                LOG_DEBUG(std::string("profile_settings: skipping '") + kv.first + "': " + e.what());
+            }
+        }
     }
 #endif
 
 #if HAVE_LIBSLIC3R
-    // Re-apply 3MF print-level overrides on top of selected profiles
-    if (params.transfer_process_customizations) {
-        OrcaSlicerCli::slice::reapply_print_overrides(*m_impl->config, m_impl->print_cfg_overrides, m_impl->print_overrides_keys);
-    }
+    // Re-apply 3MF print-level overrides on top of profile (3MF wins over profile)
+    OrcaSlicerCli::slice::reapply_print_overrides(*m_impl->config, m_impl->print_cfg_overrides, m_impl->print_overrides_keys);
 #endif
 
     // Load config file if specified
@@ -2119,40 +2027,25 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
 #if HAVE_LIBSLIC3R
     // Re-apply 3MF project parameter overrides (but NOT for keys set by API custom_settings)
     // Priority order: Profiles -> 3MF customizations -> API custom_settings (highest)
-    if (params.transfer_project_overrides) {
-        {
-            std::vector<std::string> keys_to_apply = m_impl->project_overrides_keys;
-            if (keys_to_apply.empty()) keys_to_apply = m_impl->project_cfg_after_3mf.keys();
-            // Pass __used_override_keys to exclude them from project overrides
-            // This ensures that if the API user provides a custom setting (e.g. layer_height),
-            // it is NOT overwritten by the project value in the 3MF.
-            OrcaSlicerCli::slice::reapply_project_overrides_excluding(
-                *m_impl->config,
-                m_impl->project_cfg_after_3mf,
-                keys_to_apply,
-                __used_override_keys);
-        }
-    }
-
-
-    // Ensure 3MF print-level (dirty) overrides take precedence over project-level overrides
-    // Some UIs expect per-print edits (shown as orange/dirty) to win. Re-apply them after project overrides.
-    if (params.transfer_process_customizations) {
-        OrcaSlicerCli::slice::reapply_print_overrides_excluding(
+    {
+        std::vector<std::string> keys_to_apply = m_impl->project_overrides_keys;
+        if (keys_to_apply.empty()) keys_to_apply = m_impl->project_cfg_after_3mf.keys();
+        OrcaSlicerCli::slice::reapply_project_overrides_excluding(
             *m_impl->config,
-            m_impl->print_cfg_overrides,
-            m_impl->print_overrides_keys,
+            m_impl->project_cfg_after_3mf,
+            keys_to_apply,
             __used_override_keys);
     }
 
-    // Enable single_extruder_multi_material and prime tower if multi-material detected
-    // BUT NOT in pure on-the-fly mode (all transfer flags disabled) - this can cause infinite loops
-    const bool all_transfer_disabled_for_mm = !m_impl->transfer_printer_customizations &&
-                                               !m_impl->transfer_filament_customizations &&
-                                               !m_impl->transfer_process_customizations &&
-                                               !m_impl->transfer_project_overrides;
+    // Ensure 3MF print-level (dirty) overrides take precedence over project-level overrides
+    OrcaSlicerCli::slice::reapply_print_overrides_excluding(
+        *m_impl->config,
+        m_impl->print_cfg_overrides,
+        m_impl->print_overrides_keys,
+        __used_override_keys);
 
-    if (m_impl->detected_extruders > 1 && !all_transfer_disabled_for_mm) {
+    // Enable single_extruder_multi_material and prime tower if multi-material detected
+    if (m_impl->detected_extruders > 1) {
         LOG_DEBUG(std::string("Detected multi-material model (") + std::to_string(m_impl->detected_extruders) + " colors in 3MF)");
         m_impl->config->set_key_value("single_extruder_multi_material", new Slic3r::ConfigOptionBool(true));
         m_impl->config->set_key_value("enable_prime_tower", new Slic3r::ConfigOptionBool(true));
@@ -2167,72 +2060,23 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
         // Expand filament arrays to match detected_extruders (will be trimmed later in performSlicing)
         auto* fil_diameter = m_impl->config->opt<Slic3r::ConfigOptionFloats>("filament_diameter", false);
         auto* fil_type = m_impl->config->opt<Slic3r::ConfigOptionStrings>("filament_type", false);
-
         if (fil_diameter && fil_diameter->values.size() < m_impl->detected_extruders) {
-            while (fil_diameter->values.size() < m_impl->detected_extruders) {
+            while (fil_diameter->values.size() < m_impl->detected_extruders)
                 fil_diameter->values.push_back(fil_diameter->values.empty() ? 1.75 : fil_diameter->values.back());
-            }
         }
         if (fil_type && fil_type->values.size() < m_impl->detected_extruders) {
-            while (fil_type->values.size() < m_impl->detected_extruders) {
+            while (fil_type->values.size() < m_impl->detected_extruders)
                 fil_type->values.push_back(fil_type->values.empty() ? "PLA" : fil_type->values.back());
-            }
         }
 
         // Restore change_filament_gcode for Bambu AMS multi-color printing
         // ONLY if not overridden via config JSON (custom_settings)
-        {
-            bool gcode_overridden = std::find(__used_override_keys.begin(), __used_override_keys.end(),
-                                              "change_filament_gcode") != __used_override_keys.end();
-            if (!m_impl->saved_change_filament_gcode.empty() && !gcode_overridden) {
-                LOG_DEBUG(std::string("Restoring 3MF change_filament_gcode (") + std::to_string(m_impl->saved_change_filament_gcode.size()) + " chars)");
-                m_impl->config->set_key_value("change_filament_gcode",
-                    new Slic3r::ConfigOptionString(m_impl->saved_change_filament_gcode));
-            }
-        }
-    } else if (m_impl->detected_extruders > 1 && all_transfer_disabled_for_mm) {
-        // PURE ON-THE-FLY MODE with multi-material: Enable SEMM but disable problematic features
-        // We need to enable single_extruder_multi_material to respect object extruder assignments
-        // but disable features that can cause infinite loops
-        LOG_DEBUG(std::string("PURE ON-THE-FLY MODE: Enabling multi-material (") + std::to_string(m_impl->detected_extruders) + " colors in 3MF) with safe settings");
-        m_impl->config->set_key_value("single_extruder_multi_material", new Slic3r::ConfigOptionBool(true));
-        m_impl->config->set_key_value("enable_prime_tower", new Slic3r::ConfigOptionBool(false));
-        // Disable features that can cause infinite loops in ToolOrdering
-        m_impl->config->set_key_value("flush_into_infill", new Slic3r::ConfigOptionBool(false));
-        m_impl->config->set_key_value("flush_into_support", new Slic3r::ConfigOptionBool(false));
-        m_impl->config->set_key_value("flush_into_objects", new Slic3r::ConfigOptionBool(false));
-
-        // Restore 3MF colors in on-the-fly mode
-        auto* fil_colour = m_impl->config->opt<Slic3r::ConfigOptionStrings>("filament_colour", false);
-        if (!m_impl->saved_filament_colours.empty() && fil_colour) {
-            LOG_DEBUG("Restoring 3MF filament colors (on-the-fly mode)");
-            fil_colour->values = m_impl->saved_filament_colours;
-        }
-
-        // Expand filament arrays to match detected_extruders
-        auto* fil_diameter = m_impl->config->opt<Slic3r::ConfigOptionFloats>("filament_diameter", false);
-        auto* fil_type = m_impl->config->opt<Slic3r::ConfigOptionStrings>("filament_type", false);
-        if (fil_diameter && fil_diameter->values.size() < m_impl->detected_extruders) {
-            while (fil_diameter->values.size() < m_impl->detected_extruders) {
-                fil_diameter->values.push_back(fil_diameter->values.empty() ? 1.75 : fil_diameter->values.back());
-            }
-        }
-        if (fil_type && fil_type->values.size() < m_impl->detected_extruders) {
-            while (fil_type->values.size() < m_impl->detected_extruders) {
-                fil_type->values.push_back(fil_type->values.empty() ? "PLA" : fil_type->values.back());
-            }
-        }
-
-        // Restore change_filament_gcode for Bambu AMS multi-color printing
-        // ONLY if not overridden via config JSON (custom_settings)
-        {
-            bool gcode_overridden = std::find(__used_override_keys.begin(), __used_override_keys.end(),
-                                              "change_filament_gcode") != __used_override_keys.end();
-            if (!m_impl->saved_change_filament_gcode.empty() && !gcode_overridden) {
-                LOG_DEBUG(std::string("Restoring 3MF change_filament_gcode in on-the-fly mode (") + std::to_string(m_impl->saved_change_filament_gcode.size()) + " chars)");
-                m_impl->config->set_key_value("change_filament_gcode",
-                    new Slic3r::ConfigOptionString(m_impl->saved_change_filament_gcode));
-            }
+        bool gcode_overridden = std::find(__used_override_keys.begin(), __used_override_keys.end(),
+                                          "change_filament_gcode") != __used_override_keys.end();
+        if (!m_impl->saved_change_filament_gcode.empty() && !gcode_overridden) {
+            LOG_DEBUG(std::string("Restoring 3MF change_filament_gcode (") + std::to_string(m_impl->saved_change_filament_gcode.size()) + " chars)");
+            m_impl->config->set_key_value("change_filament_gcode",
+                new Slic3r::ConfigOptionString(m_impl->saved_change_filament_gcode));
         }
     }
 

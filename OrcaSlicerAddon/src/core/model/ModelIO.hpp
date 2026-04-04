@@ -54,12 +54,6 @@ bool load_3mf_project(
     Slic3r::t_config_option_keys& project_overrides_keys,
     Slic3r::DynamicPrintConfig& print_cfg_overrides,
     Slic3r::t_config_option_keys& print_overrides_keys,
-    // Transfer flags
-    bool transfer_printer_customizations,
-    bool transfer_filament_customizations,
-    bool transfer_process_customizations,
-    bool transfer_project_overrides,
-    // Error out
     std::string& last_error);
 
 }} // namespace OrcaSlicerCli::model

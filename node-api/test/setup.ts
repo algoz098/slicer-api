@@ -8,8 +8,11 @@ const nodeApiRoot = path.resolve(__dirname, '..')
 const repoRoot = path.resolve(nodeApiRoot, '..')
 
 if (!process.env.ORCACLI_ENGINE_PATH) {
-  const engine = path.resolve(repoRoot, 'OrcaSlicerAddon/build/bindings/node/liborcacli_engine.dylib')
-  process.env.ORCACLI_ENGINE_PATH = engine
+	const engine = path.resolve(
+		repoRoot,
+		'OrcaSlicerAddon/bindings/node/build/bindings/node/liborcacli_engine.dylib',
+	)
+	process.env.ORCACLI_ENGINE_PATH = engine
 }
 
 if (!process.env.ORCACLI_RESOURCES) {

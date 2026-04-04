@@ -49,20 +49,11 @@ public:
         std::string output_file;
         std::string config_file;
         std::string preset_name;
-        // Display names for profiles in output 3MF (metadata only, does not load any preset)
-        // These are shown in OrcaSlicer GUI when opening the generated file
-        std::string printer_profile_name;   // e.g. "My Custom Printer" - sets printer_settings_id
-        std::string filament_profile_name;  // e.g. "Generic PLA" - sets filament_settings_id[0]
-        std::string process_profile_name;   // e.g. "High Quality" - sets print_settings_id
         int plate_index = 1; // 1-based plate index for .3mf projects (defaults to 1)
-        std::map<std::string, std::string> custom_settings; // JSON on-the-fly config
+        std::map<std::string, std::string> profile_settings; // Base profile (applied before 3MF; 3MF overrides these)
+        std::map<std::string, std::string> custom_settings; // Explicit user overrides (applied after 3MF; highest priority)
         bool verbose = false;
         bool dry_run = false;
-        // Control how 3MF-embedded customizations are transferred (defaults: true)
-        bool transfer_printer_customizations = true;
-        bool transfer_filament_customizations = true;
-        bool transfer_process_customizations = true;
-        bool transfer_project_overrides = true;
         // Behavior flags
         bool center_on_bed = false;
         bool auto_realign_if_needed = false; // Realinha automaticamente na mesa caso itens estejam fora da area
@@ -197,27 +188,6 @@ public:
      * @return Operation result
      */
     OperationResult loadVendor(const std::string& vendor_id);
-
-    /**
-     * @brief Load a printer profile by name and select it
-     * @param printer_name Name of the printer profile
-     * @return Operation result
-     */
-    OperationResult loadPrinterProfile(const std::string& printer_name);
-
-    /**
-     * @brief Load a filament profile by name and select it
-     * @param filament_name Name of the filament profile
-     * @return Operation result
-     */
-    OperationResult loadFilamentProfile(const std::string& filament_name);
-
-    /**
-     * @brief Load a process (print) profile by name and select it
-     * @param process_name Name of the process profile
-     * @return Operation result
-     */
-    OperationResult loadProcessProfile(const std::string& process_name);
 
     /**
      * @brief Get version information

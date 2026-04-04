@@ -50,3 +50,6 @@ node-api/.orcaslicercli/
 # Native addon artifacts (do not commit compiled .node binaries)
 node-api/*.node
 .tmp-prebuild-linux*
+.orcaslicercli/tmp
+node-compile-cache
+tmp

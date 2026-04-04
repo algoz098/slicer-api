@@ -13,6 +13,18 @@ import type { Slicer3Mf, Slicer3MfData, Slicer3MfPatch, Slicer3MfQuery } from '.
 import { BadRequest } from '@feathersjs/errors'
 
 export type { Slicer3Mf, Slicer3MfData, Slicer3MfPatch, Slicer3MfQuery }
+
+// Profile settings passed to OrcaSlicer. It is essentially a dynamic
+// key/value map coming from 3MF metadata, but we explicitly model the
+// fields we touch below to keep TypeScript happy without perder
+// informações.
+type ProfileSettings = {
+  curr_bed_type: string
+  flush_volumes_matrix?: unknown
+  filament_colour?: unknown
+  flush_multiplier?: unknown
+} & Record<string, unknown>
+
 export interface Slicer3MfServiceOptions {
   app: Application
 }
@@ -138,44 +150,41 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
     let estimatedTimeSec: number | undefined
     let filamentUsedGrams: number | undefined
 
-    // Mescla options e config com precedencia correta:
-    // Precedencia: options (usuario) > config (baseline de perfis) > customizacoes do arquivo > profiles
-    // Nota: o profileConfig enviado como 'config' serve apenas como baseline; as customizacoes
-    // embutidas no arquivo 3MF (via transferProjectOverrides/transferProcessCustomizations)
-    // sobrescrevem o config, e os options do usuario sobrescrevem tudo.
-    const configOverrides = (data as any).config ?? {}
-    const finalOptions = { ...configOverrides, ...options }
-    finalOptions.curr_bed_type = 'High Temp Plate'
+    // Precedência correta:
+    //   config (perfil base on-the-fly)  <  3MF (mesa/objeto)  <  options (overrides explícitos)
+    // O campo `profile` é aplicado antes de carregar o 3MF; o 3MF sobrescreve o perfil.
+    // O campo `options` é aplicado depois do 3MF com prioridade máxima.
+    const configOverrides: Record<string, unknown> = (data as any).config ?? {}
+    const profileSettings: ProfileSettings = {
+      ...configOverrides,
+      curr_bed_type: 'High Temp Plate',
+    }
+    const finalOptions = { ...options }
 
     // Sanitize BBL-proprietary G-code template variables before passing to OrcaSlicer.
-    // BBL profiles reference variables like flush_volumetric_speeds and flush_temperatures
-    // that don't exist in this OrcaSlicer fork, and use previous_extruder (which starts at -1)
-    // as a vector index. This prevents PlaceholderParser errors during export_gcode.
-    sanitizeBblGcodeTemplates(finalOptions)
+    sanitizeBblGcodeTemplates(profileSettings)
 
-    // Remove flush_volumes_matrix from overrides if it doesn't match the filament count
-    // This prevents "Flush volumes matrix do not match to the correct size" errors
-    // The addon will automatically synchronize the matrix based on filament_colour
-    if (finalOptions.flush_volumes_matrix) {
-      const filamentCount = Array.isArray(finalOptions.filament_colour)
-        ? finalOptions.filament_colour.length
+    // Remove flush_volumes_matrix from profile if it doesn't match the filament count
+    if (profileSettings.flush_volumes_matrix) {
+      const filamentCount = Array.isArray(profileSettings.filament_colour)
+        ? profileSettings.filament_colour.length
         : 1
-      const headsCount = Array.isArray(finalOptions.flush_multiplier)
-        ? finalOptions.flush_multiplier.length
+      const headsCount = Array.isArray(profileSettings.flush_multiplier)
+        ? profileSettings.flush_multiplier.length
         : 1
       const expectedSize = filamentCount * filamentCount * headsCount
-      const actualSize = Array.isArray(finalOptions.flush_volumes_matrix)
-        ? finalOptions.flush_volumes_matrix.length
+      const actualSize = Array.isArray(profileSettings.flush_volumes_matrix)
+        ? profileSettings.flush_volumes_matrix.length
         : 0
       if (actualSize !== expectedSize) {
         logger.debug(
           `[3MF] Removing inconsistent flush_volumes_matrix: expected=${expectedSize}, actual=${actualSize}`
         )
-        delete finalOptions.flush_volumes_matrix
+        delete profileSettings.flush_volumes_matrix
       }
     }
 
-    // Guarda as chaves de options para validacao posterior
+    // Guarda as chaves de options (overrides explícitos) para validação posterior
     const optionsKeys = new Set(Object.keys(options ?? {}))
 
     // Create a safe copy of the input file to ensure access and simple path
@@ -186,24 +195,18 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
     )
 
     try {
-      // Silencia logs por padrao para evitar spam no terminal
-      ;(orca as any).setLoggingSilenced(true)
       let res: any
       try {
         res = await orca.slice({
           input: safeInputPath,
           output: outPath,
           plate: data.plate,
-          options: finalOptions,
+          profile: profileSettings,
+          options: Object.keys(finalOptions).length > 0 ? finalOptions : undefined,
           center: true,
           autoRealignIfNeeded: true,
-          transferPrinterCustomizations: true,
-          transferFilamentCustomizations: true,
-          transferProcessCustomizations: true,
-          transferProjectOverrides: true
         })
       } finally {
-        ;(orca as any).setLoggingSilenced(false)
       }
       output = res.output
 

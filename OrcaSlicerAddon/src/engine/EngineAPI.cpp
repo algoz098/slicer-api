@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstring>
+#include <iostream>
 
 #include "core/AddonCore.hpp"
 #include "utils/Logger.hpp"
@@ -130,6 +131,22 @@ orcacli_operation_result orcacli_slice(orcacli_handle h, const orcacli_slice_par
         return orcacli_operation_result{false, dup_cstr("invalid args"), nullptr};
     }
 
+    // Always log basic slice parameters for diagnostics (independent of verbose flag)
+    LOG_DEBUG(
+        std::string("orcacli_slice[entry]: input='") + (params->input_file ? params->input_file : "(null)") +
+        "' output='" + (params->output_file ? params->output_file : "(null)") +
+        "' plate=" + std::to_string(params->plate_index) +
+        " center_on_bed=" + (params->center_on_bed ? "1" : "0") +
+        " auto_realign_if_needed=" + (params->auto_realign_if_needed ? "1" : "0"));
+
+    // DEBUG: raw override pointers as seen by the C API (helps diagnose FFI/layout issues)
+    try {
+        std::cout << "DEBUG [orcacli_slice]: raw_overrides_ptr=" << (const void*)params->overrides
+                  << " raw_overrides_count=" << params->overrides_count << std::endl;
+    } catch (...) {
+        // Logging must never break slicing; ignore any iostream issues
+    }
+
     if (params->verbose) {
         LOG_DEBUG(std::string("orcacli_slice: input='") + (params->input_file ? params->input_file : "(null)") +
                   "' plate=" + std::to_string(params->plate_index));
@@ -141,22 +158,21 @@ orcacli_operation_result orcacli_slice(orcacli_handle h, const orcacli_slice_par
     if (params->output_file)  p.output_file = params->output_file;
     if (params->config_file)  p.config_file = params->config_file;
     if (params->preset_name)  p.preset_name = params->preset_name;
-    // Display names for profiles in output 3MF (metadata only)
-    if (params->printer_profile_name)  p.printer_profile_name = params->printer_profile_name;
-    if (params->filament_profile_name) p.filament_profile_name = params->filament_profile_name;
-    if (params->process_profile_name)  p.process_profile_name = params->process_profile_name;
     p.plate_index = params->plate_index;
     p.verbose = params->verbose;
     p.dry_run = params->dry_run;
-    // Forward 3MF transfer flags
-    p.transfer_printer_customizations  = params->transfer_printer_customizations;
-    p.transfer_filament_customizations = params->transfer_filament_customizations;
-    p.transfer_process_customizations  = params->transfer_process_customizations;
-    p.transfer_project_overrides       = params->transfer_project_overrides;
     // Behavior flags
     p.center_on_bed = params->center_on_bed;
     p.auto_realign_if_needed = params->auto_realign_if_needed;
-    // Forward overrides into SlicingParams.custom_settings
+    // Forward profile into SlicingParams.profile_settings (base profile, applied before 3MF)
+    if (params->profile && params->profile_count > 0) {
+        for (int32_t i = 0; i < params->profile_count; ++i) {
+            const orcacli_kv& kv = params->profile[i];
+            if (kv.key && kv.value)
+                p.profile_settings[std::string(kv.key)] = std::string(kv.value);
+        }
+    }
+    // Forward overrides into SlicingParams.custom_settings (explicit overrides, applied after 3MF)
     if (params->overrides && params->overrides_count > 0) {
         if (params->verbose) {
             LOG_DEBUG(std::string("orcacli_slice: overrides_count=") + std::to_string(params->overrides_count));
@@ -170,9 +186,19 @@ orcacli_operation_result orcacli_slice(orcacli_handle h, const orcacli_slice_par
                 p.custom_settings[std::string(kv.key)] = std::string(kv.value);
             }
         }
+    } else {
+        // Help debug scenarios where the caller believes overrides are present but the engine receives none.
+        try {
+            std::cout << "DEBUG [orcacli_slice]: overrides array is empty or null at engine boundary" << std::endl;
+        } catch (...) {}
     }
 
     auto res = e->core.slice(p);
+
+    // Log outcome so we can correlate native crashes vs. graceful errors
+    LOG_DEBUG(std::string("orcacli_slice[exit]: success=") + (res.success ? "1" : "0") +
+              " message='" + res.message + "'");
+
     return make_result(res);
 }
 
@@ -180,24 +206,6 @@ orcacli_operation_result orcacli_load_vendor(orcacli_handle h, const char* vendo
     if (!h || !vendor_id) return orcacli_operation_result{false, dup_cstr("invalid args"), nullptr};
     Engine* e = static_cast<Engine*>(h);
     return make_result(e->core.loadVendor(vendor_id));
-}
-
-orcacli_operation_result orcacli_load_printer_profile(orcacli_handle h, const char* name) {
-    if (!h || !name) return orcacli_operation_result{false, dup_cstr("invalid args"), nullptr};
-    Engine* e = static_cast<Engine*>(h);
-    return make_result(e->core.loadPrinterProfile(name));
-}
-
-orcacli_operation_result orcacli_load_filament_profile(orcacli_handle h, const char* name) {
-    if (!h || !name) return orcacli_operation_result{false, dup_cstr("invalid args"), nullptr};
-    Engine* e = static_cast<Engine*>(h);
-    return make_result(e->core.loadFilamentProfile(name));
-}
-
-orcacli_operation_result orcacli_load_process_profile(orcacli_handle h, const char* name) {
-    if (!h || !name) return orcacli_operation_result{false, dup_cstr("invalid args"), nullptr};
-    Engine* e = static_cast<Engine*>(h);
-    return make_result(e->core.loadProcessProfile(name));
 }
 
 #ifndef ORCACLI_VERSION_STRING
