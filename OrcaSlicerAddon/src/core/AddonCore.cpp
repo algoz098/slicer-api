@@ -469,6 +469,16 @@ public:
         // Configure basic flags
         try {
             bool is_bbl = preset_bundle.is_bbl_vendor();
+            // Fallback: detect BBL by printer_model when vendor bundle is not loaded
+            if (!is_bbl && config) {
+                try {
+                    std::string printer_model = config->opt_string("printer_model");
+                    if (!printer_model.empty() &&
+                        (printer_model.find("Bambu Lab") != std::string::npos ||
+                         printer_model.find("BBL") != std::string::npos))
+                        is_bbl = true;
+                } catch (...) {}
+            }
             print->is_BBL_printer() = is_bbl;
             LOG_DEBUG(std::string("is_BBL_printer set to ") + (is_bbl ? "true" : "false"));
         } catch (...) {
