@@ -157,9 +157,11 @@ bool center_instances_on_bed_center(Slic3r::Model* model,
         if (!all_bb_init) return false;
         const double cx = 0.5 * (all_bb.min.x() + all_bb.max.x());
         const double cy = 0.5 * (all_bb.min.y() + all_bb.max.y());
+        const double cz = all_bb.min.z();  // menor Z entre todos os objetos
 
         const double dx = bed_cx_mm - cx;
         const double dy = bed_cy_mm - cy;
+        const double dz = -cz;  // desce o objeto para que o fundo toque Z=0
 
         size_t adjusted = 0;
         for (auto *obj : model->objects) {
@@ -167,7 +169,7 @@ bool center_instances_on_bed_center(Slic3r::Model* model,
             for (auto *inst : obj->instances) {
                 auto tf = inst->get_transformation();
                 Slic3r::Vec3d toff = tf.get_offset();
-                toff(0) += dx; toff(1) += dy;
+                toff(0) += dx; toff(1) += dy; toff(2) += dz;
                 tf.set_offset(toff);
                 inst->set_transformation(tf);
                 ++adjusted;
@@ -177,8 +179,9 @@ bool center_instances_on_bed_center(Slic3r::Model* model,
         }
 
         std::cout << "DEBUG: center_on_bed (instances) => shifted " << adjusted
-                  << " instances by (" << dx << "," << dy << ") bed_center=(" << bed_cx_mm
-                  << "," << bed_cy_mm << ") model_center=(" << cx << "," << cy << ")" << std::endl;
+                  << " instances by (" << dx << "," << dy << "," << dz
+                  << ") bed_center=(" << bed_cx_mm << "," << bed_cy_mm
+                  << ") model_center=(" << cx << "," << cy << ") model_min_z=" << cz << std::endl;
         return adjusted > 0;
     } catch (const std::exception &e) {
         std::cout << "WARN: center_instances_on_bed_center failed: " << e.what() << std::endl;

@@ -17,8 +17,14 @@
 
 #include <string>
 #include <vector>
+#include <typeinfo>
 #include <libslic3r/Arrange.hpp>
 #include <libslic3r/ModelArrange.hpp>
+// NOTE: Nao incluir Exception.hpp propositalmente.
+// liblibslic3r.a e' pre-compilado separadamente, o que causa duplicacao de typeinfo
+// para SlicingErrors/SlicingError. Catch por tipo especifico (ou dynamic_cast)
+// falha porque a comparacao de typeinfo usa ponteiros que nao coincidem entre
+// as duas compilacoes. Em vez disso, identificamos a excecao pelo what() + typeid().
 
 #include <limits>
 #include <cstdlib>
@@ -881,10 +887,83 @@ public:
                 print->process();
                 LOG_INFO("Slicing completed.");
             } catch (const std::exception& e) {
-                LOG_ERROR(std::string("Slicing process failed: ") + e.what());
+                // NOTA: Nao podemos capturar Slic3r::SlicingErrors por tipo porque
+                // liblibslic3r.a e' pre-compilado separadamente, causando duplicacao
+                // de typeinfo. Nem catch por tipo nem dynamic_cast funcionam.
+                //
+                // Contorno: usamos reinterpret_cast para ler o vector errors_ em
+                // um deslocamento conhecido. Ambas as compilacoes usam o mesmo
+                // header Exception.hpp, entao o layout em memoria e' identico.
+                //
+                // Layout (Itanium ABI + libc++ macOS):
+                //   std::exception (base): <empty>
+                //   std::runtime_error:   vtable(8) + string(24) = 32
+                //   Slic3r::SlicingError: 32 + objectId(8) = 40
+                //   Slic3r::SlicingErrors: 32 + vector<SlicingError>(24) = 56
+                //
+                // Ver webslicer/docs/bugs/2026-06-06-slicing-error-propagation.md
+
+                const std::string what = e.what();
+
+                if (what == "Errors") {
+                    // SlicingErrors — extrai o vector via layout conhecido.
+                    // Absolutamente FRAGIL, mas necessario: o typeinfo esta
+                    // duplicado e nao podemos capturar por tipo. Ambas as
+                    // compilacoes usam o mesmo Exception.hpp, entao o layout
+                    // em memoria e' identico.
+                    //
+                    // sizeof(std::runtime_error) varia por plataforma:
+                    // - macOS libc++: 32 (vtable 8 + string SSO 24)
+                    // - Linux libstdc++: 32 (vtable 8 + string 24)
+                    // - Windows MSVC: 28 (vtable 8 + string 20)
+                    try {
+                        const size_t rtSize = sizeof(std::runtime_error);
+                        struct SlicingErrorAccess {
+                            char    base[sizeof(std::runtime_error)];
+                            size_t  objectId;
+                        };
+                        struct SlicingErrorsAccess {
+                            char    base[sizeof(std::runtime_error)];
+                            const SlicingErrorAccess* begin;
+                            const SlicingErrorAccess* end;
+                            const SlicingErrorAccess* capacity;
+                        };
+                        static_assert(sizeof(SlicingErrorAccess) == sizeof(std::runtime_error) + sizeof(size_t),
+                            "SlicingErrorAccess layout mismatch");
+                        static_assert(sizeof(SlicingErrorsAccess) == sizeof(std::runtime_error) + 3 * sizeof(void*),
+                            "SlicingErrorsAccess layout mismatch");
+
+                        const auto& data = reinterpret_cast<const SlicingErrorsAccess&>(e);
+                        size_t count = static_cast<size_t>(data.end - data.begin);
+                        std::string details;
+                        for (const auto* p = data.begin; p != data.end; ++p) {
+                            if (!details.empty()) details += " | ";
+                            const auto& errBase = reinterpret_cast<const std::runtime_error&>(*p);
+                            details += std::string(errBase.what())
+                                     + " (object " + std::to_string(p->objectId) + ")";
+                        }
+                        last_error = details.empty()
+                            ? std::string("SlicingErrors (") + std::to_string(count) + " errors, what='Errors', type=" + typeid(e).name() + ")"
+                            : details;
+                    } catch (...) {
+                        // Se o reinterpret_cast falhar (e.g. layout diferente),
+                        // loga o que sabemos
+                        last_error = std::string("SlicingErrors (what='Errors', type=")
+                                   + typeid(e).name()
+                                   + ") — falha ao extrair detalhes via layout";
+                    }
+                    LOG_ERROR(std::string("Slicing process failed: ") + last_error);
+                    return false;
+                }
+
+                // Outras excecoes std::exception — re-lanca para o catch externo
+                last_error = std::string("Slicing process failed: ") + what
+                           + " (type=" + typeid(e).name() + ")";
+                LOG_ERROR(last_error);
                 throw;
             } catch (...) {
-                LOG_ERROR("Slicing process failed with unknown error");
+                last_error = "Slicing process failed with unknown error";
+                LOG_ERROR(last_error);
                 throw;
             }
 
