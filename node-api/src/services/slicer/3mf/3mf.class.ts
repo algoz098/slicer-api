@@ -215,10 +215,17 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
       estimatedTimeSec = (res as any)?.estimatedTimeSec
       filamentUsedGrams = (res as any)?.filamentUsedGrams
     } catch (err: any) {
+      // 1. Log everything we know about the error for debugging
       const msg = String(err?.message ?? err ?? '')
-      const lower = msg.toLowerCase()
+      const details = String(err?.errorDetails ?? err?.error_details ?? '')
+      logger.error('[3MF] Slice failed. input=%s plate=%s msg="%s" details="%s"',
+        safeInputPath, data.plate ?? 'all', msg, details)
+      if (err?.stack) logger.error('[3MF] Stack: %s', err.stack)
 
-      // Erro de elementos fora da area de impressao
+      const lower = msg.toLowerCase()
+      const lowerDetails = details.toLowerCase()
+
+      // 2. Erro de elementos fora da area de impressao
       if (
         lower.includes('fora da área') ||
         lower.includes('fora da area') ||
@@ -229,6 +236,7 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
         throw new BadRequest(msg, { code: 'OBJECTS_OUT_OF_BOUNDS' })
       }
 
+      // 3. Overrides invalidas
       if (
         lower.includes('unknown') ||
         lower.includes('invalid') ||
@@ -238,15 +246,58 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
         throw new BadRequest(`Invalid override option(s): ${msg}`)
       }
 
-      // Model empty (no objects found for the requested plate / broken plate metadata)
-      if (lower.includes('empty')) {
+      // 4. SlicingErrors — erros lancados por SlicingError/SlicingErrors do OrcaSlicer.
+      //    Agora o addon extrai as mensagens reais via reinterpret_cast do layout em memoria
+      //    (contorno para duplicacao de typeinfo entre liblibslic3r.a e orcacli_core).
+      //    Padroes conhecidos (GCode.cpp, Print.cpp, PrintObjectSlice.cpp):
+      //    - "One object has empty initial layer and can't be printed..."
+      //    - "No object can be printed. Maybe too small"
+      //    - "The print is empty. The model is not printable with current print settings."
+      //    - "No layers were detected..."
+      //    - "Levitating objects cannot be printed without supports."
+      //    Formato antigo (antes do fix): "Slicing failed: Errors"
+      //    Ver docs/bugs/2026-06-06-slicing-error-propagation.md
+      const knownSlicingErrorPatterns = [
+        'slicing failed: errors',
+        'slicing errors',
+        'slicingerrors',
+        'slicing_error',
+        'empty initial layer',
+        "can't be printed",
+        'no object can be printed',
+        'the print is empty',
+        'no layers were detected',
+        'levitating objects',
+      ]
+      const isSlicingError = knownSlicingErrorPatterns.some(
+        p => lower.includes(p) || details.toLowerCase().includes(p)
+      )
+      if (isSlicingError) {
+        const hint = data.plate
+          ? `plate #${data.plate}`
+          : 'the model'
+        logger.warn('[3MF] Slicing error for %s: %s', hint, msg)
+        throw new BadRequest(msg, { code: 'SLICING_ERROR', originalError: msg })
+      }
+
+      // 6. Falha na exportacao do gcode
+      if (lower.includes('g-code export failed') || lower.includes('gcode export failed')) {
         throw new BadRequest(
-          `No printable objects found for the requested plate. The 3MF plate metadata may be invalid.`,
-          { code: 'MODEL_EMPTY' }
+          `O OrcaSlicer concluiu o calculo mas falhou ao exportar o G-code. ` +
+          `Pode ser problema de permissao de escrita em disco ou falta de espaco em ${os.tmpdir()}.`,
+          { code: 'GCODE_EXPORT_FAILED' }
         )
       }
 
-      // Always throw a proper Error instance to avoid "error: undefined" logs
+      // 7. Arquivo gerado muito pequeno (provavelmente vazio)
+      if (lower.includes('too small') || lower.includes('file size')) {
+        throw new BadRequest(
+          `O G-code gerado e muito pequeno (${msg}). O slicing pode ter produzido um resultado vazio.`,
+          { code: 'GCODE_FILE_TOO_SMALL' }
+        )
+      }
+
+      // 8. Sempre lancar uma instancia Error propria para evitar "error: undefined" nos logs
       throw new Error(msg || 'Slice failed')
     }
 
@@ -291,7 +342,7 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
       outputPath: output,
       contentType: 'model/3mf',
       size: content.length,
-      // dataBase64,
+      dataBase64: content.toString('base64'),
       usedOptions,
       ignoredOptions,
       estimatedTimeSec,
