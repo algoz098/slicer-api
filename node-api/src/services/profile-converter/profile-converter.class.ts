@@ -45,8 +45,9 @@ function coerceValue(v: unknown): string | number | boolean {
   const s = String(v)
   // Try boolean
   if (/^(true|false)$/i.test(s)) return /^true$/i.test(s)
-  // Try number (int/float), but avoid turning IDs with leading zeros into numbers
-  if (/^[+-]?(?:\d+\.\d+|\d+)$/i.test(s)) {
+  // Try number (int/float), avoid turning IDs with leading zeros into numbers
+  // Reject strings like "007", "00123" that are IDs, not numbers
+  if (/^[+-]?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(s)) {
     const n = Number(s)
     if (!Number.isNaN(n)) return n
   }

@@ -195,6 +195,7 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
     )
 
     try {
+      orca.setLoggingSilenced(true)
       let res: any
       try {
         res = await orca.slice({
@@ -207,6 +208,7 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
           autoRealignIfNeeded: true,
         })
       } finally {
+        orca.setLoggingSilenced(false)
       }
       output = res.output
 

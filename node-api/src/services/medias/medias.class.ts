@@ -33,7 +33,10 @@ export class MediasService<ServiceParams extends MediasParams = MediasParams>
       path.resolve('output_files') // Common output directory
     ]
 
-    const isAllowed = allowedDirs.some(dir => safePath.startsWith(dir))
+    const isAllowed = allowedDirs.some(dir => {
+      const prefix = dir.endsWith(path.sep) ? dir : dir + path.sep
+      return safePath.startsWith(prefix)
+    })
 
     if (!isAllowed) {
       // Log attempt?

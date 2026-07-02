@@ -90,25 +90,21 @@ export class SlicerStlService<ServiceParams extends SlicerStlParams = SlicerStlP
       throw new BadRequest('Input file not found')
     }
 
-    // Define caminho de saída do G-code
-    // Security: Force output to be in a safe directory or sanitize filename
-    // Ignore user provided output path to prevent arbitrary writes, or sanitize it
-    // For safety, we enforce a generated path in tmp or a specific output dir
-    const outputDir = data.output ? path.dirname(data.output) : os.tmpdir()
-    // Ensure output dir is safe (optional check, dependent on deployment)
-    const outputFilename = data.output ? path.basename(data.output) : `orca-${randomUUID()}.gcode`
-    const outPath = path.join(outputDir, outputFilename)
+    // Forca o caminho de saida para ser no diretorio temporario para seguranca
+    // Ignora data.output enviado pelo usuario para evitar Arbitrary File Write
+    const outputFilename = `orca-${randomUUID()}.gcode`
+    const outPath = path.join(os.tmpdir(), outputFilename)
 
     // NOTE: Nao carregamos vendors/profiles aqui.
     // O addon funciona em modo on-the-fly puro:
     // - A configuracao completa e passada via `options` em cada chamada de slice
     // - O addon usa FullPrintConfig::defaults() como fallback
 
-    // Mescla options e config, onde config tem precedencia
-    // Precedencia: config > options > profiles
+    // Mescla options e config, onde options tem precedencia maxima
+    // Precedencia: options (explicit overrides) > config (base profile) > defaults
     const baseOptions = (data as any).options ?? {}
     const configOverrides = (data as any).config ?? {}
-    const finalOptions = { ...baseOptions, ...configOverrides }
+    const finalOptions = { ...configOverrides, ...baseOptions }
 
     // Guarda as chaves de options para validacao posterior
     const optionsKeys = new Set(Object.keys(baseOptions))
