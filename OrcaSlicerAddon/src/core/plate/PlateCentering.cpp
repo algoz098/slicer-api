@@ -157,11 +157,14 @@ bool center_instances_on_bed_center(Slic3r::Model* model,
         if (!all_bb_init) return false;
         const double cx = 0.5 * (all_bb.min.x() + all_bb.max.x());
         const double cy = 0.5 * (all_bb.min.y() + all_bb.max.y());
-        const double cz = all_bb.min.z();  // menor Z entre todos os objetos
 
         const double dx = bed_cx_mm - cx;
         const double dy = bed_cy_mm - cy;
-        const double dz = -cz;  // desce o objeto para que o fundo toque Z=0
+        // Z fica intocado aqui (paridade com Model::center_instances_around_point).
+        // Um shift Z global usando o menor Z de TODOS os objetos levantava objetos
+        // corretamente apoiados quando outro objeto estava afundado de propósito
+        // (Z<0, corte da base), produzindo "empty initial layer" nos demais.
+        // Objetos flutuando são tratados por drop_floating_instances_to_bed().
 
         size_t adjusted = 0;
         for (auto *obj : model->objects) {
@@ -169,7 +172,7 @@ bool center_instances_on_bed_center(Slic3r::Model* model,
             for (auto *inst : obj->instances) {
                 auto tf = inst->get_transformation();
                 Slic3r::Vec3d toff = tf.get_offset();
-                toff(0) += dx; toff(1) += dy; toff(2) += dz;
+                toff(0) += dx; toff(1) += dy;
                 tf.set_offset(toff);
                 inst->set_transformation(tf);
                 ++adjusted;
@@ -179,14 +182,55 @@ bool center_instances_on_bed_center(Slic3r::Model* model,
         }
 
         std::cout << "DEBUG: center_on_bed (instances) => shifted " << adjusted
-                  << " instances by (" << dx << "," << dy << "," << dz
+                  << " instances by (" << dx << "," << dy
                   << ") bed_center=(" << bed_cx_mm << "," << bed_cy_mm
-                  << ") model_center=(" << cx << "," << cy << ") model_min_z=" << cz << std::endl;
+                  << ") model_center=(" << cx << "," << cy << ")" << std::endl;
         return adjusted > 0;
     } catch (const std::exception &e) {
         std::cout << "WARN: center_instances_on_bed_center failed: " << e.what() << std::endl;
         return false;
     }
+}
+
+// Baseada em ModelObject::ensure_on_bed(sinking_allowed=true) (OrcaSlicer src/libslic3r/Model.cpp):
+// baixa para a mesa apenas instâncias FLUTUANDO (min Z > 0). Instâncias afundadas
+// (min Z < 0) são preservadas — o fatiador corta o que está abaixo de Z=0, que é o
+// comportamento do GUI para "cut bottom". No GUI o usuário resolve objetos flutuando
+// com "place on bed"; headless isso precisa ser automático, senão o slice falha com
+// "One object has empty initial layer" (GCode.cpp).
+bool drop_floating_instances_to_bed(Slic3r::Model* model)
+{
+    if (!model) return false;
+    constexpr double EPS = 1e-3;
+    size_t adjusted = 0;
+    try {
+        for (auto *obj : model->objects) {
+            if (!obj) continue;
+            bool touched = false;
+            for (auto *inst : obj->instances) {
+                if (!inst) continue;
+                const Slic3r::BoundingBoxf3 bb = obj->instance_bounding_box(*inst);
+                if (!bb.defined) continue;
+                const double min_z = bb.min.z();
+                if (min_z > EPS) {
+                    auto tf = inst->get_transformation();
+                    Slic3r::Vec3d toff = tf.get_offset();
+                    toff(2) -= min_z;
+                    tf.set_offset(toff);
+                    inst->set_transformation(tf);
+                    ++adjusted;
+                    touched = true;
+                    std::cout << "DEBUG: drop_floating_instances_to_bed => dropped instance of '"
+                              << obj->name << "' by " << min_z << "mm" << std::endl;
+                }
+            }
+            if (touched) obj->invalidate_bounding_box();
+        }
+    } catch (const std::exception &e) {
+        std::cout << "WARN: drop_floating_instances_to_bed failed: " << e.what() << std::endl;
+        return false;
+    }
+    return adjusted > 0;
 }
 
 // TODO: Implementação correta baseada no arquivo OrcaSlicer src/slic3r/GUI/PartPlate.cpp:3200-3201
@@ -257,6 +301,7 @@ namespace OrcaSlicerCli { namespace plate {
 bool compute_and_set_plate_origin_from_model_instances(void*, void*, void*) { return false; }
 bool center_plate_origin_to_bed_center(void*, void*, void*) { return false; }
 bool center_instances_on_bed_center(void*, void*) { return false; }
+bool drop_floating_instances_to_bed(void*) { return false; }
 bool normalize_model_instances_to_plate_local(void*, void*) { return false; }
 }} // namespaces
 

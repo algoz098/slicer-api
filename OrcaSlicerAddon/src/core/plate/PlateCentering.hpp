@@ -26,6 +26,10 @@ bool center_plate_origin_to_bed_center(Slic3r::Model* model,
 bool center_instances_on_bed_center(Slic3r::Model* model,
                                     Slic3r::DynamicPrintConfig* config);
 
+// Drop floating instances (min Z > 0) onto the bed; sunken instances (min Z < 0)
+// are preserved so the slicer cuts below Z=0 (GUI "cut bottom" behavior).
+bool drop_floating_instances_to_bed(Slic3r::Model* model);
+
 // Normalize model instances into plate-local coordinates by removing the logical grid stride
 bool normalize_model_instances_to_plate_local(Slic3r::Model* model,
                                               Slic3r::DynamicPrintConfig* config);

@@ -99,6 +99,12 @@ bool load_3mf_project(
     // OrcaSlicer GUI (Plater.cpp) não tem retry explícito — ele usa load_bbs_3mf internamente
     // sem plate_id filter e separa os objetos por placa depois. O retry aqui é workaround
     // para arquivos 3MF re-salvos com metadados de placa quebrados; não existe equivalente no GUI.
+    // `config` is the engine's long-lived working config: metadata left by a previous
+    // project must not leak into this load. A stale different_settings_to_system from
+    // another 3MF makes the override detection below pick the wrong key set, dropping
+    // this file's customizations (e.g. enable_prime_tower=0) in favor of preset values.
+    config.erase("different_settings_to_system");
+
     // Read model+config from 3MF (per-plate)
     // If loading a specific plate returns empty (broken plate metadata in re-saved 3MFs),
     // retry without plate filter to load all objects — matching OrcaSlicer GUI behavior.

@@ -673,11 +673,15 @@ public:
         }
         
         // Check Wipe Tower
-        bool prime_enabled = false; try { prime_enabled = pc.enable_prime_tower.getBool(); } catch (...) {}
-        if (prime_enabled || print->has_wipe_tower()) {
+        // GUI parity (Print.cpp Print::validate): only validate the tower when it will
+        // actually be printed — has_wipe_tower() already accounts for enable_prime_tower,
+        // spiral mode and filament count. wipe_tower_x/y are per-plate vectors, so index
+        // them by the plate being sliced, not plate 0.
+        if (print->has_wipe_tower()) {
+             const int plate_idx = std::max(0, print->get_plate_index());
              float wtx = 0.f, wty = 0.f;
-             try { wtx = pc.wipe_tower_x.get_at(0); } catch (...) {}
-             try { wty = pc.wipe_tower_y.get_at(0); } catch (...) {}
+             try { wtx = pc.wipe_tower_x.get_at(plate_idx); } catch (...) {}
+             try { wty = pc.wipe_tower_y.get_at(plate_idx); } catch (...) {}
              Slic3r::Vec3d pt(double(wtx), double(wty), 0.0);
              Slic3r::BoundingBoxf3 wtbb(pt, pt);
                  auto state = build_volume.volume_state_bbox(wtbb, true);
@@ -856,6 +860,13 @@ public:
 
             // 2. Configure Plate Origin
             configurePlateOrigin();
+
+            // 2b. Drop floating instances to the bed (min Z > 0). Headless parity com o
+            // "place on bed" do GUI: sem isso o slice falha com "empty initial layer".
+            // Instâncias afundadas (min Z < 0) são preservadas (corte da base).
+            if (OrcaSlicerCli::plate::drop_floating_instances_to_bed(model.get())) {
+                LOG_DEBUG("performSlicing: dropped floating instance(s) to bed");
+            }
 
             // 3. Prepare Configuration
             LOG_DEBUG("Preparing print configuration with overrides...");
@@ -2137,7 +2148,25 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
     if (m_impl->detected_extruders > 1) {
         LOG_DEBUG(std::string("Detected multi-material model (") + std::to_string(m_impl->detected_extruders) + " colors in 3MF)");
         m_impl->config->set_key_value("single_extruder_multi_material", new Slic3r::ConfigOptionBool(true));
-        m_impl->config->set_key_value("enable_prime_tower", new Slic3r::ConfigOptionBool(true));
+
+        // Only force-enable the prime tower when no layer explicitly chose a value.
+        // A 3MF saved with the tower disabled — or an API profile/override disabling it —
+        // must be respected; the effective config value at this point already reflects
+        // the priority order profile_settings < 3MF < custom_settings. Multicolor
+        // without a prime tower is valid (flush happens via filament-change G-code).
+        const bool prime_tower_explicit =
+            params.profile_settings.count("enable_prime_tower") > 0 ||
+            params.custom_settings.count("enable_prime_tower") > 0 ||
+            std::find(m_impl->print_overrides_keys.begin(), m_impl->print_overrides_keys.end(),
+                      "enable_prime_tower") != m_impl->print_overrides_keys.end() ||
+            m_impl->project_cfg_after_3mf.has("enable_prime_tower");
+        if (!prime_tower_explicit) {
+            m_impl->config->set_key_value("enable_prime_tower", new Slic3r::ConfigOptionBool(true));
+        } else {
+            bool eff = false;
+            try { eff = m_impl->config->opt_bool("enable_prime_tower"); } catch (...) {}
+            LOG_DEBUG(std::string("enable_prime_tower explicitly set by 3MF/profile/override, keeping value=") + (eff ? "1" : "0"));
+        }
 
         // Restore 3MF colors
         auto* fil_colour = m_impl->config->opt<Slic3r::ConfigOptionStrings>("filament_colour", false);
