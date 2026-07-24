@@ -1,0 +1,8 @@
+{
+  "round":25,"findings":[
+    {"id":"R25-1","severity":"HIGH","file":"prepare_linux_prebuild.sh","bug":"Script CI quebrado — control flow órfão, variável não inicializada","status":"known_issue"},
+    {"id":"R25-2","severity":"HIGH","file":"app.ts+services","bug":"Sem health check endpoint — orchestrator não detecta engine crash","status":"known_issue"},
+    {"id":"R25-3","severity":"CRITICAL","file":"index.d.ts","bug":"Tipo estrutural errado — exporta funções soltas mas runtime exporta middleware+methods","status":"known_issue"},
+    {"id":"R25-4","severity":"HIGH","file":"index.d.ts","bug":"shutdown() ausente, InitializeOptions errado, customSettings ausente","status":"known_issue"}
+  ],"files_changed":0,"fixes_applied":0
+}

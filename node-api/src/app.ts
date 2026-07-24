@@ -20,8 +20,25 @@ const app: Application = koa(feathers())
 app.configure(configuration(configurationValidator))
 
 // Set up Koa middleware
-app.use(cors())
-app.use(koaBody({ multipart: true, formidable: { keepExtensions: true } }))
+app.use(cors({
+  origin: (ctx) => {
+    const origins = app.get('origins') ?? []
+    const requestOrigin = ctx.get('Origin')
+    return origins.includes(requestOrigin) ? requestOrigin : ''
+  }
+}))
+app.use(koaBody({
+  multipart: true,
+  formidable: {
+    keepExtensions: true,
+    maxFileSize: 512 * 1024 * 1024,
+    maxTotalFileSize: 512 * 1024 * 1024
+  },
+  jsonLimit: '10mb',
+  formLimit: '10mb',
+  textLimit: '10mb'
+}))
+app.use(errorHandler())
 
 // Mapear arquivos do koa-body para params (ctx.feathers)
 app.use(async (ctx, next) => {
@@ -33,7 +50,7 @@ app.use(async (ctx, next) => {
 
 // add koa middleware for medias service
 app.use(async (ctx, next) => {
-  if (!ctx.path.includes(mediasPath) || ctx.method !== 'GET') {
+  if (!ctx.path.startsWith('/' + mediasPath) || ctx.method !== 'GET') {
     return next()
   }
   await next()
@@ -57,7 +74,6 @@ if (fs.existsSync(publicDir)) {
   app.use(serveStatic(publicDir))
 }
 
-app.use(errorHandler())
 app.use(parseAuthentication())
 // Eagerly load the Orca addon at API startup and log the configuration
 // eslint-disable-next-line @typescript-eslint/no-var-requires

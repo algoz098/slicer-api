@@ -1,0 +1,6 @@
+{"round":34,"findings":[
+  {"id":"R34-1","severity":"HIGH","file":"AddonCore.cpp","bug":"modes[] out-of-bounds access — SIGSEGV com zero layers","status":"fixed"},
+  {"id":"R34-2","severity":"HIGH","file":"stl+3mf+model-info","bug":"koa-body temp files nunca limpos — leak a cada upload","status":"fixed"},
+  {"id":"R34-3","severity":"MEDIUM","file":"3mf.class.ts","bug":"TOCTOU statSync/readFileSync — bypass do limite 512MB","status":"pending"},
+  {"id":"R34-4","severity":"HIGH","file":"AddonCore.cpp","bug":"print->validate() NUNCA chamado — 7 validações bypassadas","status":"known_issue"}
+],"files_changed":4,"fixes_applied":2}

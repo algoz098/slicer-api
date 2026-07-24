@@ -16,6 +16,7 @@
 const GCODE_TEMPLATE_KEYS = [
   'machine_start_gcode',
   'machine_end_gcode',
+  'machine_pause_gcode',
   'change_filament_gcode',
   'filament_start_gcode',
   'filament_end_gcode',
@@ -63,6 +64,11 @@ function sanitizeTemplate(template: string, key: string): string {
   for (const [varName, defaultVal] of Object.entries(BBL_PROPRIETARY_VARS)) {
     const escapedName = varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
+    // (a0) Legacy square-bracket expansion without index: [var]
+    // Must be handled BEFORE barePattern to prevent [literal] orphan
+    const legacyNoIndexPattern = new RegExp('\\[' + escapedName + '\\]', 'g')
+    result = result.replace(legacyNoIndexPattern, defaultVal)
+
     // (a) Legacy square-bracket expansion: [var[idx]]
     // The outer [] is the legacy syntax, inner [idx] is the vector index.
     // Replace the ENTIRE match (including outer brackets) with the literal.
@@ -78,7 +84,18 @@ function sanitizeTemplate(template: string, key: string): string {
     result = result.replace(barePattern, defaultVal)
   }
 
-  // --- 2. Guard previous_extruder vector accesses ---
+  // --- 2. Guard bare {expression} blocks using previous_extruder as index ---
+  // BBL change_filament_gcode contains: M620.1 E F[...] T{nozzle_temperature_range_high[previous_extruder]}
+  // When previous_extruder = -1, this causes a negative vector index crash.
+  // Wrap the index expression so it falls back to 0 when previous_extruder is negative.
+  result = result.replace(
+    /\{([a-zA-Z_][a-zA-Z0-9_]*)\[previous_extruder\]\}/g,
+    (match, varName) => {
+      return `{${varName}[previous_extruder >= 0 ? previous_extruder : 0]}`
+    }
+  )
+
+  // --- 3. Guard previous_extruder vector accesses ---
   // In change_filament_gcode, lines like:
   //   {if nozzle_temperature[previous_extruder] > 142 && next_extruder < 255}
   //   {if long_retractions_when_cut[previous_extruder]}

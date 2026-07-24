@@ -26,6 +26,13 @@ export class MediasService<ServiceParams extends MediasParams = MediasParams>
 
     const safePath = path.resolve(reqPath)
 
+    let realPath: string
+    try {
+      realPath = fs.realpathSync(safePath)
+    } catch {
+      throw new NotFound('File not found')
+    }
+
     // Allowlist of directories
     const allowedDirs = [
       os.tmpdir(),
@@ -35,7 +42,7 @@ export class MediasService<ServiceParams extends MediasParams = MediasParams>
 
     const isAllowed = allowedDirs.some(dir => {
       const prefix = dir.endsWith(path.sep) ? dir : dir + path.sep
-      return safePath.startsWith(prefix)
+      return realPath.startsWith(prefix)
     })
 
     if (!isAllowed) {
@@ -43,14 +50,14 @@ export class MediasService<ServiceParams extends MediasParams = MediasParams>
       throw new BadRequest('Access denied: path not allowed')
     }
 
-    if (!fs.existsSync(safePath)) {
+    if (!fs.existsSync(realPath)) {
       throw new NotFound('File not found')
     }
 
     // Return path and base64-encoded content so callers on different filesystems can
     // read the file without needing direct filesystem access to this server's /tmp.
-    const content = fs.readFileSync(safePath)
-    return [{ path: safePath, data: content.toString('base64') }]
+    const content = fs.readFileSync(realPath)
+    return [{ path: realPath, data: content.toString('base64') }]
   }
 
   async get(id: Id, _params?: ServiceParams): Promise<Medias> {

@@ -13,6 +13,7 @@ import type {
   SlicerModelInfoQuery
 } from './model-info.schema'
 import { BadRequest } from '@feathersjs/errors'
+import { withSilencedLogging } from '../logging-guard'
 
 export type { SlicerModelInfo, SlicerModelInfoData, SlicerModelInfoPatch, SlicerModelInfoQuery }
 
@@ -81,6 +82,21 @@ export class SlicerModelInfoService<ServiceParams extends SlicerModelInfoParams 
       originalFilename = fileObj.originalFilename || fileObj.name || fileObj.filename
     }
 
+    if (inputPath && !fileObj) {
+      let resolved: string
+      try {
+        resolved = fs.realpathSync(path.resolve(inputPath))
+      } catch {
+        throw new BadRequest('Input file not found or not accessible')
+      }
+      const tmpDir = os.tmpdir()
+      const prefix = tmpDir.endsWith(path.sep) ? tmpDir : tmpDir + path.sep
+      if (!resolved.startsWith(prefix)) {
+        throw new BadRequest('filePath must be within the temp directory or use multipart upload')
+      }
+      inputPath = resolved
+    }
+
     if (!inputPath) {
       throw new BadRequest('Nenhum arquivo recebido. Envie um multipart field "file" ou informe "filePath".')
     }
@@ -95,12 +111,10 @@ export class SlicerModelInfoService<ServiceParams extends SlicerModelInfoParams 
     fs.copyFileSync(inputPath, safeInputPath)
 
     try {
-      ;(orca as any).setLoggingSilenced(true)
-      let info: any
-      try {
-        info = await (orca as any).getModelInfo(safeInputPath)
-      } finally {
-        ;(orca as any).setLoggingSilenced(false)
+      const info = await withSilencedLogging(orca, () => (orca as any).getModelInfo(safeInputPath))
+
+      if (!info) {
+        throw new Error('Model info retrieval returned no data')
       }
 
       return {
@@ -112,11 +126,26 @@ export class SlicerModelInfoService<ServiceParams extends SlicerModelInfoParams 
         boundingBox: info.boundingBox ?? '',
         isValid: info.isValid ?? true
       }
+    } catch (err: any) {
+      const msg = String(err?.message ?? err ?? '')
+      const lower = msg.toLowerCase()
+
+      if (lower.includes('unknown') || lower.includes('invalid') || lower.includes('unrecognized') || lower.includes('failed to set')) {
+        throw new BadRequest(`Invalid option(s): ${msg}`)
+      }
+      throw new Error(msg || 'Model info retrieval failed')
     } finally {
       try {
         fs.unlinkSync(safeInputPath)
       } catch {
         // best-effort cleanup
+      }
+      if (fileObj) {
+        try {
+          fs.unlinkSync(inputPath)
+        } catch {
+          // best-effort cleanup
+        }
       }
     }
   }

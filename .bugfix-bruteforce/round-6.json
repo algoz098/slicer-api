@@ -1,0 +1,24 @@
+{
+  "round": 6,
+  "date": "2026-07-21",
+  "findings": [
+    {"id": "R6-1", "severity": "CRITICAL", "file": "addon.cc", "line": 58, "bug": "Duplo mecanismo de silencing com mutexes separados CORROMPE stdout/stderr permanentemente", "status": "fixed"},
+    {"id": "R6-2", "severity": "HIGH", "file": "3mf.class.ts", "line": 166, "bug": "curr_bed_type hardcoded sobrescreve config do usuário", "status": "fixed"},
+    {"id": "R6-3", "severity": "HIGH", "file": "3mf.class.ts", "line": 173, "bug": "BBL sanitizer não aplicado a finalOptions (explicit overrides)", "status": "fixed"},
+    {"id": "R6-4", "severity": "HIGH", "file": "3mf.class.ts", "line": 110, "bug": "Zip bomb DoS — sem limite de tamanho/entradas no ZIP", "status": "fixed"},
+    {"id": "R6-5", "severity": "HIGH", "file": "gcode-sanitizer.ts", "line": 92, "bug": "previous_extruder em {expression} blocks sem guard — crash no PlaceholderParser", "status": "fixed"},
+    {"id": "R6-6", "severity": "MEDIUM", "file": "3mf.class.ts", "line": 145, "bug": "ZIP inválido não rejeitado — catch engole erro", "status": "fixed"},
+    {"id": "R6-7", "severity": "MEDIUM", "file": "3mf.class.ts", "line": 112, "bug": "Arquivo vazio não rejeitado — passa para engine", "status": "fixed"},
+    {"id": "R6-8", "severity": "MEDIUM", "file": "gcode-sanitizer.ts", "line": 16, "bug": "machine_pause_gcode ausente do GCODE_TEMPLATE_KEYS", "status": "fixed"},
+    {"id": "R6-9", "severity": "MEDIUM", "file": "gcode-sanitizer.ts", "line": 77, "bug": "barePattern cria orphan [literal] em sintaxe legacy sem índice", "status": "fixed"}
+  ],
+  "pending_future_rounds": [
+    "Key mapping for profile_settings (PRIO-002)",
+    "STL config+options merge into single field (PRIO-003)",
+    "Config injection bounds validation (3MF-006)",
+    "setLoggingSilenced TOCTOU between concurrent requests (TS-HIGH-002)",
+    "Model complexity limits (3MF-007)"
+  ],
+  "files_changed": 3,
+  "fixes_applied": 9
+}

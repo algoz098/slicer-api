@@ -4,13 +4,13 @@
 #if HAVE_LIBSLIC3R
 
 #include <filesystem>
-#include <iostream>
 #include <set>
 #include <vector>
 #include <algorithm>
 #include <clocale>
 #include <cstdlib>
 
+#include "utils/Logger.hpp"
 #include "libslic3r/AppConfig.hpp"
 #include "libslic3r/PresetBundle.hpp"
 #include "libslic3r/Utils.hpp"
@@ -147,14 +147,14 @@ bool initialize_slic3r(const std::string& resources_path,
         // Options passed via JSON will override these defaults.
         Slic3r::FullPrintConfig full_defaults = Slic3r::FullPrintConfig::defaults();
         config->apply(full_defaults, true);
-        std::cout << "DEBUG: Initialized config with FullPrintConfig::defaults()" << std::endl;
+        LOG_DEBUG("DEBUG: Initialized config with FullPrintConfig::defaults()");
 
         // If vendors are loaded, merge their config on top of defaults
         if (!loaded_vendors.empty()) {
             Slic3r::DynamicPrintConfig vendor_config;
             safe_build_config(preset_bundle, vendor_config);
             config->apply(vendor_config, true);
-            std::cout << "DEBUG: Applied vendor config on top of defaults" << std::endl;
+            LOG_DEBUG("DEBUG: Applied vendor config on top of defaults");
         }
 
         return true;
@@ -173,7 +173,7 @@ void cleanup(std::unique_ptr<Slic3r::Print>& print,
         if (model) { model->clear_objects(); model.reset(); }
         if (config) config.reset();
     } catch (const std::exception& e) {
-        std::cerr << "Warning: Error during cleanup: " << e.what() << std::endl;
+        LOG_WARNING(std::string("Warning: Error during cleanup: ") + e.what());
     }
 }
 

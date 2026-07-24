@@ -1,0 +1,22 @@
+{
+  "round": 2,
+  "date": "2026-07-21",
+  "findings": [
+    {"id": "R2-1", "severity": "HIGH", "file": "AddonCore.cpp", "line": 659, "bug": "Null ptr deref em checkOutside/simpleReposition/preparePrintConfig — model->objects sem null guard", "status": "fixed"},
+    {"id": "R2-2", "severity": "HIGH", "file": "AddonCore.cpp", "line": 2236, "bug": "flush_volumes_vector expected_size usa filament_count*heads_count em vez de 2*filament_count", "status": "fixed"},
+    {"id": "R2-3", "severity": "HIGH", "file": "AddonCore.cpp", "line": 70, "bug": "IO silencer globals sem mutex — condição de corrida em setLoggingSilenced()", "status": "fixed"},
+    {"id": "R2-4", "severity": "MEDIUM", "file": "AddonCore.cpp", "line": 1841, "bug": "Código morto inalcançável após return false", "status": "fixed"},
+    {"id": "R2-5", "severity": "MEDIUM", "file": "AddonCore.cpp", "line": 1556, "bug": "ThumbnailData raw new vaza se exceção antes de push_back", "status": "fixed"},
+    {"id": "R2-6", "severity": "MEDIUM", "file": "medias.class.ts", "line": 27, "bug": "Symlink bypass: path.resolve() não resolve symlinks, permitindo leitura fora do sandbox", "status": "fixed"},
+    {"id": "R2-7", "severity": "MEDIUM", "file": "profiles.class.ts", "line": 57, "bug": "Path traversal via campo inherits no resolveInheritance()", "status": "fixed"},
+    {"id": "R2-8", "severity": "MEDIUM", "file": "AddonCore.cpp", "line": 381, "bug": "std::filesystem::exists() sem error_code em múltiplos locais — lança filesystem_error", "status": "pending"},
+    {"id": "R2-9", "severity": "MEDIUM", "file": "AddonCore.cpp", "line": 1223, "bug": "ConfigOptionStrings raw new vaza se set_key_value lançar exceção", "status": "pending"},
+    {"id": "R2-10", "severity": "LOW", "file": "AddonCore.cpp", "line": 957, "bug": "reinterpret_cast de std::exception é undefined behavior (strict aliasing)", "status": "ignored"}
+  ],
+  "ignored": [
+    {"id": "R2-10", "reason": "Requer modificação do submodule OrcaSlicer/ (proibido pelo AGENTS.md). Documentado como dívida técnica."}
+  ],
+  "files_changed": 3,
+  "fixes_applied": 7,
+  "pending": 2
+}

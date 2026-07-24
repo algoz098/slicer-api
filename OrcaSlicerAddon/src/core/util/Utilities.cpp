@@ -1,6 +1,6 @@
 #include "core/util/Utilities.hpp"
+#include "utils/Logger.hpp"
 
-#include <iostream>
 #include <fstream>
 #include <cstdlib>
 
@@ -17,8 +17,7 @@ void dbg_log(const std::string& s)
         }
         __orcacli_dbg_inited = true;
     }
-    std::cout << s << std::endl;
-    std::cout.flush();
+    LOG_DEBUG(s);
     if (__orcacli_dbg_file.is_open()) {
         __orcacli_dbg_file << s << std::endl;
         __orcacli_dbg_file.flush();
@@ -67,8 +66,10 @@ void safe_build_config(Slic3r::PresetBundle& preset_bundle, Slic3r::DynamicPrint
         try { out.apply(preset_bundle.printers.get_edited_preset().config); } catch (...) {}
         try { out.apply(preset_bundle.project_config, /*ignore_nonexistent=*/true); } catch (...) {}
         config = out;
+    } catch (const std::exception& e) {
+        LOG_ERROR(std::string("safe_build_config failed: ") + e.what());
     } catch (...) {
-        // Keep existing config on failure
+        LOG_ERROR("safe_build_config failed: unknown error");
     }
 }
 #endif

@@ -9,6 +9,7 @@ ARG ADDON_BASE
 
 # 1) Addon builder: compile engine + Node addon on top of CORE
 FROM ${BASE_CORE_IMAGE} AS builder
+ARG TARGETARCH
 ARG CI_MAX_JOBS
 WORKDIR /opt/orca
 
@@ -29,7 +30,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY OrcaSlicerAddon ./OrcaSlicerAddon
 
 # Build the shared engine library required by the Node addon
-RUN --mount=type=cache,id=ccache-orca-amd64,target=/root/.ccache bash -lc 'JOBS=${CI_MAX_JOBS:-$(nproc)}; cmake -S OrcaSlicerAddon -B OrcaSlicerAddon/build -G Ninja -DORCACLI_REQUIRE_LIBS=ON && cmake --build OrcaSlicerAddon/build --config Release --target orcacli_engine --parallel "$JOBS"'
+RUN --mount=type=cache,id=ccache-orca-${TARGETARCH},target=/root/.ccache bash -lc 'JOBS=${CI_MAX_JOBS:-$(nproc)}; cmake -S OrcaSlicerAddon -B OrcaSlicerAddon/build -G Ninja -DORCACLI_REQUIRE_LIBS=ON && cmake --build OrcaSlicerAddon/build --config Release --target orcacli_engine --parallel "$JOBS"'
 
 # Build the Node addon and stage prebuild artifacts
 WORKDIR /opt/orca/OrcaSlicerAddon/bindings/node

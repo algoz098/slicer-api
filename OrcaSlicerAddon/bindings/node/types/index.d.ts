@@ -23,9 +23,9 @@ export interface SliceParams {
   center?: boolean; // center object(s) on bed before slicing (default false)
   autoRealignIfNeeded?: boolean; // automatically realign on bed if elements are out-of-bounds
   // Base profile (applied before 3MF load; 3MF settings override these)
-  profile?: Record<string, string | number | boolean | string[] | number[]>;
+  profile?: Record<string, string | number | boolean | (string | number | boolean)[]>;
   // Explicit user overrides (applied after 3MF load; override 3MF settings)
-  options?: Record<string, string | number | boolean>;
+  options?: Record<string, string | number | boolean | (string | number | boolean)[]>;
   // Back-compat: custom (string-only)
   custom?: Record<string, string>;
 }

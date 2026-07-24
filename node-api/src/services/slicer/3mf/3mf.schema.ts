@@ -38,7 +38,7 @@ export const slicer3MfDataSchema = Type.Object(
     // Opcional: nome do campo multipart (se aplicável). Padrão: "file"
     field: Type.Optional(Type.String()),
     // Opcional: plate quando input tiver múltiplas placas
-    plate: Type.Optional(Type.Number({ minimum: 1 })),
+    plate: Type.Optional(Type.Integer({ minimum: 1 })),
     // Opcional: overrides de configuração
     options: Type.Optional(
       Type.Record(

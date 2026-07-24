@@ -3,7 +3,7 @@
 #if HAVE_LIBSLIC3R
 
 #include <limits>
-#include <iostream>
+#include "utils/Logger.hpp"
 #include <algorithm>
 
 #include "libslic3r/Model.hpp"
@@ -44,28 +44,28 @@ bool compute_and_set_plate_origin_from_model_instances(Slic3r::Model* model,
         const double stride_x = bed_w_mm * (1.0 + LOGICAL_PART_PLATE_GAP);
         const double stride_y = bed_d_mm * (1.0 + LOGICAL_PART_PLATE_GAP);
 
-        bool origin_found = false;
         double origin_x = 0.0, origin_y = 0.0;
+        size_t instance_count = 0;
         for (auto *obj : model->objects) {
             for (auto *inst : obj->instances) {
                 Slic3r::Vec3d aoff = inst->get_offset_to_assembly();
                 const double col = std::round(aoff(0) / stride_x);
                 const double row = std::round(-aoff(1) / stride_y);
-                origin_x = col * stride_x;
-                origin_y = -row * stride_y; // GUI uses negative Y per row
-                origin_found = true;
-                break;
+                if (instance_count == 0) {
+                    origin_x = col * stride_x;
+                    origin_y = -row * stride_y;
+                }
+                ++instance_count;
             }
-            if (origin_found) break;
         }
+        bool origin_found = instance_count > 0;
         if (!origin_found) return false;
 
         print->set_plate_origin(Slic3r::Vec3d(origin_x, origin_y, 0.0));
-        std::cout << "DEBUG: plate_origin (from instance assembly offsets) => origin=(" << origin_x << "," << origin_y
-                  << ") stride=(" << stride_x << "," << stride_y << ")" << std::endl;
+        LOG_DEBUG("DEBUG: plate_origin (from instance assembly offsets) => origin=(" + std::to_string(origin_x) + "," + std::to_string(origin_y) + ") stride=(" + std::to_string(stride_x) + "," + std::to_string(stride_y) + ")");
         return true;
     } catch (const std::exception &e) {
-        std::cout << "WARN: compute_and_set_plate_origin_from_model_instances failed: " << e.what() << std::endl;
+        LOG_WARNING("WARN: compute_and_set_plate_origin_from_model_instances failed: " + std::string(e.what()));
         return false;
     }
 }
@@ -111,12 +111,10 @@ bool center_plate_origin_to_bed_center(Slic3r::Model* model,
         const double origin_x = cx - bed_cx_mm;
         const double origin_y = cy - bed_cy_mm;
         print->set_plate_origin(Slic3r::Vec3d(origin_x, origin_y, 0.0));
-        std::cout << "DEBUG: center_on_bed => plate_origin set to (" << origin_x << "," << origin_y
-                  << ") using model center=(" << cx << "," << cy << ") and bed center=(" << bed_cx_mm
-                  << "," << bed_cy_mm << ")" << std::endl;
+        LOG_DEBUG("DEBUG: center_on_bed => plate_origin set to (" + std::to_string(origin_x) + "," + std::to_string(origin_y) + ") using model center=(" + std::to_string(cx) + "," + std::to_string(cy) + ") and bed center=(" + std::to_string(bed_cx_mm) + "," + std::to_string(bed_cy_mm) + ")");
         return true;
     } catch (const std::exception &e) {
-        std::cout << "WARN: center_plate_origin_to_bed_center failed: " << e.what() << std::endl;
+        LOG_WARNING("WARN: center_plate_origin_to_bed_center failed: " + std::string(e.what()));
         return false;
     }
 }
@@ -181,13 +179,10 @@ bool center_instances_on_bed_center(Slic3r::Model* model,
             obj->invalidate_bounding_box();
         }
 
-        std::cout << "DEBUG: center_on_bed (instances) => shifted " << adjusted
-                  << " instances by (" << dx << "," << dy
-                  << ") bed_center=(" << bed_cx_mm << "," << bed_cy_mm
-                  << ") model_center=(" << cx << "," << cy << ")" << std::endl;
+        LOG_DEBUG("DEBUG: center_on_bed (instances) => shifted " + std::to_string(adjusted) + " instances by (" + std::to_string(dx) + "," + std::to_string(dy) + ") bed_center=(" + std::to_string(bed_cx_mm) + "," + std::to_string(bed_cy_mm) + ") model_center=(" + std::to_string(cx) + "," + std::to_string(cy) + ")");
         return adjusted > 0;
     } catch (const std::exception &e) {
-        std::cout << "WARN: center_instances_on_bed_center failed: " << e.what() << std::endl;
+        LOG_WARNING("WARN: center_instances_on_bed_center failed: " + std::string(e.what()));
         return false;
     }
 }
@@ -220,14 +215,13 @@ bool drop_floating_instances_to_bed(Slic3r::Model* model)
                     inst->set_transformation(tf);
                     ++adjusted;
                     touched = true;
-                    std::cout << "DEBUG: drop_floating_instances_to_bed => dropped instance of '"
-                              << obj->name << "' by " << min_z << "mm" << std::endl;
+                    LOG_DEBUG("DEBUG: drop_floating_instances_to_bed => dropped instance of '" + obj->name + "' by " + std::to_string(min_z) + "mm");
                 }
             }
             if (touched) obj->invalidate_bounding_box();
         }
     } catch (const std::exception &e) {
-        std::cout << "WARN: drop_floating_instances_to_bed failed: " << e.what() << std::endl;
+        LOG_WARNING("WARN: drop_floating_instances_to_bed failed: " + std::string(e.what()));
         return false;
     }
     return adjusted > 0;
@@ -266,28 +260,22 @@ bool normalize_model_instances_to_plate_local(Slic3r::Model* model,
                 const double col = std::round(aoff(0) / stride_x);
                 const double row = std::round(-aoff(1) / stride_y);
                 asm_origin_x = col * stride_x;
-                asm_origin_y = -row * stride_y; // GUI uses negative Y per row
+                asm_origin_y = -row * stride_y;
                 origin_found = true;
-                break;
             }
-            if (origin_found) break;
         }
         if (!origin_found) return false;
 
         size_t adjusted = 0;
         for (auto *obj : model->objects) {
             for (auto *inst : obj->instances) {
-                Slic3r::Vec3d toff = inst->get_transformation().get_offset();
-                toff(0) -= asm_origin_x; toff(1) -= asm_origin_y;
-                inst->set_offset(toff);
                 Slic3r::Vec3d aoff = inst->get_offset_to_assembly();
                 aoff(0) -= asm_origin_x; aoff(1) -= asm_origin_y;
                 inst->set_offset_to_assembly(aoff);
                 ++adjusted;
             }
         }
-        std::cout << "DEBUG: normalized instances to plate-local FROM assembly: asm_origin=(" << asm_origin_x << "," << asm_origin_y
-                  << ") stride=(" << stride_x << "," << stride_y << ") adjusted_instances=" << adjusted << std::endl;
+        LOG_DEBUG("DEBUG: normalized instances to plate-local FROM assembly: asm_origin=(" + std::to_string(asm_origin_x) + "," + std::to_string(asm_origin_y) + ") stride=(" + std::to_string(stride_x) + "," + std::to_string(stride_y) + ") adjusted_instances=" + std::to_string(adjusted));
         return adjusted > 0;
     } catch (...) { return false; }
 }

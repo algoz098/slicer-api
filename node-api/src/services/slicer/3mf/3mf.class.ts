@@ -11,6 +11,7 @@ import type { Application } from '../../../declarations'
 import { logger } from '../../../logger'
 import type { Slicer3Mf, Slicer3MfData, Slicer3MfPatch, Slicer3MfQuery } from './3mf.schema'
 import { BadRequest } from '@feathersjs/errors'
+import { withSilencedLogging } from '../logging-guard'
 
 export type { Slicer3Mf, Slicer3MfData, Slicer3MfPatch, Slicer3MfQuery }
 
@@ -91,6 +92,22 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
       originalFilename = fileObj.originalFilename || fileObj.name || fileObj.filename || originalFilename
     }
 
+    // Security: if filePath is provided directly (not from upload), restrict to tmpdir
+    if (inputPath && !fileObj) {
+      let resolved: string
+      try {
+        resolved = fs.realpathSync(path.resolve(inputPath))
+      } catch {
+        throw new BadRequest('Input file not found or not accessible')
+      }
+      const tmpDir = os.tmpdir()
+      const prefix = tmpDir.endsWith(path.sep) ? tmpDir : tmpDir + path.sep
+      if (!resolved.startsWith(prefix)) {
+        throw new BadRequest('filePath must be within the temp directory or use multipart upload')
+      }
+      inputPath = resolved
+    }
+
     if (!inputPath) {
       throw new Error('Nenhum arquivo recebido. Envie um multipart field "file" ou informe "filePath".')
     }
@@ -99,31 +116,40 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
       throw new BadRequest('Input file not found')
     }
 
-    const inputStats = fs.statSync(inputPath)
-    logger.debug(`[3MF] Input file: ${inputPath}, Size: ${inputStats.size} bytes`)
-    if (inputStats.size === 0) {
-      logger.warn('[3MF] Check: Input file is empty!')
-    }
+    const MAX_3MF_SIZE = 512 * 1024 * 1024 // 512 MB
 
     // Força o caminho de saída para ser no diretório temporário para segurança
     // Ignora data.output enviado pelo usuário para evitar Arbitrary File Write
     const outputFilename = `orca-${randomUUID()}.gcode.3mf`
     const outPath = path.join(os.tmpdir(), outputFilename)
 
+    // Read file once, then validate size from the buffer (eliminates TOCTOU window)
     // Validate input file is a valid ZIP/3MF
     try {
       const fileContent = fs.readFileSync(inputPath)
+      logger.debug(`[3MF] Input file: ${inputPath}, Size: ${fileContent.length} bytes`)
+      if (fileContent.length === 0) {
+        throw new BadRequest('Input file is empty')
+      }
+      if (fileContent.length > MAX_3MF_SIZE) {
+        throw new BadRequest(`3MF file too large: ${fileContent.length} bytes. Maximum allowed: ${MAX_3MF_SIZE} bytes`)
+      }
       const zip = await JSZip.loadAsync(fileContent)
       logger.debug('[3MF] Input file is a valid ZIP. Contents:')
       const files = Object.keys(zip.files)
+
+      const MAX_ZIP_ENTRIES = 10000
+      if (files.length > MAX_ZIP_ENTRIES) {
+        throw new BadRequest(`3MF contains too many files: ${files.length}. Maximum allowed: ${MAX_ZIP_ENTRIES}`)
+      }
 
       for (const f of files) {
         const fileData = zip.files[f]
         // Log size for .model files or config
         if (f.endsWith('.model') || f.endsWith('.config')) {
-          const content = await fileData.async('nodebuffer')
-          logger.debug(`  - ${f} (Size: ${content.length} bytes)`)
-          if (content.length === 0) {
+          const internalData = (fileData as any)._data
+          logger.debug(`  - ${f} (Compressed: ${internalData?.compressedSize ?? 'unknown'} bytes)`)
+          if (internalData?.uncompressedSize === 0) {
             logger.warn(`[3MF] WARNING: Internal file ${f} is empty!`)
           }
         } else {
@@ -136,6 +162,7 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
       }
     } catch (err: any) {
       logger.error('[3MF] Input file is NOT a valid ZIP: %s', err?.message ?? String(err))
+      throw new BadRequest('Invalid 3MF file: not a valid ZIP archive')
     }
 
     // NOTE: Nao carregamos vendors/profiles aqui.
@@ -156,31 +183,34 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
     // O campo `options` é aplicado depois do 3MF com prioridade máxima.
     const configOverrides: Record<string, unknown> = (data as any).config ?? {}
     const profileSettings: ProfileSettings = {
-      ...configOverrides,
       curr_bed_type: 'High Temp Plate',
+      ...configOverrides,
     }
-    const finalOptions = { ...options }
+    const baseOptions = { ...options }
 
     // Sanitize BBL-proprietary G-code template variables before passing to OrcaSlicer.
-    sanitizeBblGcodeTemplates(profileSettings)
+    const sanitizedProfile = sanitizeBblGcodeTemplates({ ...profileSettings })
+    const sanitizedOptions = Object.keys(baseOptions).length > 0
+      ? sanitizeBblGcodeTemplates({ ...baseOptions })
+      : baseOptions
 
     // Remove flush_volumes_matrix from profile if it doesn't match the filament count
-    if (profileSettings.flush_volumes_matrix) {
-      const filamentCount = Array.isArray(profileSettings.filament_colour)
-        ? profileSettings.filament_colour.length
+    if (sanitizedProfile.flush_volumes_matrix) {
+      const filamentCount = Array.isArray(sanitizedProfile.filament_colour)
+        ? sanitizedProfile.filament_colour.length
         : 1
-      const headsCount = Array.isArray(profileSettings.flush_multiplier)
-        ? profileSettings.flush_multiplier.length
+      const headsCount = Array.isArray(sanitizedProfile.flush_multiplier)
+        ? sanitizedProfile.flush_multiplier.length
         : 1
       const expectedSize = filamentCount * filamentCount * headsCount
-      const actualSize = Array.isArray(profileSettings.flush_volumes_matrix)
-        ? profileSettings.flush_volumes_matrix.length
+      const actualSize = Array.isArray(sanitizedProfile.flush_volumes_matrix)
+        ? sanitizedProfile.flush_volumes_matrix.length
         : 0
       if (actualSize !== expectedSize) {
         logger.debug(
           `[3MF] Removing inconsistent flush_volumes_matrix: expected=${expectedSize}, actual=${actualSize}`
         )
-        delete profileSettings.flush_volumes_matrix
+        delete sanitizedProfile.flush_volumes_matrix
       }
     }
 
@@ -194,22 +224,22 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
       `[3MF] Copied input to safe path: ${safeInputPath} (Size: ${fs.statSync(safeInputPath).size})`
     )
 
+    if (fileObj) {
+      try { await fs.promises.unlink(inputPath) } catch { /* ignore */ }
+    }
+
     try {
-      orca.setLoggingSilenced(true)
-      let res: any
-      try {
-        res = await orca.slice({
+      const res = await withSilencedLogging(orca, () =>
+        orca.slice({
           input: safeInputPath,
           output: outPath,
           plate: data.plate,
-          profile: profileSettings,
-          options: Object.keys(finalOptions).length > 0 ? finalOptions : undefined,
+          profile: sanitizedProfile,
+          options: Object.keys(sanitizedOptions).length > 0 ? sanitizedOptions : undefined,
           center: true,
           autoRealignIfNeeded: true,
         })
-      } finally {
-        orca.setLoggingSilenced(false)
-      }
+      )
       output = res.output
 
       usedOptions = (res as any)?.usedOptions
@@ -218,19 +248,17 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
       filamentUsedGrams = (res as any)?.filamentUsedGrams
     } catch (err: any) {
       // 1. Log everything we know about the error for debugging
-      const msg = String(err?.message ?? err ?? '')
-      const details = String(err?.errorDetails ?? err?.error_details ?? '')
+      const errObj = err instanceof Error ? err : (typeof err === 'string' ? new Error(err) : new Error(String(err ?? 'Slice failed')))
+      const msg = errObj.message || 'Slice failed'
+      const details = String((err as any)?.errorDetails || (err as any)?.error_details || '')
       logger.error('[3MF] Slice failed. input=%s plate=%s msg="%s" details="%s"',
         safeInputPath, data.plate ?? 'all', msg, details)
       if (err?.stack) logger.error('[3MF] Stack: %s', err.stack)
 
       const lower = msg.toLowerCase()
-      const lowerDetails = details.toLowerCase()
 
       // 2. Erro de elementos fora da area de impressao
       if (
-        lower.includes('fora da área') ||
-        lower.includes('fora da area') ||
         lower.includes('outside') ||
         lower.includes('out of bounds') ||
         lower.includes('does not fit')
@@ -238,17 +266,7 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
         throw new BadRequest(msg, { code: 'OBJECTS_OUT_OF_BOUNDS' })
       }
 
-      // 3. Overrides invalidas
-      if (
-        lower.includes('unknown') ||
-        lower.includes('invalid') ||
-        lower.includes('unrecognized') ||
-        lower.includes('failed to set')
-      ) {
-        throw new BadRequest(`Invalid override option(s): ${msg}`)
-      }
-
-      // 4. SlicingErrors — erros lancados por SlicingError/SlicingErrors do OrcaSlicer.
+      // 3. SlicingErrors — erros lancados por SlicingError/SlicingErrors do OrcaSlicer.
       //    Agora o addon extrai as mensagens reais via reinterpret_cast do layout em memoria
       //    (contorno para duplicacao de typeinfo entre liblibslic3r.a e orcacli_core).
       //    Padroes conhecidos (GCode.cpp, Print.cpp, PrintObjectSlice.cpp):
@@ -280,6 +298,16 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
           : 'the model'
         logger.warn('[3MF] Slicing error for %s: %s', hint, msg)
         throw new BadRequest(msg, { code: 'SLICING_ERROR', originalError: msg })
+      }
+
+      // 4. Overrides invalidas
+      if (
+        lower.includes('unknown') ||
+        lower.includes('invalid') ||
+        lower.includes('unrecognized') ||
+        lower.includes('failed to set')
+      ) {
+        throw new BadRequest(`Invalid override option(s): ${msg}`)
       }
 
       // 6. Falha na exportacao do gcode
@@ -337,6 +365,10 @@ export class Slicer3MfService<ServiceParams extends Slicer3MfParams = Slicer3MfP
       )
     }
     // const dataBase64 = content.toString('base64')
+
+    // Clean up temporary files
+    try { await fs.promises.unlink(safeInputPath) } catch { /* ignore */ }
+    try { await fs.promises.unlink(outPath) } catch { /* ignore */ }
 
     return {
       id: randomUUID(),

@@ -33,10 +33,18 @@ export const slicerStlDataSchema = Type.Object(
     // Opcional: nome do campo multipart (se aplicável). Padrão: "file"
     field: Type.Optional(Type.String()),
     // Opcional: plate quando input for .3mf
-    plate: Type.Optional(Type.Number({ minimum: 1 })),
+    plate: Type.Optional(Type.Integer({ minimum: 1 })),
     // Opcional: overrides de configuração (coerção p/ string no addon)
     options: Type.Optional(
-      Type.Record(Type.String(), Type.Union([Type.String(), Type.Number(), Type.Boolean()]))
+      Type.Record(
+        Type.String(),
+        Type.Union([
+          Type.String(),
+          Type.Number(),
+          Type.Boolean(),
+          Type.Array(Type.Union([Type.String(), Type.Number(), Type.Boolean()]))
+        ])
+      )
     ),
     // Opcional: configuracao completa via JSON (tem precedencia sobre options e profiles)
     // Permite enviar todas as configuracoes de impressora/filamento/processo como JSON

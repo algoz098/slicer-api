@@ -1,0 +1,25 @@
+{
+  "rounds_13_15": {
+    "round_13": {
+      "findings": [
+        {"id": "R13-1", "severity": "MEDIUM", "file": "addon.cc", "line": 254, "bug": "Null byte injection — c_str() trunca após \\0, config values silenciosamente corrompidos", "status": "fixed"},
+        {"id": "R13-2", "severity": "HIGH", "file": "addon.cc", "line": 593, "bug": "NaN/Infinity propagam do JS até libslic3r — G-code com coordenadas NaN", "status": "fixed"},
+        {"id": "R13-3", "severity": "MEDIUM", "file": "addon.cc", "line": 387, "bug": "InfoWork raw new vaza em N-API failure paths", "status": "fixed"},
+        {"id": "R13-4", "severity": "VERIFY", "scope": "cross-file", "bug": "Verificação cross-file: ALL CLEAN — sem inconsistências", "status": "verified"}
+      ],
+      "fixes_applied": 3
+    },
+    "round_14": {
+      "findings": [],
+      "fixes_applied": 0,
+      "note": "Fixes da R13 aplicados via general agents"
+    },
+    "round_15": {
+      "findings": [
+        {"id": "R15-1", "severity": "MEDIUM", "file": "stl.class.ts", "line": 146, "bug": "STL error handler sem classificação de slicing errors (gap vs 3MF)", "status": "fixed"},
+        {"id": "R15-2", "severity": "LOW", "file": "3mf.class.ts", "line": 247, "bug": "Variável lowerDetails declarada mas nunca usada", "status": "fixed"}
+      ],
+      "fixes_applied": 2
+    }
+  }
+}

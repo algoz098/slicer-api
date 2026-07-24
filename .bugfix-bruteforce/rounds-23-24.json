@@ -1,0 +1,4 @@
+{
+  "round_23": {"findings":5,"fixes":5,"highlights":["Path traversal bypass /tmp2","GetLastError overwrite","dup2 permanent stdout loss"]},
+  "round_24": {"findings":9,"fixes":0,"highlights":["G-code OOM (no size limit)","bed_temp_key_for btDefault drop","6 ConfigManager bugs (non-deterministic, leak, stale state, BBL hardcode)"]}
+}

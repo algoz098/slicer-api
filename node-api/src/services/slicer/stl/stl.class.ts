@@ -8,10 +8,10 @@ import { randomUUID } from 'node:crypto'
 import type { Application } from '../../../declarations'
 import type { SlicerStl, SlicerStlData, SlicerStlPatch, SlicerStlQuery } from './stl.schema'
 import { BadRequest } from '@feathersjs/errors'
+import { sanitizeBblGcodeTemplates } from '../3mf/gcode-sanitizer'
+import { withSilencedLogging } from '../logging-guard'
 
 export type { SlicerStl, SlicerStlData, SlicerStlPatch, SlicerStlQuery }
-
-// O addon e carregado via app.get('orca') injetado pelo src/orca.ts
 
 export interface SlicerStlServiceOptions {
   app: Application
@@ -79,6 +79,22 @@ export class SlicerStlService<ServiceParams extends SlicerStlParams = SlicerStlP
       originalFilename = fileObj.originalFilename || fileObj.name || fileObj.filename || originalFilename
     }
 
+    // Security: if filePath is provided directly (not from upload), restrict to tmpdir
+    if (inputPath && !fileObj) {
+      let resolved: string
+      try {
+        resolved = fs.realpathSync(path.resolve(inputPath))
+      } catch {
+        throw new BadRequest('Input file not found or not accessible')
+      }
+      const tmpDir = os.tmpdir()
+      const prefix = tmpDir.endsWith(path.sep) ? tmpDir : tmpDir + path.sep
+      if (!resolved.startsWith(prefix)) {
+        throw new BadRequest('filePath must be within the temp directory or use multipart upload')
+      }
+      inputPath = resolved
+    }
+
     if (!inputPath) {
       throw new Error('Nenhum arquivo recebido. Envie um multipart field "file" ou informe "filePath".')
     }
@@ -100,11 +116,16 @@ export class SlicerStlService<ServiceParams extends SlicerStlParams = SlicerStlP
     // - A configuracao completa e passada via `options` em cada chamada de slice
     // - O addon usa FullPrintConfig::defaults() como fallback
 
-    // Mescla options e config, onde options tem precedencia maxima
     // Precedencia: options (explicit overrides) > config (base profile) > defaults
     const baseOptions = (data as any).options ?? {}
     const configOverrides = (data as any).config ?? {}
-    const finalOptions = { ...configOverrides, ...baseOptions }
+
+    const sanitizedConfig = Object.keys(configOverrides).length > 0
+      ? sanitizeBblGcodeTemplates({ ...configOverrides })
+      : configOverrides
+    const sanitizedOptions = Object.keys(baseOptions).length > 0
+      ? sanitizeBblGcodeTemplates({ ...baseOptions })
+      : baseOptions
 
     // Guarda as chaves de options para validacao posterior
     const optionsKeys = new Set(Object.keys(baseOptions))
@@ -115,27 +136,45 @@ export class SlicerStlService<ServiceParams extends SlicerStlParams = SlicerStlP
     let estimatedTimeSec: number | undefined
     let filamentUsedGrams: number | undefined
     try {
-      orcaAny.setLoggingSilenced(true)
-      let res: any
-      try {
-        res = await orcaAny.slice({
+      const res = await withSilencedLogging(orcaAny, () =>
+        orcaAny.slice({
           input: inputPath,
           output: outPath,
           plate: data.plate,
-          options: finalOptions,
+          profile: Object.keys(sanitizedConfig).length > 0 ? sanitizedConfig : undefined,
+          options: Object.keys(sanitizedOptions).length > 0 ? sanitizedOptions : undefined,
           center: true,
           autoRealignIfNeeded: true
         })
-      } finally {
-        orcaAny.setLoggingSilenced(false)
-      }
+      )
       output = res.output
       ignoredOptions = res.ignoredOptions ?? []
       estimatedTimeSec = res.estimatedTimeSec
       filamentUsedGrams = res.filamentUsedGrams
     } catch (err: any) {
-      const msg = String(err?.message ?? err ?? '')
+      const rawMsg = String(err?.message ?? err ?? '')
+      const msg = (rawMsg && rawMsg !== 'null') ? rawMsg : 'Slice failed'
       const lower = msg.toLowerCase()
+      // SlicingErrors — erros do OrcaSlicer engine
+      const knownSlicingErrorPatterns = [
+        'slicing failed: errors',
+        'slicing errors',
+        'slicingerrors',
+        'slicing_error',
+        'empty initial layer',
+        "can't be printed",
+        'no object can be printed',
+        'the print is empty',
+        'no layers were detected',
+        'levitating objects',
+        'does not fit',
+        'outside',
+        'out of bounds'
+      ]
+      const isSlicingError = knownSlicingErrorPatterns.some(p => lower.includes(p))
+      if (isSlicingError) {
+        throw new BadRequest(msg, { code: 'SLICING_ERROR', originalError: msg })
+      }
       if (
         lower.includes('unknown') ||
         lower.includes('invalid') ||
@@ -156,6 +195,12 @@ export class SlicerStlService<ServiceParams extends SlicerStlParams = SlicerStlP
     }
 
     const gcode = await fs.promises.readFile(output, 'utf8')
+
+    // Clean up temporary files
+    try { await fs.promises.unlink(outPath) } catch { /* ignore cleanup errors */ }
+    if (fileObj) {
+      try { await fs.promises.unlink(inputPath) } catch { /* ignore */ }
+    }
 
     return {
       id: randomUUID(),

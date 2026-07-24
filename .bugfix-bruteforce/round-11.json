@@ -1,0 +1,12 @@
+{
+  "round": 11,
+  "date": "2026-07-21",
+  "findings": [
+    {"id": "R11-1", "severity": "HIGH", "file": "addon.cc", "line": 254, "bug": "User resourcesPath ignorado — engine auto-inicializado com nullptr antes do path do usuário", "status": "fixed"},
+    {"id": "R11-2", "severity": "HIGH", "file": "SliceEngine.cpp", "line": 228, "bug": "Bed temperature descartado silenciosamente para bed types não reconhecidos", "status": "fixed"},
+    {"id": "R11-3", "severity": "HIGH", "file": "AddonCore.cpp", "line": 754, "bug": "raw_bounding_box() retorna union de TODAS as instâncias — posicionamento errado", "status": "fixed"},
+    {"id": "R11-4", "severity": "HIGH", "file": "CMakeLists.txt", "line": 421, "bug": "50+ fallback paths hardcoded 'arm64' — quebra builds x64", "status": "fixed"}
+  ],
+  "files_changed": 4,
+  "fixes_applied": 4
+}

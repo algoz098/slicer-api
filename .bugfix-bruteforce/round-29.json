@@ -1,0 +1,8 @@
+{
+  "round":29,"findings":[
+    {"id":"R29-1","severity":"HIGH","file":"stl+3mf+model-info","bug":"realpathSync calculado mas DESCARTADO — TOCTOU symlink race ainda explorável","status":"fixed"},
+    {"id":"R29-2","severity":"HIGH","file":"klipper-client.js","bug":"Timeout 30s aborta upload de GCode grande + temp file leak","status":"known_issue"},
+    {"id":"R29-3","severity":"HIGH","file":"Makefile+Dockerfile","bug":"build-all/push-all missing addon targets + x64 hardcode","status":"fixed"},
+    {"id":"R29-4","severity":"HIGH","file":"build scripts","bug":"10 bugs em scripts de build (CI quebrado, versões erradas, command injection)","status":"known_issue"}
+  ],"files_changed":5,"fixes_applied":3
+}

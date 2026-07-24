@@ -1,0 +1,12 @@
+{
+  "round": 22,
+  "findings": [
+    {"id":"R22-1","severity":"MEDIUM","file":"addon.cc","bug":"Sem static_assert para ABI struct layout — divergência silenciosa","status":"fixed"},
+    {"id":"R22-2","severity":"HIGH","file":"addon.cc","bug":"std::bad_alloc do vector::emplace_back no contexto N-API → process kill","status":"known_issue"},
+    {"id":"R22-3","severity":"HIGH","file":"AddonCore.cpp","bug":"3MF embedded change_filament_gcode bypassa BBL sanitizer","status":"known_issue"},
+    {"id":"R22-4","severity":"MEDIUM","file":"addon.cc","bug":"double-to-int cast UB para valores fora de [INT_MIN,INT_MAX]","status":"fixed"},
+    {"id":"R22-5","severity":"MEDIUM","file":"3mf.class.ts","bug":"3MF sem validação estrutural — aceita ZIPs não-3MF","status":"known_issue"}
+  ],
+  "files_changed": 1,
+  "fixes_applied": 2
+}

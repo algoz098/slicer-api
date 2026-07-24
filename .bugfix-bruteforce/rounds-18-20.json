@@ -1,0 +1,5 @@
+{
+  "round_18": {"findings": 4, "fixes": 4, "highlights": ["model-info sandbox", "graceful shutdown", "errorHandler order", "orca.ts require safety"]},
+  "round_19": {"findings": 5, "fixes": 0, "highlights": ["Klipper never exported (CRITICAL)", "coerceValue scientific notation", "3 cross-service inconsistencies"]},
+  "round_20": {"findings": 3, "fixes": 3, "highlights": ["index.js Klipper attach fix", "model-info ref-counted logging", "CMake x64→${ORCASLICER_ARCH}"]}
+}

@@ -4,8 +4,12 @@
 #include <vector>
 #include <memory>
 #include <mutex>
+#include <atomic>
 
 #include <cstdlib>
+#include <cstdint>
+#include <cmath>
+#include <limits>
 
 #include <cstring>
 #include <filesystem>
@@ -13,8 +17,6 @@
   #include <windows.h>
 #else
   #include <dlfcn.h>
-  #include <unistd.h>
-  #include <fcntl.h>
 #endif
 #include <cstdio>
 #include <chrono>
@@ -40,58 +42,13 @@ static bool addon_is_silent() {
 
 #define ADDON_DEBUGF(...) do { if (!addon_is_silent()) { std::fprintf(stderr, __VA_ARGS__); std::fflush(stderr);} } while(0)
 
-// Early stdio silencer (works even before engine is loaded)
-namespace {
-  static bool s_stdio_silenced = false;
-  static std::streambuf* s_orig_cout = nullptr;
-  static std::streambuf* s_orig_cerr = nullptr;
-  static std::ofstream   s_devnull_stream;
-#if defined(_WIN32)
-  static const char* kDevNull = "NUL";
-#else
-  static int             s_saved_stdout = -1;
-  static int             s_saved_stderr = -1;
-  static int             s_devnull_fd   = -1;
-  static const char* kDevNull = "/dev/null";
-#endif
-
-  static void toggle_stdio_silenced(bool silent) {
-    if (silent == s_stdio_silenced) return;
-    if (silent) {
-      try {
-        if (!s_devnull_stream.is_open()) s_devnull_stream.open(kDevNull);
-      } catch (...) {}
-#if !defined(_WIN32)
-      if (s_devnull_fd < 0) { s_devnull_fd = ::open(kDevNull, O_WRONLY); }
-#endif
-      if (!s_orig_cout) s_orig_cout = std::cout.rdbuf();
-      if (!s_orig_cerr) s_orig_cerr = std::cerr.rdbuf();
-      try { std::cout.rdbuf(s_devnull_stream.rdbuf()); } catch (...) {}
-      try { std::cerr.rdbuf(s_devnull_stream.rdbuf()); } catch (...) {}
-#if !defined(_WIN32)
-      if (s_saved_stdout < 0) s_saved_stdout = ::dup(STDOUT_FILENO);
-      if (s_saved_stderr < 0) s_saved_stderr = ::dup(STDERR_FILENO);
-      if (s_devnull_fd >= 0) {
-        ::dup2(s_devnull_fd, STDOUT_FILENO);
-        ::dup2(s_devnull_fd, STDERR_FILENO);
-      }
-#endif
-      s_stdio_silenced = true;
-    } else {
-      if (s_orig_cout) { try { std::cout.rdbuf(s_orig_cout); } catch (...) {} }
-      if (s_orig_cerr) { try { std::cerr.rdbuf(s_orig_cerr); } catch (...) {} }
-#if !defined(_WIN32)
-      if (s_saved_stdout >= 0) { ::dup2(s_saved_stdout, STDOUT_FILENO); ::close(s_saved_stdout); s_saved_stdout = -1; }
-      if (s_saved_stderr >= 0) { ::dup2(s_saved_stderr, STDERR_FILENO); ::close(s_saved_stderr); s_saved_stderr = -1; }
-#endif
-      s_stdio_silenced = false;
-    }
-  }
-}
 
 // Thin addon will dlopen the engine library at runtime; no direct core linkage.
 static std::mutex g_mutex; // serialize heavy operations
 static std::string g_current_resources; // track current resourcesPath for persistent sandbox
+
+static constexpr int MAX_PENDING_WORK = 10;
+static std::atomic<int> s_pending_work_count{0};
 
 
 #define NAPI_CALL(env, call)                                                     \
@@ -127,6 +84,11 @@ typedef struct { const char* filename; uint32_t object_count; uint32_t triangle_
 // key/value override
 typedef struct { const char* key; const char* value; } orcacli_kv;
 typedef struct { const char* input_file; const char* output_file; const char* config_file; const char* preset_name; int32_t plate_index; bool verbose; bool dry_run; bool center_on_bed; bool auto_realign_if_needed; const orcacli_kv* profile; int32_t profile_count; const orcacli_kv* overrides; int32_t overrides_count; } orcacli_slice_params;
+
+static_assert(sizeof(orcacli_operation_result) == 40, "ABI: orcacli_operation_result size mismatch with EngineAPI.hpp");
+static_assert(sizeof(orcacli_model_info) == 40, "ABI: orcacli_model_info size mismatch with EngineAPI.hpp");
+static_assert(sizeof(orcacli_slice_params) == 72, "ABI: orcacli_slice_params size mismatch with EngineAPI.hpp");
+static_assert(sizeof(orcacli_kv) == sizeof(const char*) * 2, "ABI: orcacli_kv must be two pointers");
 
 typedef orcacli_handle       (*PF_orcacli_create)();
 typedef void                 (*PF_orcacli_destroy)(orcacli_handle);
@@ -217,11 +179,19 @@ static bool ensure_engine_loaded(std::string* err_out) {
   for (const auto& p : candidates) {
 #if defined(_WIN32)
     g_ffi.lib = (void*)LoadLibraryA(p.c_str());
+    DWORD err = GetLastError();
     ADDON_DEBUGF("DEBUG: [addon] ensure_engine_loaded: try '%s' => %p (win)\n", p.c_str(), g_ffi.lib);
     if (g_ffi.lib) break;
-    last_err = nullptr; last_path = p;
+    static std::string win_last_err;
+    if (err != 0) {
+      win_last_err = "Windows error " + std::to_string(err);
+      last_err = win_last_err.c_str();
+    } else {
+      last_err = nullptr;
+    }
+    last_path = p;
 #else
-    g_ffi.lib = dlopen(p.c_str(), RTLD_NOW | RTLD_GLOBAL);
+    g_ffi.lib = dlopen(p.c_str(), RTLD_NOW);
     const char* dlerr = g_ffi.lib ? nullptr : dlerror();
     ADDON_DEBUGF("DEBUG: [addon] ensure_engine_loaded: try '%s' => %p%s%s\n", p.c_str(), g_ffi.lib, dlerr?" err=":"", dlerr?dlerr:"");
     if (g_ffi.lib) break;
@@ -289,42 +259,29 @@ static bool ensure_engine_loaded(std::string* err_out) {
     dlclose(g_ffi.lib); g_ffi = FFI{}; return false;
 #endif
   }
-
-  // Auto-initialize the engine after creation to ensure AddonCore is ready for use
-  // This allows slice() to work without requiring an explicit initialize() call
-  if (g_ffi.initialize) {
-    ADDON_DEBUGF("DEBUG: [addon] ensure_engine_loaded: auto-initializing engine...\n");
-    auto r = g_ffi.initialize(g_ffi.inst, nullptr);  // nullptr = use default resources path
-    ADDON_DEBUGF("DEBUG: [addon] ensure_engine_loaded: initialize returned success=%d msg_ptr=%p\n", (int)r.success, (void*)r.message);
-    if (!r.success) {
-      std::string msg = "Auto-initialization failed";
-      if (r.message) { msg += ": "; msg += r.message; }
-      if (r.error_details) { msg += " — "; msg += r.error_details; }
-      if (err_out) *err_out = msg;
-      // Clean up on failure
-      if (g_ffi.destroy) g_ffi.destroy(g_ffi.inst);
-#if defined(_WIN32)
-      FreeLibrary((HMODULE)g_ffi.lib); g_ffi = FFI{}; return false;
-#else
-      dlclose(g_ffi.lib); g_ffi = FFI{}; return false;
-#endif
-    }
-    ADDON_DEBUGF("DEBUG: [addon] ensure_engine_loaded: auto-initialization successful\n");
-  }
-
   return true;
 }
+
+static constexpr size_t MAX_STRING_BYTES = 64 * 1024 * 1024; // 64 MB
 
 static std::string get_string(napi_env env, napi_value v) {
   // TEST ONLY: Avoid NAPI_CALL in helpers that don't return napi_value; handle errors locally.
   size_t len = 0;
   napi_status st = napi_get_value_string_utf8(env, v, nullptr, 0, &len);
   if (st != napi_ok) { napi_throw_type_error(env, nullptr, "expected string"); return std::string(); }
+  if (len > MAX_STRING_BYTES) {
+    napi_throw_range_error(env, nullptr, "String argument exceeds maximum length (64 MB)");
+    return std::string();
+  }
   // Allocate len+1 to accommodate the N-API null terminator, then shrink to actual length.
   std::string s; s.resize(len + 1);
   size_t written = 0; st = napi_get_value_string_utf8(env, v, s.data(), s.size(), &written);
   if (st != napi_ok) { napi_throw_type_error(env, nullptr, "failed to read string"); return std::string(); }
   if (written <= s.size()) s.resize(written);
+  if (s.find('\0') != std::string::npos) {
+    napi_throw_error(env, nullptr, "String argument contains null byte");
+    return std::string();
+  }
   return s;
 }
 
@@ -341,7 +298,6 @@ static napi_value Initialize(napi_env env, napi_callback_info info) {
   NAPI_CALL(env, napi_get_cb_info(env, info, &argc, args, &thisArg, &data));
 
   std::string resourcesPath;
-  bool verbose = false;
   bool strict = true; // API-only: default to strict no-autoload
 
   if (argc >= 1) {
@@ -351,8 +307,6 @@ static napi_value Initialize(napi_env env, napi_callback_info info) {
       bool has;
       NAPI_CALL(env, napi_has_named_property(env, args[0], "resourcesPath", &has));
       if (has) { NAPI_CALL(env, napi_get_named_property(env, args[0], "resourcesPath", &v)); resourcesPath = get_string(env, v); }
-      NAPI_CALL(env, napi_has_named_property(env, args[0], "verbose", &has));
-      if (has) { NAPI_CALL(env, napi_get_named_property(env, args[0], "verbose", &v)); (void)get_bool(env, v, &verbose); }
       NAPI_CALL(env, napi_has_named_property(env, args[0], "strict", &has));
       if (has) { NAPI_CALL(env, napi_get_named_property(env, args[0], "strict", &v)); (void)get_bool(env, v, &strict); }
     }
@@ -376,16 +330,15 @@ static napi_value Initialize(napi_env env, napi_callback_info info) {
     if (!r.success) {
       std::string msg = r.message ? r.message : "initialize failed";
       if (r.error_details) { msg += " — "; msg += r.error_details; }
-      // TEST ONLY: temporarily do NOT free the initialize result to avoid suspected double-free in engine/free_result.
-      // if (g_ffi.free_result) { g_ffi.free_result(&r); }
+      if (g_ffi.free_result) { g_ffi.free_result(&r); }
+      if (g_ffi.destroy) { g_ffi.destroy(g_ffi.inst); g_ffi.inst = nullptr; }
       napi_throw_error(env, nullptr, msg.c_str());
 
       return nullptr;
     }
     // After successful initialize, remember current resourcesPath
     g_current_resources = rp ? std::string(rp) : std::string();
-    // TEST ONLY: temporarily do NOT free the initialize result to avoid suspected double-free in engine/free_result.
-    // if (g_ffi.free_result) { g_ffi.free_result(&r); }
+    if (g_ffi.free_result) { g_ffi.free_result(&r); }
   }
 
   napi_value undef; NAPI_CALL(env, napi_get_undefined(env, &undef)); return undef;
@@ -396,6 +349,7 @@ static napi_value Version(napi_env env, napi_callback_info info) {
   std::lock_guard<std::mutex> lk(g_mutex);
   std::string err;
   if (!ensure_engine_loaded(&err)) { napi_throw_error(env, nullptr, err.c_str()); return nullptr; }
+  if (!g_ffi.version) { napi_throw_error(env, nullptr, "version not available in engine"); return nullptr; }
   const char* v = g_ffi.version();
   napi_value js; NAPI_CALL(env, napi_create_string_utf8(env, v?v:"", NAPI_AUTO_LENGTH, &js)); return js;
 }
@@ -408,9 +362,17 @@ static void InfoExecute(napi_env env, void* data) {
   std::lock_guard<std::mutex> lk(g_mutex);
   std::string err;
   if (!ensure_engine_loaded(&err)) { w->err = err; return; }
+  if (!g_ffi.load_model) { w->err = "load_model not available in engine"; return; }
   auto r = g_ffi.load_model(g_ffi.inst, w->file.c_str());
-  if (!r.success) { w->err = r.message ? r.message : "loadModel failed"; if (g_ffi.free_result) g_ffi.free_result(&r); return; }
+  if (!r.success) {
+    if (r.error_details && r.error_details[0]) w->err = r.error_details;
+    else if (r.message && r.message[0]) w->err = r.message;
+    else w->err = "loadModel failed";
+    if (g_ffi.free_result) g_ffi.free_result(&r);
+    return;
+  }
   if (g_ffi.free_result) g_ffi.free_result(&r);
+  if (!g_ffi.get_model_info) { w->err = "get_model_info not available in engine"; return; }
   auto mi = g_ffi.get_model_info(g_ffi.inst);
   if (mi.filename) w->info.filename = mi.filename;
   w->info.object_count = mi.object_count;
@@ -422,6 +384,7 @@ static void InfoExecute(napi_env env, void* data) {
 }
 
 static void InfoComplete(napi_env env, napi_status status, void* data) {
+  s_pending_work_count--;
   InfoWork* w = static_cast<InfoWork*>(data);
   if (status != napi_ok) { napi_value e; napi_create_string_utf8(env, "Async failure", NAPI_AUTO_LENGTH, &e); napi_reject_deferred(env, w->deferred, e); }
   else if (!w->err.empty()) { napi_value e; napi_create_string_utf8(env, w->err.c_str(), NAPI_AUTO_LENGTH, &e); napi_reject_deferred(env, w->deferred, e); }
@@ -444,11 +407,19 @@ static napi_value GetModelInfo(napi_env env, napi_callback_info info) {
   if (argc < 1) { napi_throw_type_error(env, nullptr, "file path is required"); return nullptr; }
   std::string file = get_string(env, args[0]);
 
-  auto* work = new InfoWork(); work->file = std::move(file);
+  int prev = s_pending_work_count.load();
+  if (prev >= MAX_PENDING_WORK) {
+    napi_throw_error(env, nullptr, "Too many pending slice requests. Please retry later.");
+    return nullptr;
+  }
+
+  auto work = std::make_unique<InfoWork>(); work->file = std::move(file);
   napi_value promise; NAPI_CALL(env, napi_create_promise(env, &work->deferred, &promise));
   napi_value resource_name; napi_create_string_utf8(env, "getModelInfo", NAPI_AUTO_LENGTH, &resource_name);
-  NAPI_CALL(env, napi_create_async_work(env, nullptr, resource_name, InfoExecute, InfoComplete, work, &work->work));
+  NAPI_CALL(env, napi_create_async_work(env, nullptr, resource_name, InfoExecute, InfoComplete, work.get(), &work->work));
   NAPI_CALL(env, napi_queue_async_work(env, work->work));
+  s_pending_work_count.fetch_add(1);
+  work.release();
   return promise;
 }
 
@@ -495,6 +466,7 @@ static void SliceExecute(napi_env env, void* data) {
       w->profile_kvs.push_back({ kv.first.c_str(), kv.second.c_str() });
     }
     p.profile = w->profile_kvs.data();
+    if (w->profile_kvs.size() > (size_t)INT32_MAX) { w->err = "Too many profile entries"; return; }
     p.profile_count = (int32_t)w->profile_kvs.size();
   } else {
     p.profile = nullptr;
@@ -508,11 +480,13 @@ static void SliceExecute(napi_env env, void* data) {
       w->kvs.push_back(ckv);
     }
     p.overrides = w->kvs.data();
+    if (w->kvs.size() > (size_t)INT32_MAX) { w->err = "Too many override entries"; return; }
     p.overrides_count = (int32_t)w->kvs.size();
   } else {
     p.overrides = nullptr;
     p.overrides_count = 0;
   }
+  if (!g_ffi.slice) { w->err = "slice not available in engine"; return; }
   if (w->p.verbose) { ADDON_DEBUGF("DEBUG: [addon] calling g_ffi.slice input='%s' plate=%d overrides=%d\n", p.input_file ? p.input_file : "(null)", p.plate_index, p.overrides_count); }
   auto r = g_ffi.slice(g_ffi.inst, &p);
   if (w->p.verbose) { ADDON_DEBUGF("DEBUG: [addon] returned from g_ffi.slice (success=%d)\n", (int)r.success); }
@@ -531,6 +505,7 @@ static void SliceExecute(napi_env env, void* data) {
 }
 
 static void SliceComplete(napi_env env, napi_status status, void* data) {
+  s_pending_work_count--;
   SliceWork* w = static_cast<SliceWork*>(data);
   if (status != napi_ok) { napi_value e; napi_create_string_utf8(env, "Async failure", NAPI_AUTO_LENGTH, &e); napi_reject_deferred(env, w->deferred, e); }
   else if (!w->err.empty()) { napi_value e; napi_create_string_utf8(env, w->err.c_str(), NAPI_AUTO_LENGTH, &e); napi_reject_deferred(env, w->deferred, e); }
@@ -543,39 +518,47 @@ static void SliceComplete(napi_env env, napi_status status, void* data) {
 
     // If the engine returned a JSON payload in message, parse and surface arrays
     if (!w->msg.empty()) {
-      napi_value global;
-      if (napi_get_global(env, &global) == napi_ok) {
-        napi_value JSON_obj; bool ok1 = (napi_get_named_property(env, global, "JSON", &JSON_obj) == napi_ok);
-        napi_value parse_fn; bool ok2 = ok1 && (napi_get_named_property(env, JSON_obj, "parse", &parse_fn) == napi_ok);
-        napi_valuetype tparse; bool ok3 = ok2 && (napi_typeof(env, parse_fn, &tparse) == napi_ok) && (tparse == napi_function);
-        if (ok3) {
-          napi_value arg;
-          if (napi_create_string_utf8(env, w->msg.c_str(), NAPI_AUTO_LENGTH, &arg) == napi_ok) {
-            napi_value parsed;
-            if (napi_call_function(env, JSON_obj, parse_fn, 1, &arg, &parsed) == napi_ok) {
-              // used -> usedOptions
-              bool has=false; napi_value arr;
-              if (napi_has_named_property(env, parsed, "used", &has) == napi_ok && has) {
-                if (napi_get_named_property(env, parsed, "used", &arr) == napi_ok) {
-                  bool isArr=false; if (napi_is_array(env, arr, &isArr) == napi_ok && isArr) {
-                    napi_set_named_property(env, obj, "usedOptions", arr);
+      try {
+        napi_value global;
+        if (napi_get_global(env, &global) == napi_ok) {
+          napi_value JSON_obj; bool ok1 = (napi_get_named_property(env, global, "JSON", &JSON_obj) == napi_ok);
+          napi_value parse_fn; bool ok2 = ok1 && (napi_get_named_property(env, JSON_obj, "parse", &parse_fn) == napi_ok);
+          napi_valuetype tparse; bool ok3 = ok2 && (napi_typeof(env, parse_fn, &tparse) == napi_ok) && (tparse == napi_function);
+          if (ok3) {
+            napi_value arg;
+            if (napi_create_string_utf8(env, w->msg.c_str(), NAPI_AUTO_LENGTH, &arg) == napi_ok) {
+              napi_value parsed;
+              napi_status parseStatus = napi_call_function(env, JSON_obj, parse_fn, 1, &arg, &parsed);
+              if (parseStatus == napi_ok) {
+                // used -> usedOptions
+                bool has=false; napi_value arr;
+                if (napi_has_named_property(env, parsed, "used", &has) == napi_ok && has) {
+                  if (napi_get_named_property(env, parsed, "used", &arr) == napi_ok) {
+                    bool isArr=false; if (napi_is_array(env, arr, &isArr) == napi_ok && isArr) {
+                      napi_set_named_property(env, obj, "usedOptions", arr);
+                    }
                   }
                 }
-              }
-              // ignored -> ignoredOptions
-              has=false;
-              if (napi_has_named_property(env, parsed, "ignored", &has) == napi_ok && has) {
-                if (napi_get_named_property(env, parsed, "ignored", &arr) == napi_ok) {
-                  bool isArr=false; if (napi_is_array(env, arr, &isArr) == napi_ok && isArr) {
-                    napi_set_named_property(env, obj, "ignoredOptions", arr);
+                // ignored -> ignoredOptions
+                has=false;
+                if (napi_has_named_property(env, parsed, "ignored", &has) == napi_ok && has) {
+                  if (napi_get_named_property(env, parsed, "ignored", &arr) == napi_ok) {
+                    bool isArr=false; if (napi_is_array(env, arr, &isArr) == napi_ok && isArr) {
+                      napi_set_named_property(env, obj, "ignoredOptions", arr);
+                    }
                   }
                 }
+              } else {
+                napi_value dummy;
+                napi_get_and_clear_last_exception(env, &dummy);
+                ADDON_DEBUGF("DEBUG: [addon] Failed to parse engine JSON metadata\n");
               }
             }
           }
         }
+      } catch (...) {
+        ADDON_DEBUGF("DEBUG: [addon] Exception while parsing engine JSON metadata\n");
       }
-
     }
 
 
@@ -593,7 +576,7 @@ static napi_value Slice(napi_env env, napi_callback_info info) {
   if (argc < 1) { napi_throw_type_error(env, nullptr, "params object is required"); return nullptr; }
   napi_value obj = args[0]; napi_valuetype t; NAPI_CALL(env, napi_typeof(env, obj, &t)); if (t != napi_object) { napi_throw_type_error(env, nullptr, "params must be object"); return nullptr; }
 
-  auto* work = new SliceWork();
+  auto work = std::make_unique<SliceWork>();
   // Robust getters: only read strings if value is actually a string; ignore undefined/null.
   auto set_str = [&](const char* key, std::string& dst){
     bool has=false; napi_value v; napi_has_named_property(env, obj, key, &has);
@@ -609,7 +592,7 @@ static napi_value Slice(napi_env env, napi_callback_info info) {
     if (has) {
       napi_get_named_property(env, obj, key, &v);
       napi_valuetype vt; if (napi_typeof(env, v, &vt) == napi_ok) {
-        if (vt == napi_number) { double d=0; napi_get_value_double(env, v, &d); dst = (int)d; }
+        if (vt == napi_number) { double d=0; napi_get_value_double(env, v, &d); if (!std::isfinite(d)) return; if (d < (double)std::numeric_limits<int>::min() || d > (double)std::numeric_limits<int>::max()) return; dst = static_cast<int>(d); }
       }
     }
   };
@@ -622,8 +605,6 @@ static napi_value Slice(napi_env env, napi_callback_info info) {
   set_bool("dryRun", work->p.dry_run);
   // Behavior flags
   set_bool("autoRealignIfNeeded", work->p.auto_realign_if_needed);
-  set_bool("auto_realign_if_needed", work->p.auto_realign_if_needed);
-  // Behavior flags
   set_bool("center", work->p.center_on_bed);
 
   // Collect options from params.options and params.custom
@@ -644,9 +625,9 @@ static napi_value Slice(napi_env env, napi_callback_info info) {
       } else if (vt2 == napi_boolean) {
         bool b=false; get_bool(env, v, &b); sval = b?"1":"0";
       } else if (vt2 == napi_number) {
-        double d=0; napi_get_value_double(env, v, &d); sval = std::to_string(d);
+        double d=0; napi_get_value_double(env, v, &d); if (!std::isfinite(d)) continue; sval = std::to_string(d);
       } else {
-        // Check if it's an array - serialize elements with semicolon separator
+        // Check if it's an array - serialize elements with comma separator
         bool is_array = false;
         napi_is_array(env, v, &is_array);
         if (is_array) {
@@ -661,13 +642,16 @@ static napi_value Slice(napi_env env, napi_callback_info info) {
             if (elem_type == napi_string) {
               elem_str = get_string(env, elem);
             } else if (elem_type == napi_number) {
-              double d = 0; napi_get_value_double(env, elem, &d); elem_str = std::to_string(d);
+              double d = 0; napi_get_value_double(env, elem, &d); if (!std::isfinite(d)) continue; elem_str = std::to_string(d);
             } else if (elem_type == napi_boolean) {
               bool b = false; get_bool(env, elem, &b); elem_str = b ? "1" : "0";
             } else {
               continue;
             }
-            if (!sval.empty()) sval += ";";
+            if (sval.size() + elem_str.size() + 1 > MAX_STRING_BYTES) {
+              continue;
+            }
+            if (!sval.empty()) sval += ",";
             sval += elem_str;
           }
         } else {
@@ -695,7 +679,7 @@ static napi_value Slice(napi_env env, napi_callback_info info) {
       } else if (vt2 == napi_boolean) {
         bool b=false; get_bool(env, v, &b); sval = b?"1":"0";
       } else if (vt2 == napi_number) {
-        double d=0; napi_get_value_double(env, v, &d); sval = std::to_string(d);
+        double d=0; napi_get_value_double(env, v, &d); if (!std::isfinite(d)) continue; sval = std::to_string(d);
       } else {
         bool is_array = false;
         napi_is_array(env, v, &is_array);
@@ -707,10 +691,13 @@ static napi_value Slice(napi_env env, napi_callback_info info) {
             napi_valuetype et; napi_typeof(env, elem, &et);
             std::string es;
             if (et == napi_string) es = get_string(env, elem);
-            else if (et == napi_number) { double d=0; napi_get_value_double(env, elem, &d); es=std::to_string(d); }
+            else if (et == napi_number) { double d=0; napi_get_value_double(env, elem, &d); if (!std::isfinite(d)) continue; es=std::to_string(d); }
             else if (et == napi_boolean) { bool b=false; get_bool(env, elem, &b); es=b?"1":"0"; }
             else continue;
-            if (!sval.empty()) sval += ";";
+            if (sval.size() + es.size() + 1 > MAX_STRING_BYTES) {
+              continue;
+            }
+            if (!sval.empty()) sval += ",";
             sval += es;
           }
         } else { continue; }
@@ -725,17 +712,38 @@ static napi_value Slice(napi_env env, napi_callback_info info) {
   // Also support "customSettings" as an alias for "custom" (used by weslicer API)
   napi_has_named_property(env, obj, "customSettings", &has); if (has) { napi_get_named_property(env, obj, "customSettings", &map); collect_kv(map); }
 
+  {
+    bool has_exception = false;
+    napi_is_exception_pending(env, &has_exception);
+    if (has_exception) {
+      napi_value ex;
+      napi_get_and_clear_last_exception(env, &ex);
+      work.reset();
+      napi_throw_error(env, nullptr, "Failed to process slice options");
+      return nullptr;
+    }
+  }
+
   if (work->p.verbose) {
     ADDON_DEBUGF("DEBUG: [addon] Slice() scheduling: input='%s' output='%s' plate=%d opts=%zu\n",
             work->p.input_file.c_str(), work->p.output_file.c_str(), work->p.plate_index, work->opts.size());
   }
 
-  if (work->p.input_file.empty()) { delete work; napi_throw_type_error(env, nullptr, "params.input is required"); return nullptr; }
+  if (work->p.input_file.empty()) { napi_throw_type_error(env, nullptr, "params.input is required"); return nullptr; }
+  if (work->p.output_file.empty()) { napi_throw_type_error(env, nullptr, "params.output is required"); return nullptr; }
+
+  int prev = s_pending_work_count.load();
+  if (prev >= MAX_PENDING_WORK) {
+    napi_throw_error(env, nullptr, "Too many pending slice requests. Please retry later.");
+    return nullptr;
+  }
 
   napi_value promise; NAPI_CALL(env, napi_create_promise(env, &work->deferred, &promise));
   napi_value resource_name; napi_create_string_utf8(env, "slice", NAPI_AUTO_LENGTH, &resource_name);
-  NAPI_CALL(env, napi_create_async_work(env, nullptr, resource_name, SliceExecute, SliceComplete, work, &work->work));
+  NAPI_CALL(env, napi_create_async_work(env, nullptr, resource_name, SliceExecute, SliceComplete, work.get(), &work->work));
   NAPI_CALL(env, napi_queue_async_work(env, work->work));
+  s_pending_work_count.fetch_add(1);
+  work.release();
   return promise;
 }
 
@@ -751,7 +759,10 @@ static napi_value LoadVendor(napi_env env, napi_callback_info info) {
   if (!g_ffi.load_vendor) { napi_throw_error(env, nullptr, "loadVendor not available in this engine build"); return nullptr; }
   auto r = g_ffi.load_vendor(g_ffi.inst, vendorId.c_str());
   if (!r.success) {
-    std::string msg = r.message ? r.message : "loadVendor failed";
+    std::string msg;
+    if (r.error_details && r.error_details[0]) msg = r.error_details;
+    else if (r.message && r.message[0]) msg = r.message;
+    else msg = "loadVendor failed";
     if (g_ffi.free_result) g_ffi.free_result(&r);
     napi_throw_error(env, nullptr, msg.c_str()); return nullptr;
   }
@@ -763,12 +774,23 @@ static napi_value LoadVendor(napi_env env, napi_callback_info info) {
 static napi_value Shutdown(napi_env env, napi_callback_info info) {
   (void)info;
   std::lock_guard<std::mutex> lk(g_mutex);
+  if (g_ffi.lib && g_ffi.set_logging_silenced) {
+    try { g_ffi.set_logging_silenced(false); } catch (...) {}
+  }
   if (g_ffi.inst && g_ffi.destroy) {
     try { g_ffi.destroy(g_ffi.inst); } catch (...) {}
     g_ffi.inst = nullptr;
   }
   g_current_resources.clear();
-  // Keep the library handle loaded; subsequent initialize can reuse it.
+  // Reset the FFI so ensure_engine_loaded will reload
+  if (g_ffi.lib) {
+#if defined(_WIN32)
+    FreeLibrary((HMODULE)g_ffi.lib);
+#else
+    dlclose(g_ffi.lib);
+#endif
+    g_ffi = FFI{};
+  }
   napi_value undef; napi_get_undefined(env, &undef); return undef;
 }
 
@@ -778,10 +800,6 @@ static napi_value SetLoggingSilenced(napi_env env, napi_callback_info info) {
   NAPI_CALL(env, napi_get_cb_info(env, info, &argc, args, &thisArg, &data));
   if (argc < 1) { napi_throw_type_error(env, nullptr, "silent boolean is required"); return nullptr; }
   bool silent=false; if (!get_bool(env, args[0], &silent)) { napi_throw_type_error(env, nullptr, "silent must be boolean"); return nullptr; }
-  std::lock_guard<std::mutex> lk(g_mutex);
-  // Early: silence stdio at the addon layer before touching the engine
-  toggle_stdio_silenced(silent);
-  // If engine is already loaded, propagate to engine too (do not force-load it)
   if (g_ffi.lib && g_ffi.set_logging_silenced) {
     try { g_ffi.set_logging_silenced(silent); } catch (...) {}
   }

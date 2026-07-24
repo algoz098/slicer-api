@@ -1,0 +1,12 @@
+{
+  "round": 12,
+  "date": "2026-07-21",
+  "findings": [
+    {"id": "R12-1", "severity": "CLEAN", "scope": "use-after-free", "bug": "Nenhum use-after-free/double-free encontrado — verificações de ciclo de vida corretas", "status": "verified"},
+    {"id": "R12-2", "severity": "HIGH", "file": "stl.schema.ts+3mf.schema.ts", "bug": "Injeção de temperaturas/velocidades sem bounds — valores perigosos no G-code", "status": "known_issue"},
+    {"id": "R12-3", "severity": "HIGH", "file": "ErrorHandler.cpp", "line": 9, "bug": "Data race em std::function estático sem mutex", "status": "fixed"},
+    {"id": "R12-4", "severity": "CRITICAL", "file": "app.ts", "line": 23, "bug": "Sem autenticação, rate limiting, ou file size caps — DoS trivial", "status": "fixed"}
+  ],
+  "files_changed": 2,
+  "fixes_applied": 2
+}

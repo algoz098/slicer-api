@@ -56,6 +56,10 @@ function resolveInheritance(
   const typeDir = type === 'machine' ? 'machine' : type
   const profilePath = path.join(root, vendor, typeDir, `${profileName}.json`)
 
+  if (!path.resolve(profilePath).startsWith(path.resolve(root))) {
+    return {}
+  }
+
   let profile = parseProfile(profilePath)
   if (!profile) {
     // Try to find by name in the index

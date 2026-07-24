@@ -1,0 +1,8 @@
+{
+  "round":28,"findings":[
+    {"id":"R28-1","severity":"HIGH","file":"addon.cc","bug":"Semicolons quebram arrays — só ConfigOptionStrings aceita ; — todos floats/ints truncados ao 1º elemento","status":"fixed"},
+    {"id":"R28-2","severity":"HIGH","file":"AddonCore.cpp","bug":"Config state leakage — settings 3MF persistem em slices STL subsequentes","status":"fixed"},
+    {"id":"R28-3","severity":"MEDIUM","file":"addon.cc","bug":"s_pending_work_count leak + TOCTOU race na fila","status":"fixed"},
+    {"id":"R28-4","severity":"MEDIUM","file":"addon.cc","bug":"Shutdown() não restaura logging — perda permanente de stdout","status":"fixed"}
+  ],"files_changed":2,"fixes_applied":4
+}

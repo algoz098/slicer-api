@@ -1,5 +1,6 @@
 #include "core/model/ModelIO.hpp"
 #include "core/util/Utilities.hpp"
+#include "utils/Logger.hpp"
 
 #if !HAVE_LIBSLIC3R
 #error "libslic3r is required. Placeholders are not allowed."
@@ -127,8 +128,8 @@ bool load_3mf_project(
         std::string msg = e.what();
         // Check if this is the "empty" error for a plate-filtered load
         if (plate_id > 0 && (msg.find("empty") != std::string::npos || msg.find("Empty") != std::string::npos)) {
-            std::cout << "WARN: [ModelIO] Plate " << plate_id
-                      << " returned empty model, retrying without plate filter..." << std::endl;
+            LOG_WARNING(std::string("WARN: [ModelIO] Plate ") + std::to_string(plate_id)
+                      + " returned empty model, retrying without plate filter...");
             // Reset state for retry
             config_substitutions = ConfigSubstitutionContext{ForwardCompatibilitySubstitutionRule::Enable};
             project_presets.clear();
@@ -148,10 +149,11 @@ bool load_3mf_project(
                 nullptr,
                 nullptr,
                 0); // plate_id = 0 loads all objects
-            std::cout << "INFO: [ModelIO] Retry succeeded, loaded "
-                      << loaded.objects.size() << " object(s) without plate filter" << std::endl;
+            LOG_INFO(std::string("INFO: [ModelIO] Retry succeeded, loaded ")
+                      + std::to_string(loaded.objects.size()) + " object(s) without plate filter");
         } else {
-            throw; // Re-throw non-empty errors
+            last_error = e.what();
+            throw;
         }
     }
 
@@ -165,9 +167,9 @@ bool load_3mf_project(
     DynamicPrintConfig raw_3mf_config;
     try {
         raw_3mf_config.apply(config, /*ignore_nonexistent=*/true);
-        std::cout << "DEBUG: [ModelIO] Captured raw 3MF config with " << raw_3mf_config.keys().size() << " keys" << std::endl;
+        LOG_DEBUG(std::string("DEBUG: [ModelIO] Captured raw 3MF config with ") + std::to_string(raw_3mf_config.keys().size()) + " keys");
     } catch (...) {
-        std::cout << "WARN: [ModelIO] Failed to capture raw 3MF config" << std::endl;
+        LOG_WARNING("WARN: [ModelIO] Failed to capture raw 3MF config");
     }
 
     // Capture project preset names
@@ -220,8 +222,8 @@ bool load_3mf_project(
         if (auto* cfg_gcode = config.opt<ConfigOptionString>("change_filament_gcode")) {
             saved_change_filament_gcode = cfg_gcode->value;
             if (!saved_change_filament_gcode.empty()) {
-                std::cout << "DEBUG: [ModelIO] Saved change_filament_gcode from 3MF ("
-                          << saved_change_filament_gcode.size() << " chars)" << std::endl;
+                LOG_DEBUG(std::string("DEBUG: [ModelIO] Saved change_filament_gcode from 3MF (")
+                          + std::to_string(saved_change_filament_gcode.size()) + " chars)");
             }
         }
     } catch (...) {
@@ -263,7 +265,7 @@ bool load_3mf_project(
                     std::string key;
                     while (std::getline(ss, key, ';')) if (!key.empty()) print_overrides_keys.push_back(key);
                     found = true;
-                    std::cout << "DEBUG: [ModelIO] Using different_settings_to_system with " << print_overrides_keys.size() << " keys" << std::endl;
+                    LOG_DEBUG(std::string("DEBUG: [ModelIO] Using different_settings_to_system with ") + std::to_string(print_overrides_keys.size()) + " keys");
                 }
             }
             if (!found) {
@@ -272,11 +274,11 @@ bool load_3mf_project(
                 // even when the 3MF was saved without marking them as "different from system"
                 if (!raw_3mf_config.keys().empty()) {
                     print_overrides_keys = raw_3mf_config.keys();
-                    std::cout << "DEBUG: [ModelIO] Using ALL raw 3MF config keys as overrides (" << print_overrides_keys.size() << " keys)" << std::endl;
+                    LOG_DEBUG(std::string("DEBUG: [ModelIO] Using ALL raw 3MF config keys as overrides (") + std::to_string(print_overrides_keys.size()) + " keys)");
                 } else {
                     auto dirty = preset_bundle.prints.current_different_from_parent_options(true);
                     print_overrides_keys.assign(dirty.begin(), dirty.end());
-                    std::cout << "DEBUG: [ModelIO] Using parent diff with " << print_overrides_keys.size() << " keys" << std::endl;
+                    LOG_DEBUG(std::string("DEBUG: [ModelIO] Using parent diff with ") + std::to_string(print_overrides_keys.size()) + " keys");
                 }
             }
         } catch (...) {}
@@ -299,12 +301,12 @@ bool load_3mf_project(
             // Prefer raw 3MF config value, fallback to current config
             if (const auto* opt = raw_3mf_config.optptr(k)) {
                 print_cfg_overrides.set_key_value(k, opt->clone());
-                std::cout << "DEBUG: [ModelIO] print_cfg_overrides[" << k << "] = " << opt->serialize() << " (from raw 3MF)" << std::endl;
+                LOG_DEBUG(std::string("  override: ") + k + " (value omitted) (from raw 3MF)");
             } else if (const auto* opt = config.optptr(k)) {
                 print_cfg_overrides.set_key_value(k, opt->clone());
-                std::cout << "DEBUG: [ModelIO] print_cfg_overrides[" << k << "] = " << opt->serialize() << " (from config)" << std::endl;
+                LOG_DEBUG(std::string("  override: ") + k + " (value omitted) (from config)");
             } else {
-                std::cout << "WARN: [ModelIO] Key '" << k << "' not found in raw 3MF config or config" << std::endl;
+                LOG_WARNING(std::string("WARN: [ModelIO] Key '") + k + "' not found in raw 3MF config or config");
             }
         }
 
@@ -335,7 +337,7 @@ bool load_3mf_project(
 
             PlateData* pd = plate_data_src[static_cast<size_t>(idx)];
             if (pd && !pd->config.empty()) {
-                std::cout << "DEBUG: [ModelIO] Merging plate_data.config (plate " << (idx + 1) << ") into print_cfg_overrides" << std::endl;
+                LOG_DEBUG(std::string("DEBUG: [ModelIO] Merging plate_data.config (plate ") + std::to_string(idx + 1) + ") into print_cfg_overrides");
 
                 // List of known plate-specific settings that should be merged
                 // These are settings stored in slice_info.config, not project_settings.config
@@ -357,12 +359,15 @@ bool load_3mf_project(
                             if (std::find(print_overrides_keys.begin(), print_overrides_keys.end(), key) == print_overrides_keys.end()) {
                                 print_overrides_keys.push_back(key);
                             }
-                            std::cout << "DEBUG: [ModelIO] print_cfg_overrides[" << key << "] = " << opt->serialize() << " (from plate_data.config)" << std::endl;
+                            LOG_DEBUG(std::string("  override: ") + key + " (value omitted) (from plate_data.config)");
                         }
                     }
                 }
             }
         }
+
+        // Use sanitized project snapshot as project_config (before wipe tower restoration)
+        preset_bundle.project_config = project_cfg_after_3mf;
 
         // Restore wipe tower into project_config
         try {
@@ -388,14 +393,14 @@ bool load_3mf_project(
             }
         } catch (...) {}
 
-        // Use sanitized project snapshot as project_config
-        preset_bundle.project_config = project_cfg_after_3mf;
-
         // Build working config robustly using safe_build_config to avoid hangs
         safe_build_config(preset_bundle, config);
     } catch (const std::exception& e) {
-        // Non-fatal: continue; slice() may enforce policies later
-        (void)e;
+        last_error = std::string("Config setup failed: ") + e.what();
+        return false;
+    } catch (...) {
+        last_error = "Config setup failed: unknown error";
+        return false;
     }
 
     // Enable multi-material settings if needed
@@ -433,31 +438,27 @@ bool load_3mf_project(
 
     try {
         has_project_embedded_presets = !project_presets.empty();
-        std::cout << "DEBUG: [ModelIO] About to call load_project_embedded_presets..." << std::endl;
+        LOG_DEBUG("DEBUG: [ModelIO] About to call load_project_embedded_presets...");
         (void)preset_bundle.load_project_embedded_presets(project_presets, ForwardCompatibilitySubstitutionRule::Enable);
-        std::cout << "DEBUG: [ModelIO] load_project_embedded_presets completed, building config..." << std::endl;
-        std::cout.flush();
+        LOG_DEBUG("DEBUG: [ModelIO] load_project_embedded_presets completed, building config...");
         // Refresh config using safe_build_config to avoid potential hangs
         safe_build_config(preset_bundle, config);
-        std::cout << "DEBUG: [ModelIO] config build completed" << std::endl;
-        std::cout.flush();
+        LOG_DEBUG("DEBUG: [ModelIO] config build completed");
         try {
             if (const ConfigOption *opt = preset_bundle.project_config.optptr("wipe_tower_x"))
                 config.set_key_value("wipe_tower_x", opt->clone());
             if (const ConfigOption *opt = preset_bundle.project_config.optptr("wipe_tower_y"))
                 config.set_key_value("wipe_tower_y", opt->clone());
-        } catch (...) {}
+        } catch (const std::exception &e) {
+            LOG_ERROR(std::string("Failed to load embedded presets: ") + e.what());
+        } catch (...) {
+            LOG_ERROR("Failed to load embedded presets: unknown error");
+        }
 
-        // Re-apply project-level overrides onto working config
-        for (const auto &k : project_overrides_keys)
-            if (const ConfigOption *opt = project_cfg_after_3mf.optptr(k))
-                config.set_key_value(k, opt->clone());
-    } catch (...) {}
-
-    std::cout << "DEBUG: [ModelIO] About to move loaded model to out_model..." << std::endl;
+    LOG_DEBUG("DEBUG: [ModelIO] About to move loaded model to out_model...");
     // Replace current model with loaded one
     out_model = std::move(loaded);
-    std::cout << "DEBUG: [ModelIO] load_3mf_project returning true" << std::endl;
+    LOG_DEBUG("DEBUG: [ModelIO] load_3mf_project returning true");
     return true;
 }
 

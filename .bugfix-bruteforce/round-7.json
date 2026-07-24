@@ -1,0 +1,15 @@
+{
+  "round": 7,
+  "date": "2026-07-21",
+  "findings": [
+    {"id": "R7-1", "severity": "HIGH", "file": "stl.class.ts", "line": 103, "bug": "STL mescla config+options em único campo options — quebra arquitetura de prioridade", "status": "fixed"},
+    {"id": "R7-2", "severity": "HIGH", "file": "stl.class.ts+3mf.class.ts", "line": 118, "bug": "setLoggingSilenced TOCTOU entre requests concorrentes", "status": "fixed"},
+    {"id": "R7-3", "severity": "MEDIUM", "file": "EngineAPI.cpp", "line": 50, "bug": "Double cleanup: shutdown() + ~Impl() destrutor chamam cleanup()", "status": "pending"},
+    {"id": "R7-4", "severity": "LOW", "file": "addon.cc", "line": 254, "bug": "g_ffi.inst dangling pointer após destroy() no error path", "status": "pending"},
+    {"id": "R7-5", "severity": "MEDIUM", "file": "addon.cc", "line": 168, "bug": "Windows: GetLastError() não capturado — diagnóstico de falha ausente", "status": "pending"},
+    {"id": "R7-6", "severity": "LOW", "file": "addon.cc", "line": 457, "bug": "Cast size_t → int32_t sem bounds check nos counts de profile/overrides", "status": "pending"}
+  ],
+  "files_changed": 2,
+  "fixes_applied": 2,
+  "pending": 4
+}

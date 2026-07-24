@@ -96,33 +96,55 @@ orcacli_operation_result orcacli_initialize(orcacli_handle h, const char* resour
     } catch (...) { /* ignore logging setup errors */ }
 #endif
 
-    Engine* e = static_cast<Engine*>(h);
-    auto res = e->core.initialize(resources_path ? std::string(resources_path) : std::string());
-    LOG_DEBUG(std::string("orcacli_initialize: success=") + (res.success ? "1" : "0") + " msg='" + res.message + "'");
+    try {
+        Engine* e = static_cast<Engine*>(h);
+        auto res = e->core.initialize(resources_path ? std::string(resources_path) : std::string());
+        LOG_DEBUG(std::string("orcacli_initialize: success=") + (res.success ? "1" : "0") + " msg='" + res.message + "'");
 
-    return make_result(res);
+        return make_result(res);
+    } catch (const std::exception& ex) {
+        LOG_ERROR(std::string("orcacli_initialize: exception: ") + ex.what());
+        return orcacli_operation_result{false, dup_cstr(ex.what()), nullptr};
+    } catch (...) {
+        LOG_ERROR("orcacli_initialize: unknown exception");
+        return orcacli_operation_result{false, dup_cstr("unknown error in initialize"), nullptr};
+    }
 }
 
 orcacli_operation_result orcacli_load_model(orcacli_handle h, const char* filename) {
-    if (!h || !filename) {
-        return orcacli_operation_result{false, dup_cstr("invalid args"), nullptr};
+    try {
+        if (!h || !filename) {
+            return orcacli_operation_result{false, dup_cstr("invalid args"), nullptr};
+        }
+        Engine* e = static_cast<Engine*>(h);
+        auto res = e->core.loadModel(filename);
+        return make_result(res);
+    } catch (const std::exception& ex) {
+        LOG_ERROR(std::string("orcacli_load_model: exception: ") + ex.what());
+        return orcacli_operation_result{false, dup_cstr(ex.what()), nullptr};
+    } catch (...) {
+        LOG_ERROR("orcacli_load_model: unknown exception");
+        return orcacli_operation_result{false, dup_cstr("unknown error in load_model"), nullptr};
     }
-    Engine* e = static_cast<Engine*>(h);
-    auto res = e->core.loadModel(filename);
-    return make_result(res);
 }
 
 orcacli_model_info orcacli_get_model_info(orcacli_handle h) {
     orcacli_model_info out{};
-    if (!h) return out;
-    Engine* e = static_cast<Engine*>(h);
-    auto mi = e->core.getModelInfo();
-    out.filename = dup_cstr(mi.filename);
-    out.object_count = (uint32_t)mi.object_count;
-    out.triangle_count = (uint32_t)mi.triangle_count;
-    out.volume = mi.volume;
-    out.bounding_box = dup_cstr(mi.bounding_box);
-    out.is_valid = mi.is_valid;
+    try {
+        if (!h) return out;
+        Engine* e = static_cast<Engine*>(h);
+        auto mi = e->core.getModelInfo();
+        out.filename = dup_cstr(mi.filename);
+        out.object_count = (uint32_t)mi.object_count;
+        out.triangle_count = (uint32_t)mi.triangle_count;
+        out.volume = mi.volume;
+        out.bounding_box = dup_cstr(mi.bounding_box);
+        out.is_valid = mi.is_valid;
+    } catch (const std::exception& ex) {
+        LOG_ERROR(std::string("orcacli_get_model_info: exception: ") + ex.what());
+    } catch (...) {
+        LOG_ERROR("orcacli_get_model_info: unknown exception");
+    }
     return out;
 }
 
@@ -139,73 +161,82 @@ orcacli_operation_result orcacli_slice(orcacli_handle h, const orcacli_slice_par
         " center_on_bed=" + (params->center_on_bed ? "1" : "0") +
         " auto_realign_if_needed=" + (params->auto_realign_if_needed ? "1" : "0"));
 
-    // DEBUG: raw override pointers as seen by the C API (helps diagnose FFI/layout issues)
-    try {
-        std::cout << "DEBUG [orcacli_slice]: raw_overrides_ptr=" << (const void*)params->overrides
-                  << " raw_overrides_count=" << params->overrides_count << std::endl;
-    } catch (...) {
-        // Logging must never break slicing; ignore any iostream issues
-    }
+    LOG_DEBUG(std::string("DEBUG [orcacli_slice]: raw_overrides_ptr=") +
+        std::to_string(reinterpret_cast<uintptr_t>(params->overrides)) +
+        " raw_overrides_count=" + std::to_string(params->overrides_count));
 
     if (params->verbose) {
         LOG_DEBUG(std::string("orcacli_slice: input='") + (params->input_file ? params->input_file : "(null)") +
                   "' plate=" + std::to_string(params->plate_index));
     }
 
-    Engine* e = static_cast<Engine*>(h);
-    AddonCore::SlicingParams p;
-    if (params->input_file)   p.input_file = params->input_file;
-    if (params->output_file)  p.output_file = params->output_file;
-    if (params->config_file)  p.config_file = params->config_file;
-    if (params->preset_name)  p.preset_name = params->preset_name;
-    p.plate_index = params->plate_index;
-    p.verbose = params->verbose;
-    p.dry_run = params->dry_run;
-    // Behavior flags
-    p.center_on_bed = params->center_on_bed;
-    p.auto_realign_if_needed = params->auto_realign_if_needed;
-    // Forward profile into SlicingParams.profile_settings (base profile, applied before 3MF)
-    if (params->profile && params->profile_count > 0) {
-        for (int32_t i = 0; i < params->profile_count; ++i) {
-            const orcacli_kv& kv = params->profile[i];
-            if (kv.key && kv.value)
-                p.profile_settings[std::string(kv.key)] = std::string(kv.value);
-        }
-    }
-    // Forward overrides into SlicingParams.custom_settings (explicit overrides, applied after 3MF)
-    if (params->overrides && params->overrides_count > 0) {
-        if (params->verbose) {
-            LOG_DEBUG(std::string("orcacli_slice: overrides_count=") + std::to_string(params->overrides_count));
-        }
-        for (int32_t i = 0; i < params->overrides_count; ++i) {
-            const orcacli_kv& kv = params->overrides[i];
-            if (kv.key && kv.value) {
-                if (params->verbose) {
-                    LOG_DEBUG(std::string("orcacli_slice: override[") + std::to_string(i) + "]: '" + kv.key + "'='" + kv.value + "'");
-                }
-                p.custom_settings[std::string(kv.key)] = std::string(kv.value);
+    try {
+        Engine* e = static_cast<Engine*>(h);
+        AddonCore::SlicingParams p;
+        if (params->input_file)   p.input_file = params->input_file;
+        if (params->output_file)  p.output_file = params->output_file;
+        if (params->config_file)  p.config_file = params->config_file;
+        if (params->preset_name)  p.preset_name = params->preset_name;
+        p.plate_index = params->plate_index;
+        p.verbose = params->verbose;
+        p.dry_run = params->dry_run;
+        // Behavior flags
+        p.center_on_bed = params->center_on_bed;
+        p.auto_realign_if_needed = params->auto_realign_if_needed;
+        // Forward profile into SlicingParams.profile_settings (base profile, applied before 3MF)
+        if (params->profile && params->profile_count > 0) {
+            for (int32_t i = 0; i < params->profile_count; ++i) {
+                const orcacli_kv& kv = params->profile[i];
+                if (kv.key && kv.value)
+                    p.profile_settings[std::string(kv.key)] = std::string(kv.value);
             }
         }
-    } else {
-        // Help debug scenarios where the caller believes overrides are present but the engine receives none.
-        try {
-            std::cout << "DEBUG [orcacli_slice]: overrides array is empty or null at engine boundary" << std::endl;
-        } catch (...) {}
+        // Forward overrides into SlicingParams.custom_settings (explicit overrides, applied after 3MF)
+        if (params->overrides && params->overrides_count > 0) {
+            if (params->verbose) {
+                LOG_DEBUG(std::string("orcacli_slice: overrides_count=") + std::to_string(params->overrides_count));
+            }
+            for (int32_t i = 0; i < params->overrides_count; ++i) {
+                const orcacli_kv& kv = params->overrides[i];
+                if (kv.key && kv.value) {
+                    if (params->verbose) {
+                        LOG_DEBUG(std::string("orcacli_slice: override[") + std::to_string(i) + "]: '" + kv.key + "'='" + kv.value + "'");
+                    }
+                    p.custom_settings[std::string(kv.key)] = std::string(kv.value);
+                }
+            }
+        } else {
+            LOG_DEBUG("DEBUG [orcacli_slice]: overrides array is empty or null at engine boundary");
+        }
+
+        auto res = e->core.slice(p);
+
+        // Log outcome so we can correlate native crashes vs. graceful errors
+        LOG_DEBUG(std::string("orcacli_slice[exit]: success=") + (res.success ? "1" : "0") +
+                  " message='" + res.message + "'");
+
+        return make_result(res);
+    } catch (const std::exception& ex) {
+        LOG_ERROR(std::string("orcacli_slice: exception: ") + ex.what());
+        return orcacli_operation_result{false, dup_cstr(ex.what()), nullptr};
+    } catch (...) {
+        LOG_ERROR("orcacli_slice: unknown exception");
+        return orcacli_operation_result{false, dup_cstr("unknown error in slice"), nullptr};
     }
-
-    auto res = e->core.slice(p);
-
-    // Log outcome so we can correlate native crashes vs. graceful errors
-    LOG_DEBUG(std::string("orcacli_slice[exit]: success=") + (res.success ? "1" : "0") +
-              " message='" + res.message + "'");
-
-    return make_result(res);
 }
 
 orcacli_operation_result orcacli_load_vendor(orcacli_handle h, const char* vendor_id) {
-    if (!h || !vendor_id) return orcacli_operation_result{false, dup_cstr("invalid args"), nullptr};
-    Engine* e = static_cast<Engine*>(h);
-    return make_result(e->core.loadVendor(vendor_id));
+    try {
+        if (!h || !vendor_id) return orcacli_operation_result{false, dup_cstr("invalid args"), nullptr};
+        Engine* e = static_cast<Engine*>(h);
+        return make_result(e->core.loadVendor(vendor_id));
+    } catch (const std::exception& ex) {
+        LOG_ERROR(std::string("orcacli_load_vendor: exception: ") + ex.what());
+        return orcacli_operation_result{false, dup_cstr(ex.what()), nullptr};
+    } catch (...) {
+        LOG_ERROR("orcacli_load_vendor: unknown exception");
+        return orcacli_operation_result{false, dup_cstr("unknown error in load_vendor"), nullptr};
+    }
 }
 
 #ifndef ORCACLI_VERSION_STRING

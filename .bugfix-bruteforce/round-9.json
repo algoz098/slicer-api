@@ -1,0 +1,14 @@
+{
+  "round": 9,
+  "date": "2026-07-21",
+  "findings": [
+    {"id": "R9-1", "severity": "HIGH", "file": "stl.class.ts+3mf.class.ts", "line": 17, "bug": "REGRESSÃO: silenceRefCount duplicado por módulo — contadores independentes quebram silencing concorrente", "status": "fixed"},
+    {"id": "R9-2", "severity": "MEDIUM", "file": "stl.class.ts", "line": 11, "bug": "STL service não sanitiza BBL G-code templates", "status": "fixed"},
+    {"id": "R9-3", "severity": "MEDIUM", "file": "3mf.class.ts", "line": 258, "bug": "errorDetails não-string crasha .toLowerCase() no error handler", "status": "fixed"},
+    {"id": "R9-4", "severity": "MEDIUM", "file": "stl.class.ts", "line": 17, "bug": "Self-review: stl ainda com withSilencedLogging local (falso positivo — já estava corrigido)", "status": "verified_clean"},
+    {"id": "R9-5", "severity": "MEDIUM", "file": "EngineAPI.cpp", "line": 166, "bug": "std::cout debug em orcacli_slice ignora silencing", "status": "fixed_in_R10"},
+    {"id": "R9-6", "severity": "LOW", "file": "addon.cc", "line": 601, "bug": "auto_realign_if_needed set_bool duplicado", "status": "fixed_in_R10"}
+  ],
+  "files_changed": 4,
+  "fixes_applied": 3
+}

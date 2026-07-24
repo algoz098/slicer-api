@@ -1,0 +1,20 @@
+{
+  "round": 10,
+  "date": "2026-07-21",
+  "findings": [
+    {"id": "R10-1", "severity": "MEDIUM", "file": "addon.cc", "line": 573, "bug": "SliceWork* vaza quando NAPI_CALL_VOID dispara early return nos lambdas collect_kv", "status": "fixed"},
+    {"id": "R10-2", "severity": "LOW", "file": "stl.class.ts+3mf.class.ts", "line": 116, "bug": "sanitizeBblGcodeTemplates muta objeto data do Feathers in-place", "status": "fixed"},
+    {"id": "R10-3", "severity": "MEDIUM", "file": "stl.class.ts", "line": 96, "bug": "STL service sem validação de tamanho de arquivo (gap vs 3MF)", "status": "known_issue"},
+    {"id": "R10-4", "severity": "MEDIUM", "file": "ModelIO.cpp", "line": 109, "bug": "Retry em load_3mf_project opera sobre config parcialmente corrompido", "status": "known_issue"},
+    {"id": "R10-5", "severity": "LOW", "file": "3mf.class.ts", "line": 178, "bug": "curr_bed_type hardcoded só no 3MF — assimetria com STL", "status": "known_issue"},
+    {"id": "R10-6", "severity": "LOW", "file": "AddonCore.cpp", "line": 149, "bug": "s_devnull_fd nunca fechado no un-silence — resource leak", "status": "known_issue"}
+  ],
+  "known_issues": [
+    "R10-3: STL file size validation — baixo risco, STL files são tipicamente <100MB",
+    "R10-4: ModelIO retry on corrupted config — requer refactor profundo do ModelIO",
+    "R10-5: curr_bed_type asymmetry — design choice, pode ser unificado no C++ layer",
+    "R10-6: s_devnull_fd leak — recurso mínimo, fechado no processo exit"
+  ],
+  "files_changed": 4,
+  "fixes_applied": 4
+}

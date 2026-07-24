@@ -1,18 +1,19 @@
 #include "ErrorHandler.hpp"
 #include "Logger.hpp"
 
-#include <iostream>
-
 namespace OrcaSlicerCli {
 
 // Static member initialization
 ErrorHandler::ErrorHandlerFunc ErrorHandler::s_error_handler = ErrorHandler::defaultErrorHandler;
+std::mutex ErrorHandler::s_handler_mutex;
 
 void ErrorHandler::setErrorHandler(ErrorHandlerFunc handler) {
-    s_error_handler = handler ? handler : defaultErrorHandler;
+    std::lock_guard<std::mutex> lock(s_handler_mutex);
+    s_error_handler = std::move(handler);
 }
 
 void ErrorHandler::handleError(const CliException& exception) {
+    std::lock_guard<std::mutex> lock(s_handler_mutex);
     if (s_error_handler) {
         s_error_handler(exception);
     }
@@ -83,9 +84,9 @@ void ErrorHandler::defaultErrorHandler(const CliException& exception) {
 
     // Also output to stderr for critical errors
     if (exception.getCode() >= ErrorCode::SlicingError) {
-        std::cerr << "FATAL: " << exception.getMessage() << std::endl;
+        LOG_FATAL(std::string("FATAL: ") + exception.getMessage());
         if (!exception.getDetails().empty()) {
-            std::cerr << "Details: " << exception.getDetails() << std::endl;
+            LOG_ERROR(std::string("Details: ") + exception.getDetails());
         }
     }
 }

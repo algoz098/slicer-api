@@ -1,0 +1,5 @@
+{"round":36,"findings":[
+  {"id":"R36-1","severity":"CRITICAL","file":"addon.cc","bug":"RTLD_GLOBAL exporta símbolos do engine globalmente — colisão com outros módulos","status":"fixed"},
+  {"id":"R36-2","severity":"HIGH","file":"SliceEngine.cpp","bug":"std::cout vaza user config values em 30+ locais","status":"fixed"},
+  {"id":"R36-3","severity":"MEDIUM","file":"AddonCore.cpp","bug":"Config deep copy desperdiça memória + non-standard keys acumulam","status":"fixed"}
+],"files_changed":3,"fixes_applied":3}

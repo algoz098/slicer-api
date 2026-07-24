@@ -1,0 +1,9 @@
+{
+  "round":30,"findings":[
+    {"id":"R30-1","severity":"CRITICAL","file":"addon.cc","bug":"ORCACLI_ENGINE_PATH permite RCE via dlopen sem validação de path","status":"known_issue"},
+    {"id":"R30-2","severity":"CRITICAL","file":"orca.ts","bug":"ORCACLI_ADDON_DIR permite RCE via require() arbitrário","status":"known_issue"},
+    {"id":"R30-3","severity":"CRITICAL","file":"Utilities.cpp","bug":"ORCACLI_DEBUG_LOG_PATH permite escrita arbitrária em arquivo (NÃO DOCUMENTADO)","status":"known_issue"},
+    {"id":"R30-4","severity":"MEDIUM","file":"SliceEngine.cpp","bug":"ignored_override_keys inconsistentes — validação TS quebra para chaves mapeadas","status":"known_issue"},
+    {"id":"R30-5","severity":"MEDIUM","file":"docs+code","bug":"12 discrepâncias entre documentação e código","status":"known_issue"}
+  ],"files_changed":0,"fixes_applied":0
+}

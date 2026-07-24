@@ -1,0 +1,4 @@
+{"round":37,"findings":[
+  {"id":"R37-1","severity":"HIGH","file":"addon.cc","bug":"Engine re-dlopen após Shutdown re-executa static constructors — double-init corruption","status":"known_issue"},
+  {"id":"R37-2","severity":"HIGH","file":"AddonCore.cpp","bug":"Stale 3MF override state leak quando loadModelFromFile FALHA","status":"fixed"}
+],"files_changed":1,"fixes_applied":1}

@@ -1,0 +1,13 @@
+{
+  "round": 3,
+  "date": "2026-07-21",
+  "findings": [
+    {"id": "R3-1", "severity": "MEDIUM", "file": "AddonCore.cpp", "line": 381, "bug": "std::filesystem::exists() sem error_code em 10+ locais", "status": "fixed"},
+    {"id": "R3-2", "severity": "MEDIUM", "file": "AddonCore.cpp", "line": 1223, "bug": "ConfigOptionStrings raw new vaza se set_key_value lançar exceção", "status": "fixed"},
+    {"id": "R3-3", "severity": "MEDIUM", "file": "ModelIO.cpp", "line": 396, "bug": "Empty catch engole falhas críticas de config setup", "status": "fixed"},
+    {"id": "R3-4", "severity": "MEDIUM", "file": "ModelIO.cpp", "line": 89, "bug": "last_error nunca atribuído em load_3mf_project", "status": "fixed"},
+    {"id": "R3-5", "severity": "LOW", "file": "ConfigManager.cpp", "line": 38, "bug": "std::filesystem::exists() sem error_code em 11 locais", "status": "fixed"}
+  ],
+  "files_changed": 3,
+  "fixes_applied": 5
+}

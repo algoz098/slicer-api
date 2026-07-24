@@ -1,0 +1,15 @@
+{
+  "round": 16,
+  "findings": [
+    {"id": "R16-1", "severity": "MEDIUM", "file": "stl.schema.ts", "bug": "STL options schema não permite arrays (addon suporta)", "status": "fixed"},
+    {"id": "R16-2", "severity": "MEDIUM", "file": "index.d.ts", "bug": "Tipos desatualizados — options/profile sem arrays", "status": "fixed"},
+    {"id": "R16-3", "severity": "LOW", "file": "stl.schema.ts+3mf.schema.ts", "bug": "plate usa Number em vez de Integer", "status": "fixed"},
+    {"id": "R16-4", "severity": "CRITICAL", "file": "Dockerfile", "bug": "Cache mount IDs hardcoded 'amd64' — contaminação cross-arch", "status": "fixed"},
+    {"id": "R16-5", "severity": "LOW", "file": "stl.ts", "bug": "parseJsonFields engole erros de JSON (3MF lança)", "status": "fixed"},
+    {"id": "R16-6", "severity": "HIGH", "file": "klipper-client.js", "bug": "Todos os métodos engolem stack traces e HTTP context", "status": "known_issue"},
+    {"id": "R16-7", "severity": "CRITICAL", "file": "nanosvg.h (submodule!)", "bug": "Stack buffer overflow no Windows — NÃO MODIFICÁVEL", "status": "ignored"}
+  ],
+  "ignored": ["R16-7: nanosvg está no submodule OrcaSlicer/ — proibido modificar"],
+  "files_changed": 7,
+  "fixes_applied": 5
+}

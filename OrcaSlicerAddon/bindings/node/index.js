@@ -53,32 +53,36 @@ const candidatesLocalFirst = [mod1, mod1b, mod2, prebuilt];
 const candidatesDefault = [prebuilt, mod1, mod1b, mod2];
 const candidatePaths = preferPrebuilt ? candidatesDefault : candidatesLocalFirst;
 
+let addon = null;
+
 for (const p of candidatePaths) {
   if (fs.existsSync(p)) {
     log("trying", p);
     const m = withSilencedIO(() => tryRequire(p));
-    if (m) { log("loaded", p); module.exports = wrapAsMiddleware(m); return; }
+    if (m) { log("loaded", p); addon = wrapAsMiddleware(m); break; }
     log("failed to load", p);
   }
 }
 
-// Check if prebuilt exists but for different platform
-const prebuildsDir = path.join(__dirname, "prebuilds");
-if (fs.existsSync(prebuildsDir)) {
-  const available = fs.readdirSync(prebuildsDir).filter(d => {
-    const stat = fs.statSync(path.join(prebuildsDir, d));
-    return stat.isDirectory();
-  });
-  if (available.length > 0 && !available.includes(`${process.platform}-${process.arch}`)) {
-    const msg = `Prebuilt binaries available for: ${available.join(", ")} but not for current platform: ${process.platform}-${process.arch}`;
-    log(msg);
-    throw new Error(msg);
+if (!addon) {
+  // Check if prebuilt exists but for different platform
+  const prebuildsDir = path.join(__dirname, "prebuilds");
+  if (fs.existsSync(prebuildsDir)) {
+    const available = fs.readdirSync(prebuildsDir).filter(d => {
+      const stat = fs.statSync(path.join(prebuildsDir, d));
+      return stat.isDirectory();
+    });
+    if (available.length > 0 && !available.includes(`${process.platform}-${process.arch}`)) {
+      const msg = `Prebuilt binaries available for: ${available.join(", ")} but not for current platform: ${process.platform}-${process.arch}`;
+      log(msg);
+      throw new Error(msg);
+    }
   }
-}
 
-// Fall back to mod1 error for clearer message in dev
-log("falling back to require(mod1)", mod1);
-const addon = wrapAsMiddleware(withSilencedIO(() => require(mod1)));
+  // Fall back to mod1 error for clearer message in dev
+  log("falling back to require(mod1)", mod1);
+  addon = wrapAsMiddleware(withSilencedIO(() => require(mod1)));
+}
 
 // Attach Klipper client and high-level API
 try {

@@ -32,6 +32,7 @@
 
 #include <array>
 #include <map>
+#include <unordered_map>
 
 #include "utils/Logger.hpp"
 #include <fcntl.h>
@@ -137,34 +138,38 @@ namespace {
 }
 
 void OrcaSlicerCli::AddonCore::setLoggingSilenced(bool silent) {
+    static std::mutex s_silencer_mutex;
+    std::lock_guard<std::mutex> lock(s_silencer_mutex);
     if (silent == s_silenced) return;
 
     if (silent) {
-        // Open /dev/null (or NUL on Windows) once
+        s_devnull_fd = ADDON_OPEN(ADDON_DEVNULL, O_WRONLY);
+        if (s_devnull_fd < 0) return;
         try {
             if (!s_devnull_stream.is_open()) s_devnull_stream.open(ADDON_DEVNULL);
         } catch (...) {}
-        if (s_devnull_fd < 0) { s_devnull_fd = ADDON_OPEN(ADDON_DEVNULL, O_WRONLY); }
-        // Save originals once
         if (!s_orig_cout) s_orig_cout = std::cout.rdbuf();
         if (!s_orig_cerr) s_orig_cerr = std::cerr.rdbuf();
-        if (s_saved_stdout < 0) s_saved_stdout = ADDON_DUP(ADDON_STDOUT_FD);
-        if (s_saved_stderr < 0) s_saved_stderr = ADDON_DUP(ADDON_STDERR_FD);
-        // Redirect
+        int saved_out = (s_saved_stdout < 0) ? ADDON_DUP(ADDON_STDOUT_FD) : s_saved_stdout;
+        int saved_err = (s_saved_stderr < 0) ? ADDON_DUP(ADDON_STDERR_FD) : s_saved_stderr;
+        if (saved_out < 0 || saved_err < 0) {
+            if (saved_out >= 0) ADDON_CLOSE(saved_out);
+            if (saved_err >= 0) ADDON_CLOSE(saved_err);
+            return;
+        }
+        s_saved_stdout = saved_out;
+        s_saved_stderr = saved_err;
         try { std::cout.rdbuf(s_devnull_stream.rdbuf()); } catch (...) {}
         try { std::cerr.rdbuf(s_devnull_stream.rdbuf()); } catch (...) {}
-        if (s_devnull_fd >= 0) {
-            ADDON_DUP2(s_devnull_fd, ADDON_STDOUT_FD);
-            ADDON_DUP2(s_devnull_fd, ADDON_STDERR_FD);
-        }
+        ADDON_DUP2(s_devnull_fd, ADDON_STDOUT_FD);
+        ADDON_DUP2(s_devnull_fd, ADDON_STDERR_FD);
         s_silenced = true;
     } else {
-        // Restore C++ streams
         if (s_orig_cout) { try { std::cout.rdbuf(s_orig_cout); } catch (...) {} }
         if (s_orig_cerr) { try { std::cerr.rdbuf(s_orig_cerr); } catch (...) {} }
-        // Restore POSIX fds
         if (s_saved_stdout >= 0) { ADDON_DUP2(s_saved_stdout, ADDON_STDOUT_FD); ADDON_CLOSE(s_saved_stdout); s_saved_stdout = -1; }
         if (s_saved_stderr >= 0) { ADDON_DUP2(s_saved_stderr, ADDON_STDERR_FD); ADDON_CLOSE(s_saved_stderr); s_saved_stderr = -1; }
+        if (s_devnull_fd >= 0) { ADDON_CLOSE(s_devnull_fd); s_devnull_fd = -1; }
         s_silenced = false;
     }
 }
@@ -206,7 +211,8 @@ using OrcaSlicerCli::util::bed_temp_key_for;
 // This prevents "Comparing incompatible types" errors when print->apply() compares configs.
 // For each key, we check if the type matches what's expected by the print_config_def.
 // If not, we try to convert by serializing/deserializing, or we remove the problematic key.
-static void sanitize_config_types(Slic3r::DynamicPrintConfig& cfg) {
+static std::vector<std::string> sanitize_config_types(Slic3r::DynamicPrintConfig& cfg) {
+    std::vector<std::string> erased_keys;
     const Slic3r::ConfigDef& def = Slic3r::print_config_def;
 
     std::vector<std::string> keys_to_fix;
@@ -246,11 +252,13 @@ static void sanitize_config_types(Slic3r::DynamicPrintConfig& cfg) {
                     cfg.set_key_value(key, new_opt.release()); // set_key_value takes ownership
                 } catch (...) {
                     // new_opt still held by unique_ptr if deserialize threw; released otherwise
+                    erased_keys.push_back(key);
                     cfg.erase(key);
                     LOG_DEBUG("sanitize_config_types: removed key '" + key + "' (conversion failed)");
                 }
             }
         } catch (...) {
+            erased_keys.push_back(key);
             try { cfg.erase(key); } catch (...) {}
         }
     }
@@ -258,6 +266,7 @@ static void sanitize_config_types(Slic3r::DynamicPrintConfig& cfg) {
     if (!keys_to_fix.empty()) {
         LOG_DEBUG("sanitize_config_types: fixed " + std::to_string(keys_to_fix.size()) + " type mismatches");
     }
+    return erased_keys;
 }
 
 
@@ -283,10 +292,12 @@ public:
     std::vector<std::string> saved_filament_colours;  // Preserve 3MF colors from preset overwrites
     std::string saved_change_filament_gcode;  // Preserve 3MF change_filament_gcode (critical for Bambu AMS)
 
-    std::string last_error;
+        std::string last_error;
     // Last computed native statistics (reset each slice attempt)
     double last_estimated_time_sec = -1.0;
     double last_filament_used_grams = -1.0;
+    // Keys erased by sanitize_config_types (type mismatch, replaced by defaults)
+    std::vector<std::string> sanitize_erased_keys;
 
 #if HAVE_LIBSLIC3R
     std::unique_ptr<Slic3r::Model> model;
@@ -321,6 +332,8 @@ public:
 
 #endif
 
+    bool m_cleaned = false;
+
     Impl() = default;
     ~Impl() { cleanup(); } // Ensure RAII cleanup even if shutdown() was not called
 
@@ -354,6 +367,8 @@ public:
     #endif
 
     void cleanup() {
+        if (m_cleaned) return;
+        m_cleaned = true;
 #if HAVE_LIBSLIC3R
         OrcaSlicerCli::init::cleanup(print, model, config);
 #endif
@@ -378,7 +393,13 @@ public:
     }
 
     bool loadModelFromFile(const std::string& filename) {
-        if (!std::filesystem::exists(filename)) {
+        last_error.clear();
+
+        std::error_code ec;
+        if (!std::filesystem::exists(filename, ec)) {
+            if (ec) {
+                LOG_ERROR("Filesystem error checking existence: " + ec.message());
+            }
             last_error = "File not found: " + filename;
             return false;
         }
@@ -394,7 +415,18 @@ public:
         }
 
 #if HAVE_LIBSLIC3R
+        if (!model) { last_error = "Model object not initialized. Call initialize() first."; return false; }
+
         try {
+            print_cfg_overrides.clear();
+            project_cfg_after_3mf.clear();
+            print_overrides_keys.clear();
+            project_overrides_keys.clear();
+            plate_data_src.clear();
+            saved_filament_colours.clear();
+            saved_change_filament_gcode.clear();
+            total_plates_count = 0;
+            detected_extruders = 0;
             // Clear existing model
             model->clear_objects();
 
@@ -403,6 +435,16 @@ public:
                 if (!OrcaSlicerCli::model::load_stl(filename, *model, last_error)) {
                     return false;
                 }
+
+                detected_extruders = 0;
+                saved_filament_colours.clear();
+                saved_change_filament_gcode.clear();
+                plate_data_src.clear();
+                project_cfg_after_3mf.clear();
+                project_overrides_keys.clear();
+                print_cfg_overrides.clear();
+                print_overrides_keys.clear();
+                total_plates_count = 0;
             } else if (extension == ".3mf") {
                 if (!OrcaSlicerCli::model::load_3mf_project(
                         filename,
@@ -465,8 +507,6 @@ public:
     void resetAndConfigurePrint() {
         LOG_DEBUG("Resetting Print object for new slicing operation");
         
-        // Destroy old Print if it exists and create new one
-        // Using make_unique is safer and cleaner than delete release()
         if (print) {
             print.reset();
         }
@@ -501,6 +541,7 @@ public:
     }
 
     void configurePlateOrigin() {
+        if (!print || !model || !config) return;
         // Set basic plate index on Print and Model (GUI parity)
         int idx0 = (plate_id > 0 ? plate_id - 1 : 0);
         model->curr_plate_index = idx0;
@@ -559,8 +600,8 @@ public:
         }
     }
 
-    Slic3r::DynamicPrintConfig preparePrintConfig() {
-        Slic3r::DynamicPrintConfig apply_config = *config;
+    void preparePrintConfig(Slic3r::DynamicPrintConfig& out_config) {
+        if (!model) return;
 
         // 1. Apply plate-specific overrides
         if (!plate_data_src.empty() && plate_id > 0 && plate_id <= (int)plate_data_src.size()) {
@@ -571,7 +612,7 @@ public:
                 for (const auto& key : plate_keys) {
                     try {
                         std::vector<std::string> single_key = {key};
-                        apply_config.apply_only(pd->config, single_key, true);
+                        out_config.apply_only(pd->config, single_key, true);
                     } catch (...) {}
                 }
             }
@@ -585,7 +626,7 @@ public:
                 used_extruders.insert(volume->extruder_id());
             }
         }
-        size_t max_enc = used_extruders.empty() ? 1 : (*used_extruders.rbegin() + 1);
+        size_t max_enc = used_extruders.empty() ? size_t(1) : (static_cast<size_t>(*used_extruders.rbegin()) + 1);
         // For painted models, volume->extruder_id() only reflects the base extruder (e.g. 1),
         // not the paint color slots (which can be up to detected_extruders).
         // Without this guard, a single-volume painted 4-color model gets max_enc=2 and
@@ -594,9 +635,9 @@ public:
 
         // Helper to trim check
         auto check_trim = [&](const char* key) {
-             if (auto* opt = apply_config.opt<Slic3r::ConfigOptionFloats>(key, false)) {
+             if (auto* opt = out_config.opt<Slic3r::ConfigOptionFloats>(key, false)) {
                  if (opt->values.size() > max_enc) opt->values.resize(max_enc);
-             } else if (auto* opt_s = apply_config.opt<Slic3r::ConfigOptionStrings>(key, false)) {
+             } else if (auto* opt_s = out_config.opt<Slic3r::ConfigOptionStrings>(key, false)) {
                  if (opt_s->values.size() > max_enc) opt_s->values.resize(max_enc);
              }
         };
@@ -608,9 +649,7 @@ public:
         check_trim("filament_cost");
 
         // 3. Sanitize types
-        sanitize_config_types(apply_config);
-
-        return apply_config;
+        sanitize_erased_keys = sanitize_config_types(out_config);
     }
 
     void promoteConfigToMetadata() {
@@ -639,6 +678,8 @@ public:
     // Check if objects are outside printable area
     // Returns true if OUTSIDE (error/warning needed)
     bool checkOutside(std::string &msg) {
+        if (!print) return false;
+        if (!model) return false;
         LOG_DEBUG("checkOutside: starting printable area validation");
 
         const auto &pc = print->config();
@@ -700,6 +741,7 @@ public:
     // Esta implementação é uma versão simplificada (row layout) sem equivalente direto no OrcaSlicer.
     // Só é invocada quando auto_realign_if_needed=true, que não existe no GUI (é feature exclusiva do addon).
     bool simpleReposition() {
+        if (!model) return false;
         LOG_INFO("Attempting simple repositioning...");
         try {
             Slic3r::Points bed_pts = Slic3r::get_bed_shape(*config);
@@ -726,7 +768,7 @@ public:
              double total_width = 0;
              double spacing = 5.0;
              for (auto* inst : all_instances) {
-                 total_width += inst->get_object()->raw_bounding_box().size().x() + spacing;
+                 total_width += inst->get_object()->instance_bounding_box(*inst).size().x() + spacing;
              }
              total_width -= spacing;
 
@@ -740,11 +782,11 @@ public:
                  double current_x = bed_center_x - total_width / 2.0;
                  for (auto* inst : all_instances) {
                       auto* obj = inst->get_object();
-                      double w = obj->raw_bounding_box().size().x();
+                      double w = obj->instance_bounding_box(*inst).size().x();
                       double cx = current_x + w/2.0;
                       double cy = bed_center_y;
                       
-                      Slic3r::Vec3d mesh_center = obj->raw_bounding_box().center();
+                      Slic3r::Vec3d mesh_center = obj->instance_bounding_box(*inst).center();
                       inst->set_offset(Slic3r::Vec3d(cx - mesh_center.x(), cy - mesh_center.y(), inst->get_offset().z()));
                       
                       current_x += w + spacing;
@@ -752,7 +794,7 @@ public:
              } else {
                  // Stick them all in center (fallback)
                  for (auto* inst : all_instances) {
-                     Slic3r::Vec3d mesh_center = inst->get_object()->raw_bounding_box().center();
+                     Slic3r::Vec3d mesh_center = inst->get_object()->instance_bounding_box(*inst).center();
                      inst->set_offset(Slic3r::Vec3d(bed_center_x - mesh_center.x(), bed_center_y - mesh_center.y(), inst->get_offset().z()));
                  }
              }
@@ -796,25 +838,27 @@ public:
        if (auto_realign_if_needed) {
            LOG_DEBUG("validateAndAutoRealign: attempting simpleReposition()");
            if (simpleReposition()) {
-               // After repositioning, we need to re-apply the model to the print object
-               // to update the print objects with the new positions.
-               // IMPORTANT: use preparePrintConfig() (not raw *config) so that plate-level
-               // overrides (e.g. print_sequence=by object) are preserved.
-               try {
-                   print->apply(*model, preparePrintConfig());
-               } catch (const std::exception& e) {
-                   // If apply fails due to config type mismatch, try with a minimal config
-                   LOG_WARNING(std::string("Re-apply after reposition failed: ") + e.what() + ", trying minimal re-apply");
-                   try {
-                       // Create a minimal config that only updates geometry, not parameters
-                       Slic3r::DynamicPrintConfig minimal_cfg;
-                       minimal_cfg.apply(preparePrintConfig(), false); // copy all (with plate overrides)
-                       print->apply(*model, minimal_cfg);
-                   } catch (const std::exception& e2) {
-                       LOG_WARNING(std::string("Minimal re-apply also failed: ") + e2.what() + ", continuing anyway");
-                       // Continue anyway - the model positions were updated
-                   }
-               }
+        // After repositioning, we need to re-apply the model to the print object
+                // to update the print objects with the new positions.
+                // IMPORTANT: use preparePrintConfig() (not raw *config) so that plate-level
+                // overrides (e.g. print_sequence=by object) are preserved.
+                try {
+                    Slic3r::DynamicPrintConfig realign_cfg = *config;
+                    preparePrintConfig(realign_cfg);
+                    print->apply(*model, realign_cfg);
+                } catch (const std::exception& e) {
+                    // If apply fails due to config type mismatch, try with a minimal config
+                    LOG_WARNING(std::string("Re-apply after reposition failed: ") + e.what() + ", trying minimal re-apply");
+                    try {
+                        // Create a minimal config that only updates geometry, not parameters
+                        Slic3r::DynamicPrintConfig minimal_cfg = *config;
+                        preparePrintConfig(minimal_cfg);
+                        print->apply(*model, minimal_cfg);
+                    } catch (const std::exception& e2) {
+                        LOG_WARNING(std::string("Minimal re-apply also failed: ") + e2.what() + ", continuing anyway");
+                        // Continue anyway - the model positions were updated
+                    }
+                }
 
                if (!checkOutside(msg)) {
                    LOG_INFO("Auto-realign successful");
@@ -840,6 +884,7 @@ public:
             LOG_INFO("Starting slicing process...");
 
             // reset last-known stats
+            last_error.clear();
             last_estimated_time_sec = -1.0;
             last_filament_used_grams = -1.0;
             
@@ -870,7 +915,8 @@ public:
 
             // 3. Prepare Configuration
             LOG_DEBUG("Preparing print configuration with overrides...");
-            Slic3r::DynamicPrintConfig apply_config = preparePrintConfig();
+            Slic3r::DynamicPrintConfig apply_config = *config;
+            preparePrintConfig(apply_config);
 
             // 4. Apply configuration to Print
             LOG_INFO("Applying configuration to print object...");
@@ -1033,8 +1079,9 @@ public:
                 tmp_gcode.replace_extension(".gcode");
 
                 // Remove any existing files (target .3mf and temp .gcode)
-                if (std::filesystem::exists(output_file)) std::filesystem::remove(output_file);
-                if (std::filesystem::exists(tmp_gcode))   std::filesystem::remove(tmp_gcode);
+                std::error_code ec;
+                if (std::filesystem::exists(output_file, ec)) std::filesystem::remove(output_file);
+                if (std::filesystem::exists(tmp_gcode, ec))   std::filesystem::remove(tmp_gcode);
 
 
 
@@ -1167,7 +1214,11 @@ public:
                     return false;
                 }
 
-                if (!std::filesystem::exists(tmp_gcode)) {
+                std::error_code ec;
+                if (!std::filesystem::exists(tmp_gcode, ec)) {
+                    if (ec) {
+                        LOG_ERROR("Filesystem error checking temp G-code: " + ec.message());
+                    }
                     last_error = "Intermediate G-code not found";
                     return false;
                 }
@@ -1220,9 +1271,9 @@ public:
                             if (i > 0) diff_str += ";";
                             diff_str += print_overrides_keys[i];
                         }
-                        auto* diff_opt = new Slic3r::ConfigOptionStrings();
+                        auto diff_opt = std::make_unique<Slic3r::ConfigOptionStrings>();
                         diff_opt->values.push_back(diff_str);
-                        plate.config.set_key_value("different_settings_to_system", diff_opt);
+                        plate.config.set_key_value("different_settings_to_system", diff_opt.release());
                     }
 
                     // Also include curr_bed_type in plate.config if it's set in the working config
@@ -1250,9 +1301,9 @@ public:
                                     if (i > 0) diff_str_cfg += ";";
                                     diff_str_cfg += print_overrides_keys[i];
                                 }
-                                auto* diff_opt_cfg = new Slic3r::ConfigOptionStrings();
+                                auto diff_opt_cfg = std::make_unique<Slic3r::ConfigOptionStrings>();
                                 diff_opt_cfg->values.push_back(diff_str_cfg);
-                                config->set_key_value("different_settings_to_system", diff_opt_cfg);
+                                config->set_key_value("different_settings_to_system", diff_opt_cfg.release());
                             }
                         } catch (const std::exception& e) {
                             LOG_WARNING(std::string("Failed to copy overrides into main config: ") + e.what());
@@ -1270,7 +1321,9 @@ public:
                 try {
                     // prediction (seconds as string)
                     float pred_secs = 0.0f;
-                    pred_secs = proc_result.print_statistics.modes[static_cast<size_t>(Slic3r::PrintEstimatedStatistics::ETimeMode::Normal)].time;
+                    if (!proc_result.print_statistics.modes.empty()) {
+                        pred_secs = proc_result.print_statistics.modes[static_cast<size_t>(Slic3r::PrintEstimatedStatistics::ETimeMode::Normal)].time;
+                    }
                     plate.gcode_prediction = std::to_string(pred_secs);
                     // Record in impl for API propagation
                     last_estimated_time_sec = static_cast<double>(pred_secs);
@@ -1467,7 +1520,8 @@ public:
                         LOG_DEBUG("Set print_settings_id=" + print_id);
                     }
                     if (!filament_ids.empty()) {
-                        config->set_key_value("filament_settings_id", new Slic3r::ConfigOptionStrings(filament_ids));
+                        auto fopt = std::make_unique<Slic3r::ConfigOptionStrings>(filament_ids);
+                        config->set_key_value("filament_settings_id", fopt.release());
                         std::string ids_str;
                         for (const auto& fid : filament_ids) ids_str += "'" + fid + "' ";
                         LOG_DEBUG("Set filament_settings_id with " + std::to_string(filament_ids.size()) + " entries: " + ids_str);
@@ -1553,7 +1607,7 @@ public:
                         }
                         if(!segs.empty()){
                             // Setup canvas
-                            const unsigned W=800,H=800; auto *tn=new Slic3r::ThumbnailData(); tn->set(W,H); tn->pixels.assign(W*H*4, 0);
+                            const unsigned W=800,H=800; auto tn = std::make_unique<Slic3r::ThumbnailData>(); tn->set(W,H); tn->pixels.assign(W*H*4, 0);
                             // pad
                             double dx=(maxx-minx), dy=(maxy-miny); if(dx<=0||dy<=0){ minx=minx==1e9?0:minx; miny=miny==1e9?0:miny; maxx=std::max(maxx, minx+1.0); maxy=std::max(maxy, miny+1.0); dx=maxx-minx; dy=maxy-miny; }
                             double margin=20.0; double sx=(W-2*margin)/dx, sy=(H-2*margin)/dy; double s=std::min(sx,sy);
@@ -1563,7 +1617,15 @@ public:
                             for(const auto &sg: segs){ auto p0=to_px(sg.x1, sg.y1); auto p1=to_px(sg.x2, sg.y2); auto it=id2color.find(sg.t); auto col = (it!=id2color.end()? it->second : std::array<unsigned char,4>{255,255,255,255}); draw_line(p0.first,p0.second,p1.first,p1.second,col);}
                             // SIMPLIFIED: Add only the real thumbnail without empty placeholders
                             sp.thumbnail_data.clear();
-                            sp.thumbnail_data.push_back(tn);
+                            {
+                                auto *raw_tn = tn.release();
+                                try {
+                                    sp.thumbnail_data.push_back(raw_tn);
+                                } catch (...) {
+                                    delete raw_tn;
+                                    throw;
+                                }
+                            }
                         }
                     }
                 } catch (...) {
@@ -1627,7 +1689,15 @@ public:
                     bbox_data->version = 2;
 
                     if (!bbox_data->bbox_objs.empty()) {
-                        sp.id_bboxes.push_back(bbox_data.release());
+                        {
+                            auto *raw_bbox = bbox_data.release();
+                            try {
+                                sp.id_bboxes.push_back(raw_bbox);
+                            } catch (...) {
+                                delete raw_bbox;
+                                throw;
+                            }
+                        }
                     }
                 } catch (...) {
                     // best-effort bbox generation
@@ -1654,7 +1724,7 @@ public:
                 }
 
                 // Clean up temp G-code
-                try { if (std::filesystem::exists(tmp_gcode)) std::filesystem::remove(tmp_gcode); } catch (...) {}
+                try { std::error_code ec; if (std::filesystem::exists(tmp_gcode, ec)) std::filesystem::remove(tmp_gcode); } catch (...) {}
 
                 if (!ok3mf) {
                     if (last_error.empty()) last_error = "3MF packaging failed";
@@ -1669,11 +1739,13 @@ public:
                 LOG_DEBUG("Exporting G-code to: " + output_file);
 
                 // Remove any existing output file
-                if (std::filesystem::exists(output_file)) {
+                std::error_code ec;
+                if (std::filesystem::exists(output_file, ec)) {
                     std::filesystem::remove(output_file);
                 }
 
                 bool export_successful = false;
+                std::string export_error;
 
                 // CRITICAL: Synchronize flush_volumes_matrix in full_print_config() BEFORE export
                 // This prevents the "Flush volumes matrix do not match to the correct size" error
@@ -1776,7 +1848,10 @@ public:
                     LOG_DEBUG("Direct G-code export completed successfully");
                     // Capture native statistics from proc_result
                     try {
-                        float pred_secs = proc_result.print_statistics.modes[static_cast<size_t>(Slic3r::PrintEstimatedStatistics::ETimeMode::Normal)].time;
+                        float pred_secs = 0.0f;
+                        if (!proc_result.print_statistics.modes.empty()) {
+                            pred_secs = proc_result.print_statistics.modes[static_cast<size_t>(Slic3r::PrintEstimatedStatistics::ETimeMode::Normal)].time;
+                        }
                         last_estimated_time_sec = static_cast<double>(pred_secs);
                     } catch (...) { /* best-effort */ }
                     try {
@@ -1791,21 +1866,24 @@ public:
                     export_successful = true;
                 } catch (const std::exception& e) {
                     LOG_DEBUG(std::string("Direct export failed with exception: ") + e.what());
+                    export_error = e.what();
                     export_successful = false;
                 } catch (...) {
                     LOG_DEBUG("Direct export failed with unknown exception");
+                    export_error = "unknown error";
                     export_successful = false;
                 }
 
                 // If export failed, do not create any fallback file
                 if (!export_successful) {
                     LOG_DEBUG("G-code export failed, no fallback file will be created");
-                    last_error = "G-code export failed";
+                    last_error = std::string("G-code export failed: ") + export_error;
                     return false;
                 }
 
                 // Check if export was successful
-                if (export_successful && std::filesystem::exists(output_file)) {
+                std::error_code ec;
+                if (export_successful && std::filesystem::exists(output_file, ec)) {
                     auto file_size = std::filesystem::file_size(output_file);
                     LOG_DEBUG(std::string("G-code file size: ") + std::to_string(file_size) + " bytes");
 
@@ -1818,8 +1896,11 @@ public:
                         return false;
                     }
                 } else {
+                    if (ec) {
+                        LOG_ERROR("Filesystem error checking output file: " + ec.message());
+                    }
                     LOG_DEBUG("G-code export failed");
-                    last_error = "G-code export failed";
+                    last_error = std::string("G-code export failed") + (ec ? (": " + ec.message()) : "");
                     return false;
                 }
             }
@@ -1839,9 +1920,6 @@ public:
 
             last_error = "libslic3r not available";
             return false;
-            output.close();
-
-            return true;
         } catch (const std::exception& e) {
             last_error = std::string("Slicing failed: ") + e.what();
             return false;
@@ -1954,7 +2032,11 @@ AddonCore::OperationResult AddonCore::loadModel(const std::string& filename) {
         return OperationResult(false, "CLI Core not initialized");
     }
 
-    if (!std::filesystem::exists(filename)) {
+    std::error_code ec;
+    if (!std::filesystem::exists(filename, ec)) {
+        if (ec) {
+            LOG_ERROR("Filesystem error checking existence: " + ec.message());
+        }
         return OperationResult(false, "File not found: " + filename);
     }
 
@@ -2018,8 +2100,32 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
         m_impl->plate_printer_model_id.clear();
         m_impl->plate_nozzle_variant.clear();
         m_impl->has_project_embedded_presets = false;
+        m_impl->print_cfg_overrides.clear();
+        m_impl->project_cfg_after_3mf.clear();
+        m_impl->print_overrides_keys.clear();
+        m_impl->project_overrides_keys.clear();
+        m_impl->plate_data_src.clear();
+        m_impl->saved_filament_colours.clear();
+        m_impl->saved_change_filament_gcode.clear();
+        m_impl->total_plates_count = 0;
+        m_impl->detected_extruders = 0;
+        m_impl->sanitize_erased_keys.clear();
     } catch (const std::exception &e) {
         LOG_WARNING(std::string("Failed to reset preset bundle: ") + e.what());
+    }
+
+    try {
+        m_impl->config->apply(Slic3r::FullPrintConfig::defaults(), true);
+        m_impl->config->erase("different_settings_to_system");
+        m_impl->config->erase("printer_settings_id");
+        m_impl->config->erase("print_settings_id");
+        for (const auto& key : m_impl->config->keys()) {
+            if (key.rfind("filament_settings_id", 0) == 0) {
+                m_impl->config->erase(key);
+            }
+        }
+    } catch (const std::exception &e) {
+        LOG_WARNING(std::string("Failed to reset config to defaults: ") + e.what());
     }
 #endif
 
@@ -2147,7 +2253,9 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
     // Enable single_extruder_multi_material and prime tower if multi-material detected
     if (m_impl->detected_extruders > 1) {
         LOG_DEBUG(std::string("Detected multi-material model (") + std::to_string(m_impl->detected_extruders) + " colors in 3MF)");
-        m_impl->config->set_key_value("single_extruder_multi_material", new Slic3r::ConfigOptionBool(true));
+        if (std::find(__used_override_keys.begin(), __used_override_keys.end(), "single_extruder_multi_material") == __used_override_keys.end()) {
+            m_impl->config->set_key_value("single_extruder_multi_material", new Slic3r::ConfigOptionBool(true));
+        }
 
         // Only force-enable the prime tower when no layer explicitly chose a value.
         // A 3MF saved with the tower disabled — or an API profile/override disabling it —
@@ -2168,9 +2276,10 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
             LOG_DEBUG(std::string("enable_prime_tower explicitly set by 3MF/profile/override, keeping value=") + (eff ? "1" : "0"));
         }
 
-        // Restore 3MF colors
+        // Restore 3MF colors (unless user explicitly overrode)
         auto* fil_colour = m_impl->config->opt<Slic3r::ConfigOptionStrings>("filament_colour", false);
-        if (!m_impl->saved_filament_colours.empty() && fil_colour) {
+        if (!m_impl->saved_filament_colours.empty() && fil_colour &&
+            std::find(__used_override_keys.begin(), __used_override_keys.end(), "filament_colour") == __used_override_keys.end()) {
             LOG_DEBUG("Restoring 3MF filament colors");
             fil_colour->values = m_impl->saved_filament_colours;
         }
@@ -2233,7 +2342,7 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
         }
 
         // Also synchronize flush_volumes_vector (one value per filament per head)
-        size_t expected_vector_size = filament_count * heads_count;
+        size_t expected_vector_size = 2 * filament_count;
         if (flush_vector) {
             size_t current_size = flush_vector->values.size();
             if (current_size != expected_vector_size) {
@@ -2273,6 +2382,11 @@ AddonCore::OperationResult AddonCore::slice(const SlicingParams& params) {
 
 #endif
 
+    // Merge sanitize-erased keys into the ignored list for caller visibility
+    for (const auto& key : m_impl->sanitize_erased_keys) {
+        __ignored_override_keys.push_back(key + " (type mismatch, using default)");
+    }
+
     return OrcaSlicerCli::slice::slice_and_package(
         [&](const std::string& out){ return m_impl->performSlicing(out); },
         params.output_file,
@@ -2301,7 +2415,11 @@ AddonCore::OperationResult AddonCore::loadConfig(const std::string& config_file)
         return OperationResult(false, "AddonCore not initialized");
     }
 
-    if (!std::filesystem::exists(config_file)) {
+    std::error_code ec;
+    if (!std::filesystem::exists(config_file, ec)) {
+        if (ec) {
+            LOG_ERROR("Filesystem error checking existence: " + ec.message());
+        }
         return OperationResult(false, "Config file not found: " + config_file);
     }
 
@@ -2346,6 +2464,32 @@ AddonCore::OperationResult AddonCore::setConfigOption(const std::string& key, co
         // Use set_deserialize to let libslic3r parse and validate the value
         Slic3r::ConfigSubstitutionContext ctx{Slic3r::ForwardCompatibilitySubstitutionRule::Enable};
         m_impl->config->set_deserialize(key, normalized_value, ctx, /*append=*/false);
+
+        static const std::unordered_map<std::string, std::pair<double, double>> SAFETY_BOUNDS = {
+            {"machine_max_acceleration_x", {1.0, 50000.0}},
+            {"machine_max_acceleration_y", {1.0, 50000.0}},
+            {"machine_max_acceleration_z", {1.0, 50000.0}},
+            {"machine_max_acceleration_extruding", {1.0, 50000.0}},
+            {"machine_max_acceleration_retracting", {1.0, 50000.0}},
+            {"default_acceleration", {1.0, 50000.0}},
+            {"machine_max_feedrate_x", {1.0, 1000.0}},
+            {"machine_max_feedrate_y", {1.0, 1000.0}},
+            {"machine_max_feedrate_z", {1.0, 1000.0}},
+            {"machine_max_jerk_x", {0.0, 60.0}},
+            {"machine_max_jerk_y", {0.0, 60.0}},
+            {"machine_max_jerk_z", {0.0, 60.0}},
+            {"travel_speed", {1.0, 1000.0}},
+        };
+
+        auto bounds_it = SAFETY_BOUNDS.find(key);
+        if (bounds_it != SAFETY_BOUNDS.end()) {
+            auto* opt = m_impl->config->option<ConfigOptionFloat>(key);
+            if (opt && (opt->value < bounds_it->second.first || opt->value > bounds_it->second.second)) {
+                m_impl->config->erase(key);
+                return OperationResult(false, "Value out of safety bounds for " + key);
+            }
+        }
+
         LOG_DEBUG(std::string("Override applied: ") + key + "=" + normalized_value);
         return OperationResult(true, "Config option set: " + key);
     } catch (const std::exception& e) {
@@ -2390,7 +2534,11 @@ AddonCore::ModelInfo AddonCore::validateModel(const std::string& filename) const
     ModelInfo info;
     info.filename = filename;
 
-    if (!std::filesystem::exists(filename)) {
+    std::error_code ec;
+    if (!std::filesystem::exists(filename, ec)) {
+        if (ec) {
+            LOG_ERROR("Filesystem error checking existence: " + ec.message());
+        }
         info.is_valid = false;
         info.errors.push_back("File not found");
         return info;

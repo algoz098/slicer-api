@@ -1,0 +1,11 @@
+{"round":17,"findings":[
+  {"id":"R17-1","severity":"HIGH","file":"model-info.class.ts","bug":"model-info sem filePath sandbox — arbitrary file read","status":"fixed"},
+  {"id":"R17-2","severity":"HIGH","file":"index.ts","bug":"Sem graceful shutdown + unhandled listen rejection","status":"fixed"},
+  {"id":"R17-3","severity":"HIGH","file":"log-error.ts","bug":"logError produz 'error: undefined' para erros sem .stack","status":"fixed"},
+  {"id":"R17-4","severity":"MEDIUM","file":"client.ts","bug":"slicerModelInfoClient ausente do client factory","status":"fixed"},
+  {"id":"R17-5","severity":"MEDIUM","file":"app.ts","bug":"errorHandler registrado tarde — erros de middleware escapam","status":"fixed"},
+  {"id":"R17-6","severity":"MEDIUM","file":"app.ts","bug":"medias path matching muito amplo (includes vs startsWith)","status":"fixed"},
+  {"id":"R17-7","severity":"MEDIUM","file":"orca.ts","bug":"require() fora do try-catch — crash sem diagnóstico","status":"fixed"},
+  {"id":"R17-8","severity":"HIGH","file":"addon.cc","bug":"NAPI_CALL_VOID em lambdas — silent data loss","status":"known_issue"},
+  {"id":"R17-9","severity":"CLEAN","scope":"regex","bug":"Zero ReDoS — todos os 17 padrões regex são seguros","status":"verified"}
+],"files_changed":6,"fixes_applied":7}

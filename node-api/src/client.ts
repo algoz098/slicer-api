@@ -26,6 +26,14 @@ export type {
   Slicer3MfPatch
 } from './services/slicer/3mf/3mf.shared'
 
+import { slicerModelInfoClient } from './services/slicer/model-info/model-info.shared'
+export type {
+  SlicerModelInfo,
+  SlicerModelInfoData,
+  SlicerModelInfoQuery,
+  SlicerModelInfoPatch
+} from './services/slicer/model-info/model-info.shared'
+
 import { slicerStlClient } from './services/slicer/stl/stl.shared'
 export type {
   SlicerStl,
@@ -64,6 +72,7 @@ export const createClient = <Configuration = any>(
   client.configure(slicer3MfClient)
   client.configure(profileConverterClient)
   client.configure(mediasClient)
+  client.configure(slicerModelInfoClient)
   client.configure(profilesClient)
   return client
 }

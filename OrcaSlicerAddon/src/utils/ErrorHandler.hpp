@@ -3,6 +3,7 @@
 #include <string>
 #include <exception>
 #include <functional>
+#include <mutex>
 
 namespace OrcaSlicerCli {
 
@@ -147,6 +148,7 @@ public:
 
 private:
     static ErrorHandlerFunc s_error_handler;
+    static std::mutex s_handler_mutex;
     static void defaultErrorHandler(const CliException& exception);
 };
 

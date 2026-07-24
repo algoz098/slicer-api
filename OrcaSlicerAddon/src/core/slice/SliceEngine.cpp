@@ -1,10 +1,11 @@
 #include "core/slice/SliceEngine.hpp"
 
-#include <iostream>
 #include <algorithm>
 #include <set>
+#include <sstream>
 
 #include "core/util/Utilities.hpp"
+#include "utils/Logger.hpp"
 
 #if HAVE_LIBSLIC3R
 #include "libslic3r/Config.hpp"
@@ -31,7 +32,7 @@ AddonCore::OperationResult slice_and_package(
     const double& last_filament_used_grams,
     const std::string& last_error)
 {
-    std::cout << "\xF0\x9F\x94\x8D [TRACE 31] About to call performSlicing()" << std::endl;
+    LOG_DEBUG("[TRACE 31] About to call performSlicing()");
     if (perform_slicing(output_file)) {
         // Build compact JSON with which overrides were used vs ignored. Consumers (Node addon) may parse this.
         std::string json = "{\"used\":[";
@@ -72,7 +73,7 @@ void reapply_project_overrides_excluding(
 {
 #if HAVE_LIBSLIC3R
     if (keys_to_apply.empty()) {
-        std::cout << "DEBUG: No project override keys to apply (empty list)" << std::endl;
+        LOG_DEBUG("No project override keys to apply (empty list)");
         return;
     }
 
@@ -80,19 +81,23 @@ void reapply_project_overrides_excluding(
     std::set<std::string> excluded(exclude_keys.begin(), exclude_keys.end());
 
     // Log which keys will be applied
-    std::cout << "DEBUG: Project override keys to apply: ";
-    for (size_t i = 0; i < keys_to_apply.size(); ++i) {
-        if (i > 0) std::cout << ", ";
-        std::cout << keys_to_apply[i];
-    }
-    std::cout << std::endl;
-    if (!exclude_keys.empty()) {
-        std::cout << "DEBUG: Project override keys to EXCLUDE (API custom_settings have priority): ";
-        for (size_t i = 0; i < exclude_keys.size(); ++i) {
-            if (i > 0) std::cout << ", ";
-            std::cout << exclude_keys[i];
+    {
+        std::ostringstream oss;
+        oss << "Project override keys to apply: ";
+        for (size_t i = 0; i < keys_to_apply.size(); ++i) {
+            if (i > 0) oss << ", ";
+            oss << keys_to_apply[i];
         }
-        std::cout << std::endl;
+        LOG_DEBUG(oss.str());
+    }
+    if (!exclude_keys.empty()) {
+        std::ostringstream oss;
+        oss << "Project override keys to EXCLUDE (API custom_settings have priority): ";
+        for (size_t i = 0; i < exclude_keys.size(); ++i) {
+            if (i > 0) oss << ", ";
+            oss << exclude_keys[i];
+        }
+        LOG_DEBUG(oss.str());
     }
 
     // Apply key by key to identify which key causes type mismatch
@@ -101,7 +106,7 @@ void reapply_project_overrides_excluding(
     for (const auto& key : keys_to_apply) {
         // Skip keys that were provided via API custom_settings (they have highest priority)
         if (excluded.count(key) > 0) {
-            std::cout << "DEBUG: project_override[" << key << "] SKIPPED (API custom_settings has priority)" << std::endl;
+            LOG_DEBUG(std::string("project_override[") + key + "] SKIPPED (API custom_settings has priority)");
             ++skipped;
             continue;
         }
@@ -113,14 +118,14 @@ void reapply_project_overrides_excluding(
             working_config.apply_only(project_cfg_after_3mf, single_key, /*ignore_nonexistent=*/true);
             if (const auto* opt = working_config.optptr(key)) after_val = opt->serialize();
             if (before_val != after_val) {
-                std::cout << "DEBUG: project_override[" << key << "]: " << before_val << " -> " << after_val << std::endl;
+                LOG_DEBUG(std::string("project_override[") + key + "]: " + before_val + " -> " + after_val);
             }
             ++applied;
         } catch (const std::exception& e) {
-            std::cout << "WARN: Skipping project override key '" << key << "': " << e.what() << std::endl;
+            LOG_WARNING(std::string("Skipping project override key '") + key + "': " + e.what());
         }
     }
-    std::cout << "DEBUG: Re-applied " << applied << "/" << keys_to_apply.size() << " 3MF project override(s) (skipped " << skipped << " due to API custom_settings priority)" << std::endl;
+    LOG_DEBUG(std::string("Re-applied ") + std::to_string(applied) + "/" + std::to_string(keys_to_apply.size()) + " 3MF project override(s) (skipped " + std::to_string(skipped) + " due to API custom_settings priority)");
 #endif
 }
 
@@ -139,10 +144,10 @@ void reapply_print_overrides(
             working_config.apply_only(print_cfg_overrides, single_key, /*ignore_nonexistent=*/true);
             ++applied;
         } catch (const std::exception& e) {
-            std::cout << "WARN: Skipping print override key '" << key << "': " << e.what() << std::endl;
+            LOG_WARNING(std::string("Skipping print override key '") + key + "': " + e.what());
         }
     }
-    std::cout << "DEBUG: Re-applied " << applied << "/" << print_override_keys.size() << " 3MF print override(s) on top of selected profiles" << std::endl;
+    LOG_DEBUG(std::string("Re-applied ") + std::to_string(applied) + "/" + std::to_string(print_override_keys.size()) + " 3MF print override(s) on top of selected profiles");
 #endif
 }
 
@@ -161,7 +166,7 @@ void reapply_print_overrides_excluding(
         }), keys.end());
     }
     if (keys.empty()) {
-        std::cout << "DEBUG: Skipped re-applying print overrides because options already set those keys" << std::endl;
+        LOG_DEBUG("Skipped re-applying print overrides because options already set those keys");
         return;
     }
     // Apply key by key to identify which key causes type mismatch
@@ -172,10 +177,10 @@ void reapply_print_overrides_excluding(
             working_config.apply_only(print_cfg_overrides, single_key, /*ignore_nonexistent=*/true);
             ++applied;
         } catch (const std::exception& e) {
-            std::cout << "WARN: Skipping print override key (excluding) '" << key << "': " << e.what() << std::endl;
+            LOG_WARNING(std::string("Skipping print override key (excluding) '") + key + "': " + e.what());
         }
     }
-    std::cout << "DEBUG: Re-applied " << applied << "/" << keys.size() << " print override(s) after project overrides to ensure precedence" << std::endl;
+    LOG_DEBUG(std::string("Re-applied ") + std::to_string(applied) + "/" + std::to_string(keys.size()) + " print override(s) after project overrides to ensure precedence");
 #endif
 }
 
@@ -191,13 +196,13 @@ void apply_custom_settings(
 #if HAVE_LIBSLIC3R
     using OrcaSlicerCli::util::dbg_log;
 
-    std::cout << "DEBUG [apply_custom_settings]: Received " << custom_settings.size() << " custom settings to apply" << std::endl;
+    LOG_DEBUG(std::string("apply_custom_settings: Received ") + std::to_string(custom_settings.size()) + " custom settings to apply");
     for (const auto& kv : custom_settings) {
-        std::cout << "DEBUG [apply_custom_settings]: Input key=" << kv.first << " value=" << kv.second << std::endl;
+        LOG_DEBUG(std::string("apply_custom_settings: key=") + kv.first + " value=" + kv.second);
     }
 
     if (!working_config) {
-        std::cout << "DEBUG [apply_custom_settings]: working_config is NULL, returning" << std::endl;
+        LOG_DEBUG("apply_custom_settings: working_config is NULL, returning");
         return;
     }
 
@@ -227,10 +232,20 @@ void apply_custom_settings(
         // Alias: bed temps that depend on bed type and first layer
         if (key == "first_layer_bed_temperature") {
             const std::string alias = ::OrcaSlicerCli::util::bed_temp_key_for(bed_type, /*first_layer=*/true);
-            if (!alias.empty()) mapped_key = alias;
+            if (!alias.empty()) {
+                mapped_key = alias;
+            } else {
+                ignored_override_keys.push_back(key + " (bed type unrecognized, setting may not be applied)");
+                continue;
+            }
         } else if (key == "bed_temperature") {
             const std::string alias = ::OrcaSlicerCli::util::bed_temp_key_for(bed_type, /*first_layer=*/false);
-            if (!alias.empty()) mapped_key = alias;
+            if (!alias.empty()) {
+                mapped_key = alias;
+            } else {
+                ignored_override_keys.push_back(key + " (bed type unrecognized, setting may not be applied)");
+                continue;
+            }
         }
 
         // Compatibility mappings
@@ -247,7 +262,10 @@ void apply_custom_settings(
         }
         else if (key == "skirts") { mapped_key = "skirt_loops"; }
         else if (key == "fan_speed") { mapped_key = "overhang_fan_speed"; }
-        else if (key == "fan_always_on") { mapped_key = "reduce_fan_stop_start_freq"; }
+        // NOTE: "fan_always_on" is NOT mapped because its boolean semantics
+        // ("always on") conflict with reduce_fan_stop_start_freq's integer semantics
+        // (minimum seconds between fan stops). Use "reduce_fan_stop_start_freq"
+        // directly with an appropriate integer value (e.g., 0 to prevent stopping).
 
         // If the option does not exist in config, ignore to match previous behavior
         if (!working_config->has(mapped_key.c_str())) {
@@ -258,13 +276,13 @@ void apply_custom_settings(
         auto res = set_option(mapped_key, mapped_val);
         if (res.success) {
             used_override_keys.push_back(mapped_key);
-            std::cout << "DEBUG [apply_custom_settings]: APPLIED " << mapped_key << "=" << mapped_val << std::endl;
+            LOG_DEBUG(std::string("apply_custom_settings: APPLIED ") + mapped_key + "=" + mapped_val);
         } else {
             ignored_override_keys.push_back(mapped_key);
-            std::cout << "DEBUG [apply_custom_settings]: FAILED to apply " << mapped_key << "=" << mapped_val << " reason: " << res.message << std::endl;
+            LOG_DEBUG(std::string("apply_custom_settings: FAILED to apply ") + mapped_key + "=" + mapped_val + " reason: " + res.message);
         }
     }
-    std::cout << "DEBUG [apply_custom_settings]: Finished. Used=" << used_override_keys.size() << " Ignored=" << ignored_override_keys.size() << std::endl;
+    LOG_DEBUG(std::string("apply_custom_settings: Finished. Used=") + std::to_string(used_override_keys.size()) + " Ignored=" + std::to_string(ignored_override_keys.size()));
 #else
     (void)working_config; (void)custom_settings; (void)set_option;
     (void)used_override_keys; (void)ignored_override_keys;

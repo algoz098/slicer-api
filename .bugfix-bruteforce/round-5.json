@@ -1,0 +1,18 @@
+{
+  "round": 5,
+  "date": "2026-07-21",
+  "findings": [
+    {"id": "R5-1", "severity": "HIGH", "file": "AddonCore.cpp", "line": 468, "bug": "REGRESSÃO: resetAndConfigurePrint() null guard impedia criação do Print no primeiro slice", "status": "fixed"},
+    {"id": "R5-2", "severity": "HIGH", "file": "AddonCore.cpp", "line": 2171, "bug": "Estado 3MF multi-material vaza para slices STL subsequentes", "status": "fixed"},
+    {"id": "R5-3", "severity": "HIGH", "file": "addon.cc", "line": 549, "bug": "Falha no JSON.parse silencia ignoredOptions — validação TS vira código morto", "status": "fixed"},
+    {"id": "R5-4", "severity": "MEDIUM", "file": "addon.cc", "line": 412, "bug": "InfoExecute descarta error_details do loadModel", "status": "fixed"},
+    {"id": "R5-5", "severity": "MEDIUM", "file": "addon.cc", "line": 757, "bug": "LoadVendor ignora error_details", "status": "fixed"},
+    {"id": "R5-6", "severity": "MEDIUM", "file": "AddonCore.cpp", "line": 288, "bug": "last_error nunca limpo em sucesso — estado stale", "status": "fixed"},
+    {"id": "R5-7", "severity": "MEDIUM", "file": "AddonCore.cpp", "line": 511, "bug": "configurePlateOrigin deref model sem null check", "status": "fixed"},
+    {"id": "R5-8", "severity": "MEDIUM", "file": "AddonCore.cpp", "line": 405, "bug": "loadModelFromFile deref model/config sem null checks", "status": "fixed"},
+    {"id": "R5-9", "severity": "LOW", "file": "stl.class.ts", "line": 145, "bug": "String(null) = 'null' na construção de erro", "status": "fixed"},
+    {"id": "R5-10", "severity": "LOW", "file": "3mf.class.ts", "line": 228, "bug": "errorDetails extraction é código morto (addon rejeita com string pura)", "status": "fixed"}
+  ],
+  "files_changed": 4,
+  "fixes_applied": 10
+}

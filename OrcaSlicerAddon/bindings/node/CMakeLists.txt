@@ -60,7 +60,7 @@ if(NOT TARGET orcacli_core AND NOT ORCACLI_SKIP_CORE_BUILD)
     #   - Arch-specific subdir inside build dir (set above): build/x64/deps/usr/local
     set(CMAKE_PREFIX_PATH
         "${ORCASLICER_BUILD_DIR}/deps/usr/local"
-        "${ORCASLICER_ROOT_DIR}/deps/build/x64/OrcaSlicer_dep/usr/local"
+        "${ORCASLICER_ROOT_DIR}/deps/build/${ORCASLICER_ARCH}/OrcaSlicer_dep/usr/local"
         "${ORCASLICER_ROOT_DIR}/deps/build/destdir/usr/local"
         "${ORCASLICER_ROOT_DIR}/deps/build/OrcaSlicer_dep/usr/local"
         ${CMAKE_PREFIX_PATH})

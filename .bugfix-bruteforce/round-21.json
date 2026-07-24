@@ -1,0 +1,11 @@
+{
+  "round": 21,
+  "findings": [
+    {"id":"R21-1","severity":"HIGH","file":"addon.cc","bug":"Sem limite de string length — OOM via GB-sized config values","status":"fixed"},
+    {"id":"R21-2","severity":"CRITICAL","scope":"systemic","bug":"Zero crash isolation — SIGSEGV em libslic3r mata o processo Node.js inteiro","status":"known_issue"},
+    {"id":"R21-3","severity":"HIGH","file":"addon.cc","bug":"Thread pool starvation + fila ilimitada de async work — DoS","status":"fixed"},
+    {"id":"R21-4","severity":"MEDIUM","file":"profiles.class.ts","bug":"resolveInheritance recursivo — stack overflow em chains profundas","status":"known_issue"}
+  ],
+  "files_changed": 1,
+  "fixes_applied": 2
+}

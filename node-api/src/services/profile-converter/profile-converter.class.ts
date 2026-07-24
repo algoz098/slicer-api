@@ -4,6 +4,7 @@ import { BadRequest } from '@feathersjs/errors'
 import * as fs from 'node:fs/promises'
 import * as fssync from 'node:fs'
 import * as path from 'node:path'
+import * as os from 'node:os'
 
 import type { Application } from '../../declarations'
 import type {
@@ -99,8 +100,15 @@ async function loadJsonFromZipBuffer(
 ): Promise<any> {
   const JSZip = tryRequireJsZip()
   if (JSZip) {
+    const MAX_DECOMPRESSED_SIZE = 50 * 1024 * 1024
+    const MAX_ENTRIES = 100
+
     const zip = await JSZip.loadAsync(buf)
     const jsonFiles = Object.values(zip.files).filter((f: any) => !f.dir && /\.json$/i.test(f.name))
+
+    if (jsonFiles.length > MAX_ENTRIES) {
+      throw new BadRequest('ZIP contains too many entries')
+    }
     let firstObj: any | undefined
     const desiredType = kind === 'printer' ? 'machine' : kind
     const refKey =
@@ -108,6 +116,9 @@ async function loadJsonFromZipBuffer(
     for (const f of jsonFiles as any[]) {
       try {
         const txt = await f.async('string')
+        if (txt.length > MAX_DECOMPRESSED_SIZE) {
+          throw new BadRequest('ZIP entry too large after decompression')
+        }
         const obj = JSON.parse(txt)
         if (!firstObj) firstObj = obj
         // If this file is already the desired preset type, use it
@@ -122,6 +133,9 @@ async function loadJsonFromZipBuffer(
           if (zf && !zf.dir) {
             try {
               const txt2 = await zf.async('string')
+              if (txt2.length > MAX_DECOMPRESSED_SIZE) {
+                throw new BadRequest('ZIP entry too large after decompression')
+              }
               const obj2 = JSON.parse(txt2)
               if (!firstObj) firstObj = obj2
               if (obj2 && typeof obj2 === 'object' && String(obj2.type || '').toLowerCase() === desiredType) {
@@ -228,20 +242,26 @@ async function loadPresetFromInputs(
     }
 
     if (isFilePath(candidatePath) && fssync.existsSync(candidatePath)) {
-      const ext = path.extname(candidatePath).toLowerCase()
-      if (ext === '.json') {
-        const content = await fs.readFile(candidatePath, 'utf8')
-        return JSON.parse(content)
-      }
-      if (
-        ext === '.zip' ||
-        ext === '.orca' ||
-        ext === '.orca_profile' ||
-        ext === '.orca_printer' ||
-        ext === '.orca_filament'
-      ) {
-        const buf = await fs.readFile(candidatePath)
-        return loadJsonFromZipBuffer(buf, kind)
+      const resolved = path.resolve(candidatePath)
+      const baseDir = path.resolve(fssync.realpathSync('.'), 'example_files')
+      if (!resolved.startsWith(os.tmpdir()) && !resolved.startsWith(baseDir)) {
+        // Not in allowed directory - fall through to JSON parse / base64 detection
+      } else {
+        const ext = path.extname(candidatePath).toLowerCase()
+        if (ext === '.json') {
+          const content = await fs.readFile(candidatePath, 'utf8')
+          return JSON.parse(content)
+        }
+        if (
+          ext === '.zip' ||
+          ext === '.orca' ||
+          ext === '.orca_profile' ||
+          ext === '.orca_printer' ||
+          ext === '.orca_filament'
+        ) {
+          const buf = await fs.readFile(candidatePath)
+          return loadJsonFromZipBuffer(buf, kind)
+        }
       }
     }
 
@@ -251,7 +271,7 @@ async function loadPresetFromInputs(
     } catch {}
     // Base64 ZIP detection
     if (isLikelyBase64Zip(raw)) {
-      const buf = (globalThis as any).Buffer.from(raw, 'base64')
+      const buf = (globalThis as any).Buffer.from(raw.substring(0, 10000000), 'base64')
       return loadJsonFromZipBuffer(buf, kind)
     }
   }

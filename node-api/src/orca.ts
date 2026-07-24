@@ -10,8 +10,6 @@ if (!process.env.ORCACLI_PREFER_PREBUILT && !process.env.ORCACLI_PREFER_LOCAL) {
 const addonDir =
   process.env.ORCACLI_ADDON_DIR || path.resolve(__dirname, '../../OrcaSlicerAddon/bindings/node')
 
-const orca = require(addonDir)
-
 logger.debug('[Orca] Initializing addon...')
 const resourcesPath = process.env.ORCACLI_RESOURCES || path.resolve(__dirname, '../../OrcaSlicer/resources')
 
@@ -26,6 +24,7 @@ const resourcesPath = process.env.ORCACLI_RESOURCES || path.resolve(__dirname, '
  */
 export default function (app: any) {
   try {
+    const orca = require(addonDir)
     logger.debug(`[Orca] Started loading. addonDir=${addonDir} resourcesPath=${resourcesPath}`)
 
     const prevCwd = process.cwd()

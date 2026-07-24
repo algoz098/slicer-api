@@ -1,0 +1,21 @@
+{
+  "round": 1,
+  "date": "2026-07-21",
+  "findings": [
+    {"id": "R1-1", "severity": "HIGH", "file": "addon.cc", "line": 399, "bug": "g_ffi.version() null function pointer → SIGSEGV", "status": "fixed"},
+    {"id": "R1-2", "severity": "HIGH", "file": "addon.cc", "line": 411, "bug": "g_ffi.load_model() null function pointer → SIGSEGV", "status": "fixed"},
+    {"id": "R1-3", "severity": "HIGH", "file": "addon.cc", "line": 414, "bug": "g_ffi.get_model_info() null function pointer → SIGSEGV", "status": "fixed"},
+    {"id": "R1-4", "severity": "HIGH", "file": "addon.cc", "line": 517, "bug": "g_ffi.slice() null function pointer → SIGSEGV", "status": "fixed"},
+    {"id": "R1-5", "severity": "HIGH", "file": "stl.class.ts", "line": 74, "bug": "data.filePath permite leitura arbitrária de arquivos", "status": "fixed"},
+    {"id": "R1-6", "severity": "HIGH", "file": "3mf.class.ts", "line": 86, "bug": "data.filePath permite leitura arbitrária de arquivos", "status": "fixed"},
+    {"id": "R1-7", "severity": "MEDIUM", "file": "addon.cc", "line": 380, "bug": "Initialize() result struct nunca liberado (vazamento de memória)", "status": "fixed"},
+    {"id": "R1-8", "severity": "MEDIUM", "file": "stl.class.ts", "line": 96, "bug": "Arquivos temporários nunca removidos", "status": "fixed"},
+    {"id": "R1-9", "severity": "MEDIUM", "file": "3mf.class.ts", "line": 110, "bug": "safeInputPath + outPath nunca removidos", "status": "fixed"},
+    {"id": "R1-10", "severity": "MEDIUM", "file": "profile-converter.class.ts", "line": 224, "bug": "loadPresetFromInputs aceita path arbitrário", "status": "fixed"},
+    {"id": "R1-11", "severity": "HIGH", "file": "EngineAPI.cpp", "line": 99, "bug": "C++ exceptions escapam FFI boundary em 5 funções", "status": "fixed"},
+    {"id": "R1-12", "severity": "HIGH", "file": "addon.cc", "line": 763, "bug": "Shutdown() quebra reusabilidade do engine", "status": "fixed"},
+    {"id": "R1-13", "severity": "MEDIUM", "file": "addon.cc", "line": 296, "bug": "free_result antes de dlclose (use-after-free risk)", "status": "fixed"}
+  ],
+  "files_changed": 5,
+  "fixes_applied": 13
+}

@@ -27,15 +27,15 @@ const parseJsonFields = async (context: HookContext) => {
   if (data && typeof data.config === 'string') {
     try {
       data.config = JSON.parse(data.config)
-    } catch {
-      // Se nao for JSON valido, deixa como esta para a validacao rejeitar
+    } catch (e: any) {
+      throw new Error('Failed to parse "config" as JSON')
     }
   }
   if (data && typeof data.options === 'string') {
     try {
       data.options = JSON.parse(data.options)
-    } catch {
-      // Se nao for JSON valido, deixa como esta para a validacao rejeitar
+    } catch (e: any) {
+      throw new Error('Failed to parse "options" as JSON')
     }
   }
   return context

@@ -130,7 +130,7 @@ addon-build: addon-base-build addon-slim-build
 
 
 
-build-all: deps-build core-build addon-core-build
+build-all: deps-build core-build addon-core-build addon-build
 
 # ---- Build + Push (mesmo comportamento do CI) ----
 # Reutiliza os scripts do CI, que ja incluem --push
@@ -194,7 +194,7 @@ push-all-local: deps-push-local core-push-local addon-core-push-local addon-push
 
 addon-push: addon-base-push addon-slim-push
 
-push-all: deps-push core-push addon-core-push
+push-all: deps-push core-push addon-core-push addon-push
 
 # ---- Utilitarios ----
 login-ghcr:

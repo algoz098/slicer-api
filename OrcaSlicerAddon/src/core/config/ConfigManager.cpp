@@ -1,8 +1,9 @@
 #include "core/config/ConfigManager.hpp"
 #include "core/util/Utilities.hpp"
+#include "utils/Logger.hpp"
 
 #include <filesystem>
-#include <iostream>
+#include <system_error>
 
 #if !HAVE_LIBSLIC3R
 #error "libslic3r is required. Placeholders are not allowed."
@@ -35,12 +36,13 @@ bool load_json_config(const std::string& file_path,
                       std::string& last_error)
 {
     try {
-        if (!std::filesystem::exists(file_path)) {
+        std::error_code ec;
+        if (!std::filesystem::exists(file_path, ec) || ec) {
             last_error = std::string("Profile file not found: ") + file_path;
             return false;
         }
         Slic3r::ConfigSubstitutions subs = config.load(file_path, Slic3r::ForwardCompatibilitySubstitutionRule::Enable);
-        std::cout << "DEBUG: Loaded profile from " << file_path << " with " << subs.size() << " substitutions" << std::endl;
+        LOG_DEBUG("DEBUG: Loaded profile from " + file_path + " with " + std::to_string(subs.size()) + " substitutions");
         return true;
     } catch (const std::exception& e) {
         last_error = std::string("Failed to load profile from ") + file_path + ": " + e.what();
@@ -57,7 +59,8 @@ std::string find_profile_file(const std::string& resources_path,
 
     // Try exact path first
     std::string exact_path = profiles_dir + "/" + profile_name + ".json";
-    if (fs::exists(exact_path)) return exact_path;
+    std::error_code ec;
+    if (fs::exists(exact_path, ec) && !ec) return exact_path;
 
     // Recursive search
     try {
@@ -69,7 +72,7 @@ std::string find_profile_file(const std::string& resources_path,
             }
         }
     } catch (const std::exception& e) {
-        std::cerr << "Error searching for profile: " << e.what() << std::endl;
+        LOG_ERROR(std::string("Error searching for profile: ") + e.what());
     }
     return std::string();
 }
@@ -84,13 +87,14 @@ bool load_vendor_from_resources(const std::string& resources_path,
     try {
         namespace fs = std::filesystem;
         fs::path res_profiles = fs::path(resources_path) / "profiles";
-        if (!fs::exists(res_profiles)) {
+        std::error_code ec;
+        if (!fs::exists(res_profiles, ec) || ec) {
             last_error = std::string("Resources profiles directory not found: ") + res_profiles.string();
             return false;
         }
         // Remember the resources path for later direct-import fallbacks.
         g_resources_path = resources_path;
-        std::cout << "DEBUG: loadVendor from '" << res_profiles.string() << "' vendor='" << vendor_id << "'" << std::endl;
+        LOG_DEBUG("DEBUG: loadVendor from '" + res_profiles.string() + "' vendor='" + vendor_id + "'");
 
         // Ensure machine models are available even if vendor preset parsing hits an error.
         try {
@@ -104,7 +108,7 @@ bool load_vendor_from_resources(const std::string& resources_path,
         } catch (const std::exception &ex) {
             vendor_ok = false;
             last_error = std::string("Partial vendor load for ") + vendor_id + ": " + ex.what();
-            std::cerr << "DEBUG: load_vendor_configs_from_json threw: " << last_error << std::endl;
+            LOG_DEBUG(std::string("DEBUG: load_vendor_configs_from_json threw: ") + last_error);
         }
 
         // If vendor loading threw before reaching machine presets (common due to a bad filament/process),
@@ -113,9 +117,9 @@ bool load_vendor_from_resources(const std::string& resources_path,
             try {
                 // Load only vendor profile (no presets) to populate vendors map and models/variants.
                 preset_bundle.load_vendor_configs_from_json(res_profiles.string(), vendor_id, Slic3r::PresetBundle::LoadVendorOnly, Slic3r::ForwardCompatibilitySubstitutionRule::EnableSystemSilent);
-                std::cerr << "DEBUG: fallback -> loaded vendor profile only for '" << vendor_id << "'\n";
+                LOG_DEBUG(std::string("DEBUG: fallback -> loaded vendor profile only for '") + vendor_id + "'");
             } catch (const std::exception &e) {
-                std::cerr << "DEBUG: fallback -> LoadVendorOnly threw: " << e.what() << std::endl;
+                LOG_DEBUG(std::string("DEBUG: fallback -> LoadVendorOnly threw: ") + e.what());
             }
 
             try {
@@ -126,7 +130,7 @@ bool load_vendor_from_resources(const std::string& resources_path,
                 if (ifs.good()) {
                     ifs >> jroot;
                     if (jroot.contains("machine_list") && jroot["machine_list"].is_array()) {
-                        std::cerr << "DEBUG: fallback -> machine_list size=" << jroot["machine_list"].size() << std::endl;
+                        LOG_DEBUG(std::string("DEBUG: fallback -> machine_list size=") + std::to_string(jroot["machine_list"].size()));
 
                         // Build configs for base "common" machine presets first, so inheritance resolves correctly.
                         nlohmann::json machines = jroot["machine_list"];
@@ -149,7 +153,8 @@ bool load_vendor_from_resources(const std::string& resources_path,
 
                         for (const auto &sub : commons) {
                             fs::path f = fs::path(res_profiles) / vendor_id / sub;
-                            if (!fs::exists(f)) continue;
+                            std::error_code ec;
+                            if (!fs::exists(f, ec) || ec) continue;
                             try {
                                 Slic3r::DynamicPrintConfig cfg; std::map<std::string, std::string> kv; load_cfg_with_keys(f, cfg, kv);
                                 std::string name = kv.count("name") ? kv["name"] : f.stem().string();
@@ -163,17 +168,18 @@ bool load_vendor_from_resources(const std::string& resources_path,
                                 Slic3r::DynamicPrintConfig merged = *default_cfg;
                                 merged.apply(cfg);
                                 base_config_maps[name] = std::move(merged);
-                                std::cerr << "DEBUG: fallback -> prepared base machine '" << name << "'\n";
+                                LOG_DEBUG(std::string("DEBUG: fallback -> prepared base machine '") + name + "'");
                             } catch (const std::exception &e) {
-                                std::cerr << "DEBUG: fallback -> base prepare threw for '" << f.filename().string() << "': " << e.what() << std::endl;
+                                LOG_DEBUG(std::string("DEBUG: fallback -> base prepare threw for '") + f.filename().string() + "': " + e.what());
                             }
                         }
 
                         // Helper to import one concrete machine preset using PresetCollection::load_preset like vendor loader does.
                         auto import_one = [&](const fs::path &f, const std::string &sub_path){
-                            if (!fs::exists(f)) return false;
+                            std::error_code ec;
+                            if (!fs::exists(f, ec) || ec) return false;
                             try {
-                                std::cerr << "DEBUG: fallback -> import_one begin file='" << f.string() << "'" << std::endl;
+                                LOG_DEBUG(std::string("DEBUG: fallback -> import_one begin file='") + f.string() + "'");
                                 Slic3r::DynamicPrintConfig cfg; std::map<std::string, std::string> kv; load_cfg_with_keys(f, cfg, kv);
                                 std::string preset_name = kv.count("name") ? kv["name"] : f.stem().string();
 
@@ -202,10 +208,10 @@ bool load_vendor_from_resources(const std::string& resources_path,
                                     loaded.vendor  = &itv->second;
                                     loaded.version = itv->second.config_version;
                                 }
-                                std::cerr << "DEBUG: fallback -> loaded(machine) '" << preset_name << "' as system; printers.size=" << preset_bundle.printers.size() << "\n";
+                                LOG_DEBUG(std::string("DEBUG: fallback -> loaded(machine) '") + preset_name + "' as system; printers.size=" + std::to_string(preset_bundle.printers.size()));
                                 return true;
                             } catch (const std::exception &e) {
-                                std::cerr << "DEBUG: fallback -> import threw for '" << f.filename().string() << "': " << e.what() << std::endl;
+                                LOG_DEBUG(std::string("DEBUG: fallback -> import threw for '") + f.filename().string() + "': " + e.what());
                             }
                             return false;
                         };
@@ -220,20 +226,20 @@ bool load_vendor_from_resources(const std::string& resources_path,
                             if (sub.find("common") != std::string::npos) continue; // skip abstracts
                             subpaths.emplace_back(std::move(sub));
                         }
-                        std::cerr << "DEBUG: fallback -> concrete machines planned=" << subpaths.size() << std::endl;
+                        LOG_DEBUG(std::string("DEBUG: fallback -> concrete machines planned=") + std::to_string(subpaths.size()));
                         for (const auto &sub : subpaths) {
                             fs::path f = fs::path(res_profiles) / vendor_id / sub;
-                            std::cerr << "DEBUG: fallback -> importing machine sub_path='" << sub << "'" << std::endl;
+                            LOG_DEBUG(std::string("DEBUG: fallback -> importing machine sub_path='") + sub + "'");
                             import_one(f, sub);
                         }
                     } else {
-                        std::cerr << "DEBUG: fallback -> no machine_list array in vendor json" << std::endl;
+                        LOG_DEBUG("DEBUG: fallback -> no machine_list array in vendor json");
                     }
                 } else {
-                    std::cerr << "DEBUG: fallback -> failed to open vendor json: " << vendor_root.string() << std::endl;
+                    LOG_DEBUG(std::string("DEBUG: fallback -> failed to open vendor json: ") + vendor_root.string());
                 }
             } catch (const std::exception &e) {
-                std::cerr << "DEBUG: fallback -> resilient import phase threw: " << e.what() << std::endl;
+                LOG_DEBUG(std::string("DEBUG: fallback -> resilient import phase threw: ") + e.what());
             }
         }
 
@@ -242,8 +248,8 @@ bool load_vendor_from_resources(const std::string& resources_path,
 
         // Debug counts after vendor load + fallback
         try {
-            std::cerr << "DEBUG: post-vendor load counts => printers:" << preset_bundle.printers.size()
-                      << " only_defaults:" << (preset_bundle.printers.has_defaults_only()?"1":"0") << std::endl;
+            LOG_DEBUG(std::string("DEBUG: post-vendor load counts => printers:") + std::to_string(preset_bundle.printers.size())
+                      + " only_defaults:" + (preset_bundle.printers.has_defaults_only()?"1":"0"));
         } catch (...) {}
 
         loaded_vendors.insert(vendor_id);
@@ -302,7 +308,8 @@ bool load_printer_profile(const std::string& resources_path,
                 }
                 for (const auto &cand : candidates) {
                     try {
-                        if (!fs::exists(cand)) continue;
+                        std::error_code ec;
+                        if (!fs::exists(cand, ec) || ec) continue;
                         std::string stem = cand.stem().string();
                         preset = preset_bundle.printers.find_preset(stem, false, true, false);
                         if (!preset) {
@@ -359,7 +366,8 @@ bool load_printer_profile(const std::string& resources_path,
                     if (base.find('/') != std::string::npos || base.find('\\') != std::string::npos) base = fs::path(base).stem().string();
                     if (ends_with(base, ".json")) base = fs::path(base).stem().string();
                     fs::path candidate = machines_dir / (base + ".json");
-                    if (!fs::exists(candidate)) return false;
+                    std::error_code ec;
+                    if (!fs::exists(candidate, ec) || ec) return false;
                     Slic3r::PresetsConfigSubstitutions subs; std::string file = candidate.string(); int overwrite = 1; std::vector<std::string> result_names; auto override_confirm = [](std::string const &) -> int { return 1; };
                     bool ok = preset_bundle.import_json_presets(subs, file, override_confirm, Slic3r::ForwardCompatibilitySubstitutionRule::EnableSystemSilent, overwrite, result_names);
                     if (ok) {
@@ -415,7 +423,8 @@ bool load_printer_profile(const std::string& resources_path,
                         namespace fs = std::filesystem;
                         std::string model_id;
                         fs::path machines_dir = fs::path(resources_path) / "profiles" / "BBL" / "machine";
-                        if (fs::exists(machines_dir) && fs::is_directory(machines_dir)) {
+                        std::error_code ec;
+                        if (fs::exists(machines_dir, ec) && !ec && fs::is_directory(machines_dir)) {
                             for (const auto &entry : fs::directory_iterator(machines_dir)) {
                                 if (!entry.is_regular_file() || entry.path().extension() != ".json") continue;
                                 try {
@@ -479,11 +488,11 @@ bool load_printer_profile(const std::string& resources_path,
         try {
             size_t n = preset_bundle.printers.size();
             bool only_def = preset_bundle.printers.has_defaults_only();
-            std::cerr << "DEBUG: printers.size=" << n << ", has_defaults_only=" << (only_def?"1":"0") << std::endl;
+            LOG_DEBUG(std::string("DEBUG: printers.size=") + std::to_string(n) + ", has_defaults_only=" + (only_def?"1":"0"));
             // Try a few alternative lookups just in case
             if (!preset) {
                 auto *pp = preset_bundle.printers.find_preset(printer_name, true, true, false);
-                if (pp) std::cerr << "DEBUG: find_preset(printer_name,first_visible=1) succeeded: " << pp->name << std::endl;
+                if (pp) LOG_DEBUG(std::string("DEBUG: find_preset(printer_name,first_visible=1) succeeded: ") + pp->name);
             }
         } catch (...) {}
 
@@ -560,18 +569,18 @@ bool load_filament_profile(const std::string& filament_name,
                 std::string file = find_profile_file(g_resources_path, fil_name, "filament");
                 if (!file.empty()) {
                     try {
-                        std::cerr << "DEBUG: fallback import filament from: " << file << std::endl;
+                        LOG_DEBUG(std::string("DEBUG: fallback import filament from: ") + file);
                         Slic3r::PresetsConfigSubstitutions subs; int overwrite = 1; std::vector<std::string> out;
                         auto override_confirm = [](std::string const &) -> int { return 1; };
                         bool ok = preset_bundle.import_json_presets(subs, file, override_confirm, Slic3r::ForwardCompatibilitySubstitutionRule::EnableSystemSilent, overwrite, out);
-                        std::cerr << "DEBUG: fallback import filament result ok=" << (ok?"1":"0") << ", out.size=" << out.size() << std::endl;
+                        LOG_DEBUG(std::string("DEBUG: fallback import filament result ok=") + (ok?"1":"0") + ", out.size=" + std::to_string(out.size()));
                         if (ok) {
                             preset_bundle.update_compatible(Slic3r::PresetSelectCompatibleType::Always);
                             fil_preset = preset_bundle.filaments.find_preset(fil_name, false, false, false);
                         }
-                    } catch (const std::exception &e) { std::cerr << "WARN: filament import exception: " << e.what() << std::endl; }
+                    } catch (const std::exception &e) { LOG_WARNING(std::string("WARN: filament import exception: ") + e.what()); }
                 } else {
-                    std::cerr << "DEBUG: fallback import filament: file not found for name='" << fil_name << "' under resources_path='" << g_resources_path << "'" << std::endl;
+                    LOG_DEBUG(std::string("DEBUG: fallback import filament: file not found for name='") + fil_name + "' under resources_path='" + g_resources_path + "'");
                 }
             }
         }
@@ -648,7 +657,8 @@ std::vector<std::string> list_printer_profiles(const std::string& resources_path
     std::vector<std::string> profiles;
     try {
         std::string dir = resources_path + "/profiles/BBL/machine";
-        if (!std::filesystem::exists(dir)) return profiles;
+        std::error_code ec;
+        if (!std::filesystem::exists(dir, ec) || ec) return profiles;
         for (const auto& entry : std::filesystem::directory_iterator(dir)) {
             if (entry.is_regular_file() && entry.path().extension() == ".json") {
                 std::string filename = entry.path().stem().string();
@@ -656,7 +666,7 @@ std::vector<std::string> list_printer_profiles(const std::string& resources_path
             }
         }
     } catch (const std::exception& e) {
-        std::cerr << "Error scanning printer profiles: " << e.what() << std::endl;
+        LOG_ERROR(std::string("Error scanning printer profiles: ") + e.what());
     }
     return profiles;
 }
@@ -666,7 +676,8 @@ std::vector<std::string> list_filament_profiles(const std::string& resources_pat
     std::vector<std::string> profiles;
     try {
         std::string dir = resources_path + "/profiles/BBL/filament";
-        if (!std::filesystem::exists(dir)) return profiles;
+        std::error_code ec;
+        if (!std::filesystem::exists(dir, ec) || ec) return profiles;
         for (const auto& entry : std::filesystem::recursive_directory_iterator(dir)) {
             if (entry.is_regular_file() && entry.path().extension() == ".json") {
                 std::string filename = entry.path().stem().string();
@@ -674,7 +685,7 @@ std::vector<std::string> list_filament_profiles(const std::string& resources_pat
             }
         }
     } catch (const std::exception& e) {
-        std::cerr << "Error scanning filament profiles: " << e.what() << std::endl;
+        LOG_ERROR(std::string("Error scanning filament profiles: ") + e.what());
     }
     return profiles;
 }
@@ -684,7 +695,8 @@ std::vector<std::string> list_process_profiles(const std::string& resources_path
     std::vector<std::string> profiles;
     try {
         std::string dir = resources_path + "/profiles/BBL/process";
-        if (!std::filesystem::exists(dir)) return profiles;
+        std::error_code ec;
+        if (!std::filesystem::exists(dir, ec) || ec) return profiles;
         for (const auto& entry : std::filesystem::directory_iterator(dir)) {
             if (entry.is_regular_file() && entry.path().extension() == ".json") {
                 std::string filename = entry.path().stem().string();
@@ -692,7 +704,7 @@ std::vector<std::string> list_process_profiles(const std::string& resources_path
             }
         }
     } catch (const std::exception& e) {
-        std::cerr << "Error scanning process profiles: " << e.what() << std::endl;
+        LOG_ERROR(std::string("Error scanning process profiles: ") + e.what());
     }
     return profiles;
 }
@@ -701,7 +713,7 @@ std::vector<std::string> list_process_profiles(const std::string& resources_path
 bool apply_generic_fallback_config(Slic3r::DynamicPrintConfig& config,
                                    const std::string& resources_path)
 {
-    std::cout << "DEBUG: Applying generic fallback config for on-the-fly slicing..." << std::endl;
+    LOG_DEBUG("DEBUG: Applying generic fallback config for on-the-fly slicing...");
 
     try {
         // CRITICAL: Preserve 3MF process settings BEFORE applying fallback defaults
@@ -709,7 +721,7 @@ bool apply_generic_fallback_config(Slic3r::DynamicPrintConfig& config,
         // and should NOT be overwritten by fallback defaults
         struct PreservedSetting {
             std::string key;
-            Slic3r::ConfigOption* value;
+            std::unique_ptr<Slic3r::ConfigOption> value;
         };
         std::vector<PreservedSetting> preserved_settings;
 
@@ -734,12 +746,12 @@ bool apply_generic_fallback_config(Slic3r::DynamicPrintConfig& config,
         // Save current values from 3MF config
         for (const auto& key : keys_to_preserve) {
             if (const auto* opt = config.optptr(key)) {
-                preserved_settings.push_back({key, opt->clone()});
+                preserved_settings.push_back({key, std::unique_ptr<Slic3r::ConfigOption>(opt->clone())});
             }
         }
 
         if (!preserved_settings.empty()) {
-            std::cout << "DEBUG: Preserving " << preserved_settings.size() << " 3MF process settings before fallback" << std::endl;
+            LOG_DEBUG("DEBUG: Preserving " + std::to_string(preserved_settings.size()) + " 3MF process settings before fallback");
         }
 
         // Set minimal printer configuration for generic slicing
@@ -882,16 +894,16 @@ bool apply_generic_fallback_config(Slic3r::DynamicPrintConfig& config,
         // This ensures that special modes like vase/spiral mode are honored
         for (auto& ps : preserved_settings) {
             if (ps.value) {
-                config.set_key_value(ps.key, ps.value);
-                std::cout << "DEBUG: Restored 3MF setting: " << ps.key << " = " << ps.value->serialize() << std::endl;
+                LOG_DEBUG("DEBUG: Restored 3MF setting: " + ps.key + " = " + ps.value->serialize());
+                config.set_key_value(ps.key, ps.value.release());
             }
         }
 
-        std::cout << "DEBUG: Generic fallback config applied successfully" << std::endl;
+        LOG_DEBUG("DEBUG: Generic fallback config applied successfully");
         return true;
 
     } catch (const std::exception& e) {
-        std::cerr << "ERROR: Failed to apply generic fallback config: " << e.what() << std::endl;
+        LOG_ERROR(std::string("ERROR: Failed to apply generic fallback config: ") + e.what());
         return false;
     }
 }
