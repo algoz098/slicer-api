@@ -206,9 +206,11 @@ RUN ls -la /opt/orca/OrcaSlicerAddon/bindings/node && \
     find /opt/orca/OrcaSlicerAddon/bindings/node/prebuilds -maxdepth 2 -type f -print || true
 
 # Verify that liborcacli_engine.so exists in prebuilds
+# Note: Docker TARGETARCH uses "amd64" but Node.js process.arch uses "x64", so normalize
 ARG TARGETARCH
-RUN if [ ! -f /opt/orca/OrcaSlicerAddon/bindings/node/prebuilds/linux-${TARGETARCH}/liborcacli_engine.so ]; then \
-      echo "ERROR: liborcacli_engine.so not found in prebuilds/linux-${TARGETARCH}/"; \
+RUN _ARCH=${TARGETARCH}; case "$_ARCH" in amd64) _ARCH=x64;; esac; \
+    if [ ! -f /opt/orca/OrcaSlicerAddon/bindings/node/prebuilds/linux-${_ARCH}/liborcacli_engine.so ]; then \
+      echo "ERROR: liborcacli_engine.so not found in prebuilds/linux-${_ARCH}/"; \
       echo "Available files:"; \
       find /opt/orca/OrcaSlicerAddon/bindings/node/prebuilds -type f; \
       exit 1; \
