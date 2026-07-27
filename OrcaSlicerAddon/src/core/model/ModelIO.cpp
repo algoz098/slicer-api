@@ -455,11 +455,18 @@ bool load_3mf_project(
             LOG_ERROR("Failed to load embedded presets: unknown error");
         }
 
-    LOG_DEBUG("DEBUG: [ModelIO] About to move loaded model to out_model...");
-    // Replace current model with loaded one
-    out_model = std::move(loaded);
-    LOG_DEBUG("DEBUG: [ModelIO] load_3mf_project returning true");
-    return true;
+        LOG_DEBUG("DEBUG: [ModelIO] About to move loaded model to out_model...");
+        // Replace current model with loaded one
+        out_model = std::move(loaded);
+        LOG_DEBUG("DEBUG: [ModelIO] load_3mf_project returning true");
+        return true;
+    } catch (const std::exception& e) {
+        last_error = std::string("Failed to load embedded presets: ") + e.what();
+        return false;
+    } catch (...) {
+        last_error = "Failed to load embedded presets: unknown error";
+        return false;
+    }
 }
 
 }} // namespace OrcaSlicerCli::model

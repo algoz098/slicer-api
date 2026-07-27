@@ -1214,7 +1214,6 @@ public:
                     return false;
                 }
 
-                std::error_code ec;
                 if (!std::filesystem::exists(tmp_gcode, ec)) {
                     if (ec) {
                         LOG_ERROR("Filesystem error checking temp G-code: " + ec.message());
@@ -1882,7 +1881,6 @@ public:
                 }
 
                 // Check if export was successful
-                std::error_code ec;
                 if (export_successful && std::filesystem::exists(output_file, ec)) {
                     auto file_size = std::filesystem::file_size(output_file);
                     LOG_DEBUG(std::string("G-code file size: ") + std::to_string(file_size) + " bytes");
@@ -2483,7 +2481,7 @@ AddonCore::OperationResult AddonCore::setConfigOption(const std::string& key, co
 
         auto bounds_it = SAFETY_BOUNDS.find(key);
         if (bounds_it != SAFETY_BOUNDS.end()) {
-            auto* opt = m_impl->config->option<ConfigOptionFloat>(key);
+            auto* opt = m_impl->config->option<Slic3r::ConfigOptionFloat>(key);
             if (opt && (opt->value < bounds_it->second.first || opt->value > bounds_it->second.second)) {
                 m_impl->config->erase(key);
                 return OperationResult(false, "Value out of safety bounds for " + key);
