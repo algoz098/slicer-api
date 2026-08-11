@@ -267,10 +267,20 @@ void apply_custom_settings(
         // (minimum seconds between fan stops). Use "reduce_fan_stop_start_freq"
         // directly with an appropriate integer value (e.g., 0 to prevent stopping).
 
-        // If the option does not exist in config, ignore to match previous behavior
+        // If the option does not exist in config, check if it's a valid Slic3r option.
+        // If it is valid, allow it (it will be added). If not, ignore/report.
         if (!working_config->has(mapped_key.c_str())) {
-            ignored_override_keys.push_back(key);
-            continue;
+            if (!Slic3r::print_config_def.has(mapped_key)) {
+                // Also check if it's a known custom key that might not be in print_config_def
+                if (mapped_key != "print_settings_id" &&
+                    mapped_key != "filament_settings_id" &&
+                    mapped_key != "printer_settings_id" &&
+                    mapped_key != "printer_model" &&
+                    mapped_key != "printer_variant") {
+                    ignored_override_keys.push_back(key);
+                    continue;
+                }
+            }
         }
 
         auto res = set_option(mapped_key, mapped_val);
